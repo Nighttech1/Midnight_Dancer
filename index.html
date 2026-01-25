@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midnight Dancer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+
+        /* Simple error display for debugging */
+        #error-display {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: #ef4444;
+            color: white;
+            padding: 1rem;
+            z-index: 9999;
+            font-family: monospace;
+        }
+
+        /* Стили из App.tsx (custom-scrollbar) */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+
+    <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom": "https://esm.sh/react-dom@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+    }
+  }
+  </script>
+
+    <!-- Babel для компиляции TSX в браузере -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+
+<body>
+    <div id="error-display"></div>
+    <div id="root"></div>
+
+    <script>
+        // Поллифил для process.env
+        window.process = window.process || { env: { API_KEY: '' } };
+
+        // Обработчик ошибок
+        window.onerror = function (message, source, lineno, colno, error) {
+            const display = document.getElementById('error-display');
+            display.style.display = 'block';
+            display.innerText = 'Runtime Error: ' + message + '\nAt: ' + source + ':' + lineno;
+            return false;
+        };
+    </script>
+
+    <script type="text/babel" data-presets="react,typescript" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'react';
+        import ReactDOM from 'react-dom/client';
+
+        // === constants.tsx ===
+        const INITIAL_DANCES = [];
+
+        const COLORS = {
+            accent: 'text-orange-500',
+            accentBg: 'bg-orange-500',
+            accentHover: 'hover:bg-orange-600',
+            card: 'bg-slate-800/50',
+        };
+
+        const formatDuration = (sec) => {
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+
+        const formatSize = (bytes) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        };
+
+        // === db.ts ===
+        const DB_NAME = 'LatinDanceTrainerDB';
+        const STORE_NAME = 'music';
+        const DB_VERSION = 2;
+
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                    if (!db.objectStoreNames.contains('videos')) {
+                        db.createObjectStore('videos', { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = (event) => resolve(event.target.result);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        };
+
+        const saveSong = async (song) => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.put(song);
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject(event.target.error);
+            });
+        };
+
+        const getAllSongs = async () => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(STORE_NAME, 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = (event) => resolve(event.target.result);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        };
+
+        const deleteSong = async (id) => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject(event.target.error);
+            });
+        };
+
+        const saveVideo = async (videoId, blob) => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('videos', 'readwrite');
+                const store = transaction.objectStore('videos');
+                const request = store.put({ id: videoId, blob });
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject(event.target.error);
+            });
+        };
+
+        const getVideo = async (videoId) => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('videos', 'readonly');
+                const store = transaction.objectStore('videos');
+                const request = store.get(videoId);
+                request.onsuccess = (event) => resolve(event.target.result?.blob);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        };
+
+        const deleteVideo = async (videoId) => {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('videos', 'readwrite');
+                transaction.objectStore('videos').delete(videoId);
+                transaction.oncomplete = () => resolve();
+            });
+        };
+
+        // === services/geminiService.ts (BrowserVoiceAssistant) ===
+        class BrowserVoiceAssistant {
+            synthesis = null;
+            voices = [];
+
+            constructor() {
+                if (typeof window !== 'undefined' && window.speechSynthesis) {
+                    this.synthesis = window.speechSynthesis;
+                    this.loadVoices();
+                    if (this.synthesis.onvoiceschanged !== undefined) {
+                        this.synthesis.onvoiceschanged = this.loadVoices;
+                    }
+                }
+            }
+
+            loadVoices = () => {
+                if (!this.synthesis) return;
+                this.voices = this.synthesis.getVoices();
+            };
+
+            speak(text, voiceKey = 'female', volume = 1, rate = 1.0, pitch = 1.0) {
+                return new Promise((resolve) => {
+                    if (!this.synthesis) return resolve();
+                    if (this.synthesis.speaking) this.synthesis.cancel();
+
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.volume = volume;
+                    const voices = this.voices.length > 0 ? this.voices : this.synthesis.getVoices();
+
+                    const isRequestedFemale = voiceKey.includes('female');
+                    const langCode = 'ru';
+
+                    // Маркеры для женских голосов
+                    const femaleMarkers = /female|женский|mujer|paulina|mónica|milena|kore|zephyr|alena|irina|katya|elena|victoria|anna|google|тaтьяна/i;
+                    // Маркеры для мужских голосов
+                    const maleMarkers = /male|мужской|hombre|puck|charon|yuri|pavel|alexander|dmitry|maxim|anton|sergey/i;
+
+                    const isVoiceFemale = (v) => femaleMarkers.test(v.name) || (v.gender && v.gender === 'female');
+                    const isVoiceMale = (v) => maleMarkers.test(v.name) || (v.gender && v.gender === 'male');
+
+                    const voiceChecks = [
+                        // 1. Русский язык + точное совпадение пола (мужской или женский)
+                        (v) => v.lang.toLowerCase().startsWith(langCode) && (isRequestedFemale ? isVoiceFemale(v) : isVoiceMale(v)),
+                        // 2. Если нужен мужской, но нет явного мужского — берем любой русский, который НЕ помечен как женский
+                        (v) => !isRequestedFemale && v.lang.toLowerCase().startsWith(langCode) && !isVoiceFemale(v),
+                        // 3. Любой русский голос
+                        (v) => v.lang.toLowerCase().startsWith(langCode),
+                    ];
+
+                    let selectedVoice;
+                    for (const check of voiceChecks) {
+                        selectedVoice = voices.find(check);
+                        if (selectedVoice) break;
+                    }
+
+                    if (selectedVoice) {
+                        utterance.voice = selectedVoice;
+                        utterance.lang = selectedVoice.lang;
+                    } else {
+                        utterance.lang = 'ru-RU';
+                    }
+
+                    utterance.rate = rate;
+                    utterance.pitch = pitch;
+                    utterance.onend = () => resolve();
+                    utterance.onerror = () => resolve();
+
+                    setTimeout(() => {
+                        if (this.synthesis) this.synthesis.speak(utterance);
+                    }, 10);
+                });
+            }
+
+            stop() {
+                if (this.synthesis && this.synthesis.speaking) this.synthesis.cancel();
+            }
+        }
+        const assistant = new BrowserVoiceAssistant();
+
+        // === components/Elements.tsx ===
+        const fileToBase64 = (file) =>
+            new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = (error) => reject(error);
+            });
+
+        const Elements = ({ dances, onUpdateDances }) => {
+            const [selectedStyleId, setSelectedStyleId] = useState(dances[0]?.id || '');
+            const [isAddingStyle, setIsAddingStyle] = useState(false);
+            const [newStyleName, setNewStyleName] = useState('');
+            const [filterLevel, setFilterLevel] = useState('All');
+            const [sortBy, setSortBy] = useState('name');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [editingMove, setEditingMove] = useState(null);
+            const [isAddingMove, setIsAddingMove] = useState(null);
+            const [previewFile, setPreviewFile] = useState(null);
+
+            const selectedStyle = dances.find(d => d.id === selectedStyleId);
+
+            const filteredMoves = useMemo(() => {
+                if (!selectedStyle) return [];
+                let moves = [...selectedStyle.moves];
+                if (filterLevel !== 'All') moves = moves.filter(m => m.level === filterLevel);
+                if (searchQuery) moves = moves.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+                moves.sort((a, b) => {
+                    if (sortBy === 'name') return a.name.localeCompare(b.name);
+                    const levels = { Beginner: 1, Intermediate: 2, Advanced: 3 };
+                    return (levels[a.level] || 0) - (levels[b.level] || 0);
+                });
+                return moves;
+            }, [selectedStyle, filterLevel, sortBy, searchQuery]);
+
+            const handleAddStyle = () => {
+                if (!newStyleName.trim()) return;
+                const newStyle = { id: `style-${Date.now()}`, name: newStyleName, description: 'Пользовательский стиль', moves: [] };
+                onUpdateDances([...dances, newStyle]);
+                setNewStyleName('');
+                setIsAddingStyle(false);
+                setSelectedStyleId(newStyle.id);
+            };
+
+            const handleDeleteStyle = async (id) => {
+                if (dances.length <= 1) {
+                    alert("Нельзя удалить последний стиль!");
+                    return;
+                }
+                if (confirm("Вы уверены, что хотите удалить стиль и все его элементы?")) {
+                    const style = dances.find(d => d.id === id);
+                    if (style) {
+                        // Чистим видео удаляемого стиля
+                        for (const move of style.moves) {
+                            if (move.videoRef) await deleteVideo(move.videoRef);
+                        }
+                    }
+                    const newDances = dances.filter(d => d.id !== id);
+                    onUpdateDances(newDances);
+                    setSelectedStyleId(newDances[0].id);
+                }
+            };
+
+            const handleSaveMove = async (e) => {
+                e.preventDefault();
+                try {
+                    const formData = new FormData(e.currentTarget);
+                    const styleId = editingMove?.styleId || isAddingMove;
+                    const moveId = editingMove?.move.id || `move-${Date.now()}`;
+
+                    const videoFile = e.currentTarget.elements.namedItem('videoFile').files?.[0];
+                    let videoRef = editingMove?.move.videoRef || '';
+
+                    if (videoFile) {
+                        videoRef = `vid-${Date.now()}`;
+                        await saveVideo(videoRef, videoFile);
+                        // Удаляем старое видео если оно было
+                        if (editingMove?.move.videoRef) await deleteVideo(editingMove.move.videoRef);
+                    }
+
+                    const moveData = {
+                        id: moveId,
+                        name: formData.get('name'),
+                        level: formData.get('level'),
+                        description: formData.get('description'),
+                        videoRef: videoRef,
+                        videoData: editingMove?.move.videoData || ''
+                    };
+
+                    const updatedDances = dances.map(d => {
+                        if (d.id !== styleId) return d;
+                        const moves = editingMove ? d.moves.map(m => m.id === moveData.id ? moveData : m) : [...d.moves, moveData];
+                        return { ...d, moves };
+                    });
+
+                    onUpdateDances(updatedDances);
+                    setEditingMove(null);
+                    setIsAddingMove(null);
+                    setPreviewFile(null);
+                } catch (error) {
+                    console.error("Ошибка при сохранении элемента:", error);
+                    alert("Не удалось сохранить элемент. Попробуйте еще раз.");
+                }
+            };
+
+            const deleteMove = async (moveId, styleId) => {
+                if (confirm("Удалить этот элемент?")) {
+                    const style = dances.find(d => d.id === styleId);
+                    const move = style?.moves.find(m => m.id === moveId);
+                    if (move?.videoRef) await deleteVideo(move.videoRef);
+
+                    const updated = dances.map(d => d.id !== styleId ? d : { ...d, moves: d.moves.filter(m => m.id !== moveId) });
+                    onUpdateDances(updated);
+                }
+            };
+
+            const translateLevel = (level) => ({ Beginner: 'Начинающий', Intermediate: 'Средний', Advanced: 'Профи' }[level] || level);
+
+            return (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-4xl font-black tracking-tight">Элементы</h2>
+                            <p className="text-slate-500 mt-1">Управляйте своим танцевальным репертуаром</p>
+                        </div>
+                        <button onClick={() => setIsAddingStyle(true)} className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition-all border border-slate-700">
+                            + Новый стиль
+                        </button>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide flex-1">
+                            {dances.map(dance => (
+                                <div key={dance.id} className="relative group">
+                                    <button
+                                        onClick={() => setSelectedStyleId(dance.id)}
+                                        className={`px-6 py-3 rounded-2xl whitespace-nowrap transition-all duration-300 border flex items-center gap-3 ${selectedStyleId === dance.id ? 'bg-orange-500 border-orange-400 text-white shadow-lg shadow-orange-900/30' : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-600'}`}
+                                    >
+                                        <span className="font-bold">{dance.name}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${selectedStyleId === dance.id ? 'bg-orange-400' : 'bg-slate-800'}`}>{dance.moves.length}</span>
+                                    </button>
+                                    {selectedStyleId === dance.id && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteStyle(dance.id); }}
+                                            className="absolute -top-2 -right-2 w-6 h-6 bg-slate-800 text-slate-400 hover:text-rose-500 rounded-full border border-slate-700 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                            title="Удалить стиль"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {isAddingStyle && (
+                        <div className="p-6 bg-slate-900 rounded-3xl border border-slate-800 flex gap-3 animate-in slide-in-from-top-4">
+                            <input autoFocus type="text" placeholder="Название стиля..." className="flex-1 bg-slate-800 border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 ring-orange-500 outline-none" value={newStyleName} onChange={(e) => setNewStyleName(e.target.value)} />
+                            <button onClick={handleAddStyle} className="px-6 py-3 bg-orange-600 rounded-xl font-bold text-sm">Создать</button>
+                            <button onClick={() => setIsAddingStyle(false)} className="px-6 py-3 bg-slate-700 rounded-xl font-bold text-sm">Отмена</button>
+                        </div>
+                    )}
+
+                    {selectedStyle && (
+                        <div className="space-y-6">
+                            <div className="flex flex-wrap items-center gap-4 bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
+                                <input type="text" placeholder="Поиск..." className="flex-1 bg-slate-800/50 border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-1 ring-orange-500" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} className="bg-slate-800 border-slate-700/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 ring-orange-500">
+                                    <option value="All">Все уровни</option><option value="Beginner">Начинающий</option><option value="Intermediate">Средний</option><option value="Advanced">Профи</option>
+                                </select>
+                                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-slate-800 border-slate-700/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 ring-orange-500">
+                                    <option value="name">По алфавиту</option>
+                                    <option value="level">По уровню</option>
+                                </select>
+                                <button onClick={() => setIsAddingMove(selectedStyleId)} className="px-5 py-2.5 bg-orange-600 rounded-xl text-xs font-black shadow-lg shadow-orange-900/20 uppercase tracking-widest">+ Добавить элемент</button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {filteredMoves.map(move => (
+                                    <MoveCard
+                                        key={move.id}
+                                        move={move}
+                                        onEdit={() => setEditingMove({ move, styleId: selectedStyleId })}
+                                        onDelete={() => deleteMove(move.id, selectedStyleId)}
+                                        translateLevel={translateLevel}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {(editingMove || isAddingMove) && (
+                        <div
+                            className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 md:p-8"
+                            onClick={() => { setEditingMove(null); setIsAddingMove(null); setPreviewFile(null); }}
+                        >
+                            <div
+                                className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <div className="overflow-y-auto p-6 md:p-8 space-y-5 custom-scrollbar">
+                                    <h3 className="text-2xl font-black">{editingMove ? 'Изменить' : 'Добавить'} элемент</h3>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Название элемента</label>
+                                        <input required name="name" placeholder="Название" defaultValue={editingMove?.move.name} className="w-full bg-slate-800 border-slate-700 rounded-2xl p-4 outline-none focus:ring-2 ring-orange-500" />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Уровень сложности</label>
+                                        <select name="level" defaultValue={editingMove?.move.level || 'Beginner'} className="w-full bg-slate-800 border-slate-700 rounded-2xl p-4 text-sm">
+                                            <option value="Beginner">Начинающий</option><option value="Intermediate">Средний</option><option value="Advanced">Профи</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Видео файл</label>
+                                        <input name="videoFile" type="file" accept="video/*" className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl p-3 text-xs text-slate-400 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-orange-500 file:text-white" onChange={e => setPreviewFile(e.target.files[0])} />
+                                    </div>
+
+                                    <VideoPreview videoRef={editingMove?.move.videoRef} newFile={previewFile} />
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Описание элемента</label>
+                                        <textarea name="description" placeholder="Опишите детали шага..." defaultValue={editingMove?.move.description} className="w-full bg-slate-800 border-slate-700 rounded-2xl p-4 outline-none focus:ring-2 ring-orange-500 min-h-[100px]" />
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                        <button type="submit" className="flex-1 py-4 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl font-black shadow-lg shadow-orange-900/20 transition-all text-sm uppercase tracking-widest">СОХРАНИТЬ</button>
+                                        <button type="button" onClick={() => { setEditingMove(null); setIsAddingMove(null); setPreviewFile(null); }} className="sm:px-8 py-4 bg-slate-800 hover:bg-slate-700 rounded-2xl font-bold transition-all text-sm uppercase tracking-widest">ОТМЕНА</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const VideoPreview = ({ videoRef, newFile }) => {
+            const [url, setUrl] = useState('');
+            const [speed, setSpeed] = useState(1);
+            const videoElRef = useRef(null);
+
+            useEffect(() => {
+                let currentUrl = '';
+                if (newFile) {
+                    currentUrl = URL.createObjectURL(newFile);
+                    setUrl(currentUrl);
+                } else if (videoRef) {
+                    getVideo(videoRef).then(blob => {
+                        if (blob) {
+                            currentUrl = URL.createObjectURL(blob);
+                            setUrl(currentUrl);
+                        }
+                    });
+                } else {
+                    setUrl('');
+                }
+                return () => { if (currentUrl) URL.revokeObjectURL(currentUrl); };
+            }, [videoRef, newFile]);
+
+            useEffect(() => {
+                if (videoElRef.current) {
+                    videoElRef.current.playbackRate = speed;
+                }
+            }, [speed, url]);
+
+            if (!url) return null;
+
+            return (
+                <div className="space-y-4 py-2">
+                    <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
+                        <video
+                            ref={videoElRef}
+                            src={url}
+                            controls
+                            className="w-full h-full object-contain"
+                        />
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-2xl border border-slate-700/50">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Замедление</span>
+                        <div className="flex gap-1.5">
+                            {[0.5, 0.75, 1, 1.5].map(s => (
+                                <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setSpeed(s)}
+                                    className={`px-3 py-1.5 rounded-xl text-[10px] font-black transition-all ${speed === s ? 'bg-orange-500 text-white shadow-lg shadow-orange-900/40' : 'bg-slate-900 text-slate-500 hover:text-slate-300'}`}
+                                >
+                                    {s}x
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const MoveCard = ({ move, onEdit, onDelete, translateLevel }) => {
+            const [videoUrl, setVideoUrl] = useState('');
+            const videoRef = useRef(null);
+            const urlRef = useRef('');
+
+            useEffect(() => {
+                if (move.videoRef) {
+                    getVideo(move.videoRef).then(blob => {
+                        if (blob) {
+                            const url = URL.createObjectURL(blob);
+                            urlRef.current = url;
+                            setVideoUrl(url);
+                        }
+                    });
+                }
+                return () => {
+                    if (urlRef.current) {
+                        URL.revokeObjectURL(urlRef.current);
+                        urlRef.current = '';
+                    }
+                };
+            }, [move.videoRef]);
+
+            const handleMouseEnter = () => {
+                if (videoRef.current) videoRef.current.play().catch(e => console.warn("Auto-play failed:", e));
+            };
+
+            const handleMouseLeave = () => {
+                if (videoRef.current) {
+                    videoRef.current.pause();
+                    videoRef.current.currentTime = 0;
+                }
+            };
+
+            return (
+                <div className="group bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 hover:border-orange-500/50 transition-all duration-300">
+                    <div
+                        className="relative aspect-video bg-slate-800 cursor-pointer"
+                        onMouseEnter={handleMouseEnter}
+                        onMouseLeave={handleMouseLeave}
+                    >
+                        {videoUrl ? (
+                            <video
+                                ref={videoRef}
+                                src={videoUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                onTimeUpdate={e => { if (e.target.currentTime >= 4) { e.target.pause(); e.target.currentTime = 0; } }}
+                                className="w-full h-full object-cover"
+                            />
+                        ) : move.videoData ? (
+                            <img src={move.videoData} className="w-full h-full object-cover opacity-50" />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-700">Нет превью</div>
+                        )}
+                        <div className="absolute top-3 right-3 px-3 py-1 bg-black/60 rounded-lg text-[10px] font-bold uppercase pointer-events-none">{translateLevel(move.level)}</div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                            <button onClick={onEdit} className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-transform hover:scale-110">✎</button>
+                            <button onClick={onDelete} className="p-3 bg-orange-500/20 hover:bg-orange-500/40 rounded-full text-orange-500 transition-transform hover:scale-110">✕</button>
+                        </div>
+                    </div>
+                    <div className="p-5">
+                        <h4 className="font-bold text-xl">{move.name}</h4>
+                        <p className="text-slate-500 text-sm mt-2 line-clamp-2">{move.description}</p>
+                    </div>
+                </div>
+            );
+        };
+
+        // === components/MusicLibrary.tsx ===
+        const MusicLibrary = ({ songs, dances, onRefresh }) => {
+            const [uploading, setUploading] = useState(false);
+            const [pendingFile, setPendingFile] = useState(null);
+            const [filterStyle, setFilterStyle] = useState('All');
+            const [filterLevel, setFilterLevel] = useState('All');
+            const [sortBy, setSortBy] = useState('title');
+            const [playingSongId, setPlayingSongId] = useState(null);
+            const [audioElement, setAudioElement] = useState(null);
+
+            const filteredSongs = useMemo(() => {
+                let list = [...songs];
+                if (filterStyle !== 'All') list = list.filter(s => s.danceStyle === filterStyle);
+                if (filterLevel !== 'All') list = list.filter(s => s.level === filterLevel);
+                list.sort((a, b) => {
+                    if (sortBy === 'title') return a.title.localeCompare(b.title);
+                    if (sortBy === 'level') {
+                        const levels = { Beginner: 1, Intermediate: 2, Advanced: 3 };
+                        return (levels[a.level] || 0) - (levels[b.level] || 0);
+                    }
+                    return 0;
+                });
+                return list;
+            }, [songs, filterStyle, filterLevel, sortBy]);
+
+            const handleSaveSong = async (e) => {
+                e.preventDefault();
+                if (!pendingFile) return;
+                const formData = new FormData(e.currentTarget);
+                setUploading(true);
+
+                // Получение длительности аудио
+                const duration = await new Promise(resolve => {
+                    const audio = new Audio(URL.createObjectURL(pendingFile));
+                    audio.onloadedmetadata = () => {
+                        URL.revokeObjectURL(audio.src);
+                        resolve(audio.duration);
+                    };
+                });
+
+                const songData = {
+                    id: `song-${Date.now()}`,
+                    title: pendingFile.name.replace(/\.[^/.]+$/, ""),
+                    artist: 'Неизвестен',
+                    danceStyle: formData.get('style'),
+                    level: formData.get('level'),
+                    blob: pendingFile,
+                    duration: duration,
+                    size: pendingFile.size
+                };
+
+                await saveSong(songData);
+                setPendingFile(null);
+                setUploading(false);
+                onRefresh();
+            };
+
+            const translateLevel = (level) => ({ Beginner: 'Начинающий', Intermediate: 'Средний', Advanced: 'Профи', 'Общий': 'Общий' }[level] || level);
+
+            const handlePlaySong = (song) => {
+                // Stop current audio if playing
+                if (audioElement) {
+                    audioElement.pause();
+                    audioElement.currentTime = 0;
+                }
+
+                // If clicking the same song, just stop it
+                if (playingSongId === song.id) {
+                    setPlayingSongId(null);
+                    setAudioElement(null);
+                    return;
+                }
+
+                // Play new song
+                const audio = new Audio(URL.createObjectURL(song.blob));
+                audio.play();
+                setAudioElement(audio);
+                setPlayingSongId(song.id);
+
+                // Clean up when song ends
+                audio.onended = () => {
+                    setPlayingSongId(null);
+                    setAudioElement(null);
+                };
+            };
+
+            // Cleanup on unmount
+            useEffect(() => {
+                return () => {
+                    if (audioElement) {
+                        audioElement.pause();
+                        audioElement.currentTime = 0;
+                    }
+                };
+            }, [audioElement]);
+
+            return (
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-4xl font-black">Музыка</h2>
+                        <label className="cursor-pointer px-6 py-3 bg-orange-500 hover:bg-orange-400 text-white rounded-2xl font-black shadow-lg shadow-orange-900/30 transition-all text-xs uppercase tracking-widest">
+                            {uploading ? 'ЗАГРУЗКА...' : '+ ДОБАВИТЬ ТРЕК'}
+                            <input type="file" accept="audio/*" className="hidden" onChange={e => setPendingFile(e.target.files[0])} />
+                        </label>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
+                        <select value={filterStyle} onChange={(e) => setFilterStyle(e.target.value)} className="bg-slate-800 border-slate-700/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 ring-orange-500">
+                            <option value="All">Все стили</option>
+                            {dances.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                            <option value="Общий">Общий</option>
+                        </select>
+                        <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} className="bg-slate-800 border-slate-700/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 ring-orange-500">
+                            <option value="All">Все уровни</option>
+                            <option value="Beginner">Начинающий</option><option value="Intermediate">Средний</option><option value="Advanced">Профи</option>
+                        </select>
+                        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-slate-800 border-slate-700/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-1 ring-orange-500">
+                            <option value="title">По названию</option>
+                            <option value="level">По уровню</option>
+                        </select>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-800/50 text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+                                    <tr>
+                                        <th className="px-8 py-5">Название</th>
+                                        <th className="px-8 py-5">Стиль / Уровень</th>
+                                        <th className="px-8 py-5">Длительность</th>
+                                        <th className="px-8 py-5">Размер</th>
+                                        <th className="px-8 py-5 text-right">Управление</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800">
+                                    {filteredSongs.length === 0 ? (
+                                        <tr><td colSpan="5" className="px-8 py-12 text-center text-slate-500 font-bold">Библиотека пуста. Добавьте свой первый трек!</td></tr>
+                                    ) : (
+                                        filteredSongs.map(song => (
+                                            <tr key={song.id} className="hover:bg-slate-800/30 group transition-colors">
+                                                <td className="px-8 py-5">
+                                                    <div className="font-bold text-slate-200">{song.title}</div>
+                                                </td>
+                                                <td className="px-8 py-5">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-slate-300 font-medium">{song.danceStyle}</span>
+                                                        <span className="text-[10px] text-orange-500 font-black uppercase tracking-tighter">{translateLevel(song.level)}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-8 py-5 font-mono text-slate-400">{formatDuration(song.duration || 0)}</td>
+                                                <td className="px-8 py-5 font-mono text-slate-400">{formatSize(song.size || 0)}</td>
+                                                <td className="px-8 py-5 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button onClick={() => handlePlaySong(song)} className={`font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${playingSongId === song.id ? 'bg-orange-500 text-white' : 'text-orange-500/50 hover:text-orange-500 bg-orange-500/5'}`}>
+                                                            {playingSongId === song.id ? '⏸ Остановить' : '▶ Слушать'}
+                                                        </button>
+                                                        <button onClick={() => { if (confirm('Удалить трек?')) deleteSong(song.id).then(onRefresh); }} className="text-orange-500/50 hover:text-orange-500 font-black text-[10px] uppercase tracking-widest px-4 py-2 bg-orange-500/5 rounded-xl transition-all">Удалить</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {pendingFile && (
+                        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPendingFile(null)}>
+                            <form
+                                onClick={e => e.stopPropagation()}
+                                onSubmit={handleSaveSong}
+                                className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 w-full max-w-md space-y-6 shadow-2xl animate-in zoom-in-95"
+                            >
+                                <div className="space-y-2">
+                                    <h3 className="text-2xl font-black">Настройка трека</h3>
+                                    <p className="text-slate-500 text-sm truncate font-medium">{pendingFile.name}</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Стиль танца</label>
+                                        <select name="style" className="w-full bg-slate-800 border-slate-700 rounded-2xl p-4 outline-none focus:ring-2 ring-orange-500">
+                                            {dances.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                            <option value="Общий">Общий</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Уровень трека</label>
+                                        <select name="level" className="w-full bg-slate-800 border-slate-700 rounded-2xl p-4 outline-none focus:ring-2 ring-orange-500">
+                                            <option value="Beginner">Начинающий (Медленно)</option>
+                                            <option value="Intermediate">Средний (Средне)</option>
+                                            <option value="Advanced">Профи (Быстро)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-3">
+                                    <button type="submit" className="w-full py-5 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl font-black shadow-lg shadow-orange-900/20 uppercase tracking-widest transition-all">СОХРАНИТЬ</button>
+                                    <button type="button" onClick={() => setPendingFile(null)} className="w-full py-4 bg-slate-800 text-slate-400 rounded-2xl font-bold transition-all">ОТМЕНА</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // === components/Trainer.tsx ===
+        const Trainer = ({ dances, songs }) => {
+            const [isActive, setIsActive] = useState(false);
+            const [selectedStyleId, setSelectedStyleId] = useState(dances[0]?.id || '');
+            const [selectedSongId, setSelectedSongId] = useState('');
+            const [selectedVoice, setSelectedVoice] = useState('female');
+            const [currentMove, setCurrentMove] = useState(null);
+            const [countdown, setCountdown] = useState(null);
+            const [moveInterval, setMoveInterval] = useState(10);
+            const [useDucking, setUseDucking] = useState(true);
+
+            const [musicVolume, setMusicVolume] = useState(0.5);
+            const [voiceVolume, setVoiceVolume] = useState(1.0);
+
+            const audioRef = useRef(null);
+            const timerRef = useRef(null);
+            const isActiveRef = useRef(false);
+            const musicVolumeRef = useRef(0.5);
+            const voiceVolumeRef = useRef(1.0);
+            const useDuckingRef = useRef(true);
+
+            useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+            useEffect(() => { useDuckingRef.current = useDucking; }, [useDucking]);
+
+            useEffect(() => {
+                musicVolumeRef.current = musicVolume;
+                if (audioRef.current) {
+                    audioRef.current.volume = musicVolume;
+                }
+            }, [musicVolume]);
+
+            useEffect(() => {
+                voiceVolumeRef.current = voiceVolume;
+            }, [voiceVolume]);
+
+            const startTraining = () => {
+                const style = dances.find(d => d.id === selectedStyleId);
+                if (!style || !style.moves.length) return alert("Выберите стиль с элементами");
+
+                const song = songs.find(s => s.id === selectedSongId);
+                if (song) {
+                    audioRef.current = new Audio(URL.createObjectURL(song.blob));
+                    audioRef.current.loop = true;
+                    audioRef.current.volume = musicVolumeRef.current;
+                    audioRef.current.play();
+                }
+
+                setIsActive(true);
+                setCountdown(3);
+                let c = 3;
+                const intr = setInterval(() => {
+                    c--;
+                    if (c <= 0) {
+                        clearInterval(intr);
+                        setCountdown(null);
+                        runCycle();
+                    } else setCountdown(c);
+                }, 1000);
+            };
+
+            const runCycle = async () => {
+                if (!isActiveRef.current) return;
+                const style = dances.find(d => d.id === selectedStyleId);
+                const move = style.moves[Math.floor(Math.random() * style.moves.length)];
+                setCurrentMove(move);
+
+                // Динамическая скорость речи: чем короче интервал, тем быстрее голос (от 2.0 до 0.7)
+                const speechRate = Number((2.4 - Math.log(moveInterval) * 0.5).toFixed(1));
+
+                // Приглушаем музыку (Audio Ducking) если режим включен
+                if (audioRef.current && useDuckingRef.current) {
+                    audioRef.current.volume = musicVolumeRef.current * 0.2;
+                }
+
+                await assistant.speak(move.name, selectedVoice, voiceVolumeRef.current, speechRate, 2.0);
+
+                // Возвращаем громкость музыки
+                if (audioRef.current && isActiveRef.current) {
+                    audioRef.current.volume = musicVolumeRef.current;
+                }
+
+                // Планируем следующий цикл ровно через moveInterval
+                timerRef.current = setTimeout(runCycle, moveInterval * 1000);
+            };
+
+            const stop = () => {
+                setIsActive(false);
+                if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+                clearTimeout(timerRef.current);
+                assistant.stop();
+            };
+
+            if (isActive) {
+                return (
+                    <div className="flex flex-col items-center justify-center min-h-[85vh] space-y-4 md:space-y-8 px-4">
+                        {countdown !== null ? (
+                            <div className="text-8xl md:text-9xl font-black text-rose-500 animate-pulse">{countdown}</div>
+                        ) : (
+                            <>
+                                <div className="text-center w-full max-w-xl">
+                                    <h2 className="text-xl md:text-4xl font-bold mb-3 md:mb-4 text-slate-400">{dances.find(d => d.id === selectedStyleId)?.name}</h2>
+                                    <div className="bg-slate-900 border-4 md:border-8 border-slate-800 p-6 md:p-16 rounded-[2rem] md:rounded-[3rem] shadow-2xl mb-4 md:mb-8 flex items-center justify-center min-h-[160px] md:min-h-[300px]">
+                                        <h3 className="text-3xl sm:text-4xl md:text-6xl font-black leading-tight text-center px-4">{currentMove?.name || '...'}</h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 w-full bg-slate-900/50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-800 mb-4 md:mb-8 text-left">
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                                <span>Музыка</span>
+                                                <span>{Math.round(musicVolume * 100)}%</span>
+                                            </div>
+                                            <input type="range" min="0" max="1" step="0.01" value={musicVolume} onChange={e => setMusicVolume(parseFloat(e.target.value))} className="w-full h-1.5 md:h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-orange-500" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                                <span>Голос</span>
+                                                <span>{Math.round(voiceVolume * 100)}%</span>
+                                            </div>
+                                            <input type="range" min="0" max="1" step="0.01" value={voiceVolume} onChange={e => setVoiceVolume(parseFloat(e.target.value))} className="w-full h-1.5 md:h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-orange-500" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={stop} className="w-full max-w-xs py-4 md:py-5 bg-orange-600/10 hover:bg-orange-600/20 text-orange-500 border border-orange-500/20 rounded-2xl md:rounded-3xl font-black text-lg md:text-xl transition-all">ОСТАНОВИТЬ</button>
+                            </>
+                        )}
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-xl mx-auto bg-slate-900 p-10 rounded-[3rem] border border-slate-800 space-y-6">
+                    <h2 className="text-3xl font-black text-center">Настройка тренировки</h2>
+                    <select value={selectedStyleId} onChange={e => setSelectedStyleId(e.target.value)} className="w-full bg-slate-800 p-4 rounded-2xl">
+                        {dances.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                    <select value={selectedSongId} onChange={e => setSelectedSongId(e.target.value)} className="w-full bg-slate-800 p-4 rounded-2xl">
+                        <option value="">Без музыки</option>
+                        {songs.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                    </select>
+                    <select value={selectedVoice} onChange={e => setSelectedVoice(e.target.value)} className="w-full bg-slate-800 p-4 rounded-2xl outline-none focus:ring-2 ring-orange-500">
+                        <option value="male">Мужской голос</option>
+                        <option value="female">Женский голос</option>
+                    </select>
+
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Режим ассистента</label>
+                        <select
+                            value={useDucking ? 'ducking' : 'normal'}
+                            onChange={e => setUseDucking(e.target.value === 'ducking')}
+                            className="w-full bg-slate-800 p-4 rounded-2xl outline-none focus:ring-2 ring-orange-500"
+                        >
+                            <option value="ducking">С приглушением музыки</option>
+                            <option value="normal">Без приглушения музыки</option>
+                        </select>
+                    </div>
+                    <div className="text-center space-y-2">
+                        <label className="text-xs font-bold text-slate-500">Интервал: {moveInterval}с</label>
+                        <input type="range" min="2" max="30" value={moveInterval} onChange={e => setMoveInterval(parseInt(e.target.value))} className="w-full accent-orange-500" />
+                    </div>
+                    <button onClick={startTraining} className="w-full py-6 bg-orange-600 rounded-3xl font-black text-xl shadow-xl">НАЧАТЬ</button>
+                </div>
+            );
+        };
+
+        // === App.tsx ===
+        const App = () => {
+            const [view, setView] = useState('library');
+            const [dances, setDances] = useState([]);
+            const [songs, setSongs] = useState([]);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('dance_styles');
+                if (saved) setDances(JSON.parse(saved));
+                else setDances(INITIAL_DANCES);
+
+                getAllSongs().then(setSongs);
+            }, []);
+
+            const updateDances = (newDances) => {
+                setDances(newDances);
+                localStorage.setItem('dance_styles', JSON.stringify(newDances));
+            };
+
+            const refreshSongs = () => getAllSongs().then(setSongs);
+
+            return (
+                <div className="min-h-screen flex bg-slate-950 text-slate-200">
+                    <aside className="w-20 md:w-24 flex flex-col items-center py-8 bg-slate-900 border-r border-slate-800 z-50">
+                        <div className="w-12 h-12 bg-orange-600 rounded-2xl flex items-center justify-center mb-12 shadow-lg overflow-hidden border border-orange-500/20">
+                            <img src="imgonline-com-ua-Resize-ofmLXE0IgQ9c.jpg" className="w-full h-full object-cover" alt="Logo" />
+                        </div>
+                        <nav className="flex flex-col gap-8">
+                            <button onClick={() => setView('library')} className={`p-4 rounded-2xl transition-all ${view === 'library' ? 'bg-orange-500 shadow-lg shadow-orange-900/40 text-white' : 'text-slate-500 hover:text-slate-300'}`} title="Steps">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                            </button>
+                            <button onClick={() => setView('music')} className={`p-4 rounded-2xl transition-all ${view === 'music' ? 'bg-orange-500 shadow-lg shadow-orange-900/40 text-white' : 'text-slate-500 hover:text-slate-300'}`} title="Music">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" /></svg>
+                            </button>
+                            <button onClick={() => setView('training')} className={`p-4 rounded-2xl transition-all ${view === 'training' ? 'bg-orange-500 shadow-lg shadow-orange-900/40 text-white' : 'text-slate-500 hover:text-slate-300'}`} title="Train">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            </button>
+                        </nav>
+                    </aside>
+
+                    <main className="flex-1 overflow-y-auto h-screen custom-scrollbar">
+                        <div className="max-w-6xl mx-auto px-6 py-10">
+                            {view === 'library' && <Elements dances={dances} onUpdateDances={updateDances} />}
+                            {view === 'music' && <MusicLibrary songs={songs} dances={dances} onRefresh={refreshSongs} />}
+                            {view === 'training' && <Trainer dances={dances} songs={songs} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        // === index.tsx ===
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+    </script>
+</body>
+
+</html>
