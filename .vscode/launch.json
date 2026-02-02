@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Lite",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--flavor",
+        "lite",
+        "--dart-define=FLAVOR=lite"
+      ]
+    },
+    {
+      "name": "Standard",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--flavor",
+        "standard",
+        "--dart-define=FLAVOR=standard"
+      ]
+    },
+    {
+      "name": "Full",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--flavor",
+        "full",
+        "--dart-define=FLAVOR=full"
+      ]
+    }
+  ]
+}
