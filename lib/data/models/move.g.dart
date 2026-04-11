@@ -12,6 +12,7 @@ Move _$MoveFromJson(Map<String, dynamic> json) => Move(
       level: json['level'] as String,
       description: json['description'] as String?,
       videoUri: json['videoUri'] as String?,
+      masteryPercent: (json['masteryPercent'] as num?)?.toInt() ?? 0,
     );
 
 Map<String, dynamic> _$MoveToJson(Move instance) => <String, dynamic>{
@@ -20,4 +21,5 @@ Map<String, dynamic> _$MoveToJson(Move instance) => <String, dynamic>{
       'level': instance.level,
       'description': instance.description,
       'videoUri': instance.videoUri,
+      'masteryPercent': instance.masteryPercent,
     };

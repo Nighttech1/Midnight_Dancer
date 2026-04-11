@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
+import 'package:midnight_dancer/providers/ui_language_provider.dart';
 
 /// Заглушка VideoPreview для web — показывает плейсхолдер.
-class VideoPreview extends StatelessWidget {
+class VideoPreview extends ConsumerWidget {
   const VideoPreview({
     super.key,
     this.videoPath,
@@ -13,7 +15,8 @@ class VideoPreview extends StatelessWidget {
   final double initialSpeed;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final str = ref.watch(appStringsProvider);
     if (videoPath == null || videoPath!.isEmpty) return const SizedBox.shrink();
     return Container(
       height: 180,
@@ -28,8 +31,8 @@ class VideoPreview extends StatelessWidget {
           Icon(Icons.videocam, size: 48, color: AppColors.textSecondary),
           const SizedBox(height: 8),
           Text(
-            'Предпросмотр на web',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            str.previewOnWeb,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
         ],
       ),

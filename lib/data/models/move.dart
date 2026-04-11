@@ -10,6 +10,7 @@ class Move {
     required this.level,
     this.description,
     this.videoUri,
+    this.masteryPercent = 0,
   });
 
   factory Move.fromJson(Map<String, dynamic> json) {
@@ -30,6 +31,10 @@ class Move {
   /// content:// URI или путь к файлу. Без копирования в папку приложения.
   final String? videoUri;
 
+  /// Процент освоения элемента, 0–100.
+  @JsonKey(defaultValue: 0)
+  final int masteryPercent;
+
   Map<String, dynamic> toJson() => _$MoveToJson(this);
 
   Move copyWith({
@@ -38,6 +43,7 @@ class Move {
     String? level,
     String? description,
     String? videoUri,
+    int? masteryPercent,
   }) =>
       Move(
         id: id ?? this.id,
@@ -45,5 +51,6 @@ class Move {
         level: level ?? this.level,
         description: description ?? this.description,
         videoUri: videoUri ?? this.videoUri,
+        masteryPercent: masteryPercent ?? this.masteryPercent,
       );
 }

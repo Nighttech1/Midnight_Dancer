@@ -1,23 +1,84 @@
 package com.midnightdancer.app
 
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Base64
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 
 class MainActivity: FlutterActivity() {
 
     private val CHANNEL = "com.midnightdancer.app/file_copy"
+    private val BACKUP_CHANNEL = "com.midnightdancer.app/backup_export"
+    /** Имя SharedPreferences плагина flutter_local_notifications для кэша zonedSchedule (см. SCHEDULED_NOTIFICATIONS в плагине). */
+    private val NOTIFICATION_CACHE_CHANNEL = "com.midnightdancer.app/notification_cache"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NOTIFICATION_CACHE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "clearFlutterLocalNotificationsScheduleCache" -> {
+                    try {
+                        applicationContext
+                            .getSharedPreferences("scheduled_notifications", Context.MODE_PRIVATE)
+                            .edit()
+                            .clear()
+                            .apply()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("CLEAR_FAILED", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKUP_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "saveZipToDownloads" -> {
+                    val tempPath = call.argument<String>("tempPath")
+                    val fileName = call.argument<String>("fileName")
+                    if (tempPath.isNullOrEmpty() || fileName.isNullOrEmpty()) {
+                        result.error("INVALID_ARG", "tempPath and fileName required", null)
+                        return@setMethodCallHandler
+                    }
+                    val src = File(tempPath)
+                    if (!src.exists()) {
+                        result.error("NOT_FOUND", "Temp file missing", null)
+                        return@setMethodCallHandler
+                    }
+                    Thread {
+                        try {
+                            val folderPath = saveZipToPublicDownloads(fileName, src)
+                            runOnUiThread {
+                                result.success(
+                                    mapOf(
+                                        "folderPath" to folderPath,
+                                        "fileName" to fileName,
+                                    ),
+                                )
+                            }
+                        } catch (e: Exception) {
+                            runOnUiThread {
+                                result.error("SAVE_FAILED", e.message, null)
+                            }
+                        }
+                    }.start()
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
@@ -74,6 +135,41 @@ class MainActivity: FlutterActivity() {
                 result.error("UNEXPECTED", e.message, null)
             }
         }
+    }
+
+    /**
+     * Копирует ZIP в папку «Загрузки» (MediaStore на API 29+, иначе прямой путь).
+     * @return абсолютный путь к каталогу загрузок для отображения пользователю
+     */
+    private fun saveZipToPublicDownloads(fileName: String, src: File): String {
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val folderPath = downloadsDir.absolutePath
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val resolver = applicationContext.contentResolver
+            val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val uri = resolver.insert(collection, values)
+                ?: throw Exception("Не удалось создать файл в Загрузках")
+            resolver.openOutputStream(uri)?.use { output ->
+                FileInputStream(src).use { input -> input.copyTo(output) }
+            } ?: throw Exception("Не удалось записать архив")
+            return folderPath
+        }
+
+        if (!downloadsDir.exists()) {
+            if (!downloadsDir.mkdirs()) throw Exception("Не удалось создать папку Загрузки")
+        }
+        val dest = File(downloadsDir, fileName)
+        if (dest.exists()) dest.delete()
+        FileInputStream(src).use { input ->
+            FileOutputStream(dest).use { output -> input.copyTo(output) }
+        }
+        return folderPath
     }
 
     private fun copyToAppCache(uriOrPath: String): String {

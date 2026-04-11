@@ -13,6 +13,7 @@ DanceStyle _$DanceStyleFromJson(Map<String, dynamic> json) => DanceStyle(
               ?.map((e) => Move.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      currentMoveId: json['currentMoveId'] as String?,
     );
 
 Map<String, dynamic> _$DanceStyleToJson(DanceStyle instance) =>
@@ -20,4 +21,5 @@ Map<String, dynamic> _$DanceStyleToJson(DanceStyle instance) =>
       'id': instance.id,
       'name': instance.name,
       'moves': instance.moves.map((e) => e.toJson()).toList(),
+      'currentMoveId': instance.currentMoveId,
     };

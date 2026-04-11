@@ -1,7 +1,12 @@
 name: midnight_dancer
 description: Dance Training App with voice assistant
 publish_to: 'none'
-version: 1.0.0+1
+
+# Версию меняешь здесь (перед каждой загрузкой в магазин):
+#   Первое число (1.0.0) — версия для пользователя (отображается в магазине). Меняй при крупных обновлениях.
+#   Число после + (1) — номер сборки (versionCode). Увеличивай при каждой новой загрузке в любой магазин.
+# Пример: 1.0.1+2 — версия 1.0.1, сборка №2.
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -9,17 +14,27 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   flutter_riverpod: ^2.4.9
   riverpod_annotation: ^2.3.3
   path_provider: ^2.1.3
   hive_flutter: ^1.1.0
   just_audio: ^0.9.36
+  audio_session: ^0.1.21
   video_player: ^2.9.0
   file_picker: ^8.1.2
+  archive: ^3.6.1
+  share_plus: ^10.1.4
   go_router: ^13.2.0
   freezed_annotation: ^2.4.1
   json_annotation: ^4.8.1
   path: ^1.9.0
+  flutter_tts: ^4.2.5
+  sherpa_onnx: ^1.12.23
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+  flutter_timezone: ^5.0.2
 
 dev_dependencies:
   flutter_test:
@@ -29,12 +44,35 @@ dev_dependencies:
   freezed: ^2.4.6
   json_serializable: ^6.7.1
   riverpod_generator: ^2.3.9
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#0f172a"
+  adaptive_icon_foreground: "assets/icon.png"
 
 flutter:
   uses-material-design: true
   assets:
     - assets/
     - assets/fonts/
+    - assets/notifications/dance_reminder_lines.txt
+    # assets/voices/ не перечисляем — в бандл не попадёт README.md; голоса и espeak — явно ниже
+    # Piper-голоса (подставляются скриптом сборки по flavor; по умолчанию — full):
+    - assets/voices/lite/ruslan/
+    - assets/voices/standard/ruslan/
+    - assets/voices/standard/irina/
+    - assets/voices/full/ruslan/
+    - assets/voices/full/irina/
+    - assets/voices/full/kamila/
+    # espeak-ng-data для Sherpa VITS (Piper) — минимальный набор ru/en
+    - assets/voices/espeak-ng-data-manifest.txt
+    - assets/voices/espeak-ng-data/
+    - assets/voices/espeak-ng-data/lang/
+    - assets/voices/espeak-ng-data/lang/zle/
+    - assets/voices/espeak-ng-data/lang/gmw/
   fonts:
     - family: Inter
       fonts:

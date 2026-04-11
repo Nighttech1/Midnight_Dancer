@@ -1,0 +1,11 @@
+phondata
+phonindex
+phontab
+intonations
+phondata-manifest
+ru_dict
+en_dict
+lang/zle/ru
+lang/zle/ru-cl
+lang/zle/ru-LV
+lang/gmw/en-US

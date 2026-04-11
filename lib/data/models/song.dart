@@ -12,6 +12,7 @@ class Song {
     required this.fileName,
     required this.duration,
     required this.sizeBytes,
+    this.playbackSpeed = 1.0,
   });
 
   factory Song.fromJson(Map<String, dynamic> json) => _$SongFromJson(json);
@@ -24,6 +25,10 @@ class Song {
   final double duration;
   final int sizeBytes;
 
+  /// Скорость воспроизведения (0.2–1.5), сохраняется в данных приложения.
+  @JsonKey(defaultValue: 1.0)
+  final double playbackSpeed;
+
   Map<String, dynamic> toJson() => _$SongToJson(this);
 
   Song copyWith({
@@ -34,6 +39,7 @@ class Song {
     String? fileName,
     double? duration,
     int? sizeBytes,
+    double? playbackSpeed,
   }) =>
       Song(
         id: id ?? this.id,
@@ -43,5 +49,6 @@ class Song {
         fileName: fileName ?? this.fileName,
         duration: duration ?? this.duration,
         sizeBytes: sizeBytes ?? this.sizeBytes,
+        playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       );
 }

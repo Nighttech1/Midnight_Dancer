@@ -14,6 +14,7 @@ Song _$SongFromJson(Map<String, dynamic> json) => Song(
       fileName: json['fileName'] as String,
       duration: (json['duration'] as num).toDouble(),
       sizeBytes: (json['sizeBytes'] as num).toInt(),
+      playbackSpeed: (json['playbackSpeed'] as num?)?.toDouble() ?? 1.0,
     );
 
 Map<String, dynamic> _$SongToJson(Song instance) => <String, dynamic>{
@@ -24,4 +25,5 @@ Map<String, dynamic> _$SongToJson(Song instance) => <String, dynamic>{
       'fileName': instance.fileName,
       'duration': instance.duration,
       'sizeBytes': instance.sizeBytes,
+      'playbackSpeed': instance.playbackSpeed,
     };

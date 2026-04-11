@@ -1,0 +1,89 @@
+# Codemagic: сборка IPA для iOS (Midnight Dancer)
+# Репозиторий: подключите в Codemagic и укажите этот файл в настройках приложения (codemagic.yaml).
+# Подробная настройка подписи и App Store Connect — в CODEMAGIC_IOS.md
+
+workflows:
+  ios-ipa:
+    name: Midnight Dancer iOS IPA
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.midnightdancer.midnightDancer
+      vars:
+        # Совпадает с --dart-define для голосов и строк (см. lib/core/app_flavor.dart)
+        FLAVOR: full
+      # Раскомментируйте после создания группы в Codemagic (сертификаты / API ключ Apple):
+      # groups:
+      #   - midnight_dancer_ios
+    integrations:
+      # Замените на ID интеграции App Store Connect из Codemagic → Teams → Integrations
+      # Либо временно удалите блок integrations и настройте подпись через groups + переменные.
+      app_store_connect: codemagic
+    scripts:
+      - name: Flutter pub get
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter --version
+          flutter pub get
+      - name: CocoaPods (iOS)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/ios"
+          pod install --repo-update
+      - name: Подпись Xcode (профили из Codemagic)
+        script: |
+          set -e
+          xcode-project use-profiles
+      - name: Сборка IPA
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/Runner.xcarchive
+
+  # Та же сборка с другим flavor (дублируйте при необходимости lite / standard / english):
+  ios-ipa-english:
+    name: Midnight Dancer iOS IPA (English)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.midnightdancer.midnightDancer
+      vars:
+        FLAVOR: english
+    integrations:
+      app_store_connect: codemagic
+    scripts:
+      - name: Flutter pub get
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter pub get
+      - name: CocoaPods (iOS)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/ios"
+          pod install --repo-update
+      - name: Подпись Xcode
+        script: |
+          set -e
+          xcode-project use-profiles
+      - name: Сборка IPA
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+    artifacts:
+      - build/ios/ipa/*.ipa

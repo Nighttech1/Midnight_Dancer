@@ -17,6 +17,8 @@ typedef MediaType = String; // 'music' | 'video'
 
 const String _metadataKey = 'metadata';
 const String _metadataFile = 'metadata.json';
+/// Папка данных в каталоге приложения. Имя не меняем — при обновлении из магазина
+/// (тот же package id) файлы остаются на месте, пользовательские данные не сбрасываются.
 const String _folderName = 'MidnightDancer';
 const String _musicFolder = 'music';
 const String _videosFolder = 'videos';
@@ -79,6 +81,22 @@ class StorageService {
     return type == 'music'
         ? p.join(root, _musicFolder)
         : p.join(root, _videosFolder);
+  }
+
+  /// Путь к медиафайлу (только filesystem). Для музыки можно передать extension (mp3, m4a, wav).
+  Future<String?> getMediaFilePath(String id, MediaType type, [String? extension]) async {
+    await init();
+    if (!useFilesystem) return null;
+    try {
+      final base = await _mediaPath(type);
+      if (type == 'music') {
+        final ext = extension ?? 'mp3';
+        return p.join(base, '$id.$ext');
+      }
+      return p.join(base, '$id.mp4');
+    } catch (_) {
+      return null;
+    }
   }
 
   String _mediaKey(String id, MediaType type) =>
@@ -150,15 +168,15 @@ class StorageService {
     }
   }
 
-  /// Сохранить медиафайл.
-  Future<void> saveMediaFile(String id, Uint8List bytes, MediaType type) async {
+  /// Сохранить медиафайл. Для music можно передать extension (mp3, m4a, wav).
+  Future<void> saveMediaFile(String id, Uint8List bytes, MediaType type, {String? musicExtension}) async {
     await init();
 
     if (useFilesystem) {
       try {
         final base = await _mediaPath(type);
         await fs.ensureDir(base);
-        final ext = type == 'music' ? 'mp3' : 'mp4';
+        final ext = type == 'music' ? (musicExtension ?? 'mp3') : 'mp4';
         final name = '$id.$ext';
         final path = p.join(base, name);
         await fs.writeFile(path, bytes);
@@ -171,14 +189,14 @@ class StorageService {
     await _hiveBox?.put(_mediaKey(id, type), base64Encode(bytes));
   }
 
-  /// Загрузить медиафайл.
-  Future<Uint8List?> loadMediaFile(String id, MediaType type) async {
+  /// Загрузить медиафайл. Для music можно передать extension (mp3, m4a, wav).
+  Future<Uint8List?> loadMediaFile(String id, MediaType type, {String? musicExtension}) async {
     await init();
 
     if (useFilesystem) {
       try {
         final base = await _mediaPath(type);
-        final ext = type == 'music' ? 'mp3' : 'mp4';
+        final ext = type == 'music' ? (musicExtension ?? 'mp3') : 'mp4';
         final name = '$id.$ext';
         final path = p.join(base, name);
         return await fs.readFile(path);
@@ -196,14 +214,30 @@ class StorageService {
     }
   }
 
-  /// Удалить медиафайл.
-  Future<void> deleteMediaFile(String id, MediaType type) async {
+  /// Полное удаление папки данных приложения (метаданные + все медиа).
+  /// После вызова следующее сохранение создаёт структуру заново.
+  Future<void> wipeAllAppStorage() async {
+    await init();
+    if (useFilesystem) {
+      try {
+        final root = await _ensureRoot();
+        await fs.deleteDirRecursive(root);
+      } catch (e) {
+        debugPrint('StorageService wipeAllAppStorage error: $e');
+      }
+      return;
+    }
+    await _hiveBox?.clear();
+  }
+
+  /// Удалить медиафайл. Для music можно передать extension (mp3, m4a, wav).
+  Future<void> deleteMediaFile(String id, MediaType type, {String? musicExtension}) async {
     await init();
 
     if (useFilesystem) {
       try {
         final base = await _mediaPath(type);
-        final ext = type == 'music' ? 'mp3' : 'mp4';
+        final ext = type == 'music' ? (musicExtension ?? 'mp3') : 'mp4';
         final name = '$id.$ext';
         final path = p.join(base, name);
         await fs.deleteFile(path);

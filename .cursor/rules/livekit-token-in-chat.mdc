@@ -1,0 +1,16 @@
+---
+description: После открытия комнаты Cortana — вставлять JWT токен в чат из файла
+alwaysApply: true
+---
+
+# Токен LiveKit в чат
+
+Когда пользователь подключается к Agents Playground или ты только что помогал запустить `scripts/open_cortana_room.ps1` (или иначе сгенерирован токен с записью в файл):
+
+1. Прочитай файл `livekit_room_token_latest.txt` в корне проекта (если он есть).
+2. **В ответ пользователю обязательно вставь содержимое этого файла целиком** — это одна строка JWT для поля Token в [Agents Playground](https://agents-playground.livekit.io/).
+3. Напомни: **LiveKit URL** = `ws://127.0.0.1:7880` (если локальный сервер из `docker compose` проекта).
+
+Если файла нет — сгенерируй токен командой из корня проекта:  
+`.\.venv311\Scripts\python.exe scripts\get_livekit_room_token.py --room cortana-manual-test --write-jwt-to livekit_room_token_latest.txt`  
+(или `.venv\Scripts\python.exe`, если нет `.venv311`), затем снова прочитай файл и вставь JWT в чат.

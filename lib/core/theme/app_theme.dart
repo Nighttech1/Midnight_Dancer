@@ -31,7 +31,7 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData get dark => ThemeData(
-        useMaterial3: true,
+        useMaterial3: false,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: AppColors.background,
         colorScheme: ColorScheme.fromSeed(
@@ -58,6 +58,15 @@ class AppTheme {
             ),
           ),
         ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: AppColors.cardBorder),
+            shape: RoundedRectangleBorder(
+              borderRadius: AppRadius.radiusMd,
+            ),
+          ),
+        ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: AppColors.card,
@@ -69,6 +78,15 @@ class AppTheme {
           focusedBorder: OutlineInputBorder(
             borderRadius: AppRadius.radiusMd,
             borderSide: const BorderSide(color: AppColors.accent, width: 2),
+          ),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: AppColors.card,
+          contentTextStyle: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.radiusMd,
+            side: const BorderSide(color: AppColors.cardBorder),
           ),
         ),
       );

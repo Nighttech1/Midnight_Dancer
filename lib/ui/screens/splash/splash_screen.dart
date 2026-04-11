@@ -1,28 +1,58 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
+import 'package:midnight_dancer/providers/app_data_provider.dart';
+import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/ui/navigation/main_scaffold.dart';
 
-/// Splash screen с иконкой приложения. Показывается при загрузке.
-class SplashScreen extends StatefulWidget {
+/// Стартовый экран при первом запуске. Показывается 4 секунды, круг плавно заполняется. При переключении вкладок (возврат в приложение) не показывается — пользователь остаётся на MainScaffold.
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerProviderStateMixin {
   bool _iconError = false;
+  bool _navigated = false;
+
+  static const _splashDuration = Duration(seconds: 4);
+
+  late AnimationController _progressController;
+  late Animation<double> _progressAnimation;
 
   @override
   void initState() {
     super.initState();
-    _precacheIcon();
-    _navigateAfterDelay();
+    ref.read(appDataNotifierProvider);
+    _progressController = AnimationController(
+      vsync: this,
+      duration: _splashDuration,
+    );
+    _progressAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
+    );
+    _progressController.addStatusListener(_onProgressStatus);
+    _preloadIcon();
+    _progressController.forward();
   }
 
-  Future<void> _precacheIcon() async {
+  void _onProgressStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && mounted && !_navigated) {
+      _navigated = true;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const MainScaffold(),
+          transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+          transitionDuration: const Duration(milliseconds: 200),
+        ),
+      );
+    }
+  }
+
+  Future<void> _preloadIcon() async {
     try {
       await rootBundle.load('assets/icon.png');
     } catch (_) {
@@ -30,21 +60,16 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
-  Future<void> _navigateAfterDelay() async {
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const MainScaffold(),
-        transitionsBuilder: (_, a, __, c) =>
-            FadeTransition(opacity: a, child: c),
-        transitionDuration: const Duration(milliseconds: 200),
-      ),
-    );
+  @override
+  void dispose() {
+    _progressController.removeStatusListener(_onProgressStatus);
+    _progressController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final str = ref.watch(appStringsProvider);
     return RepaintBoundary(
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -55,28 +80,44 @@ class _SplashScreenState extends State<SplashScreen> {
             children: [
               _buildIcon(),
               const SizedBox(height: 24),
-              Text(
+              const Text(
                 'Midnight Dancer',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: AppColors.accent,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Dance Training App',
-                style: TextStyle(
+              Text(
+                str.appSubtitle,
+                style: const TextStyle(
                   fontSize: 16,
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'by Nighttech',
-                style: TextStyle(
+              const SizedBox(height: 8),
+              Text(
+                str.byNighttech,
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: AnimatedBuilder(
+                  animation: _progressAnimation,
+                  builder: (context, child) {
+                    return CircularProgressIndicator(
+                      value: _progressAnimation.value,
+                      strokeWidth: 4,
+                      backgroundColor: AppColors.card,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+                    );
+                  },
                 ),
               ),
             ],

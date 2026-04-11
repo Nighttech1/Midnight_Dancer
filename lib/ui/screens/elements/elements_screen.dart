@@ -4,32 +4,25 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
+import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/core/utils/file_copy_platform.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/file_copy_platform_io.dart'
     as file_copy;
 import 'package:midnight_dancer/core/utils/video_temp.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/video_temp_io.dart'
     as video_temp;
+import 'package:midnight_dancer/core/utils/formatters.dart';
+import 'package:midnight_dancer/core/utils/agent_debug_log.dart';
 import 'package:midnight_dancer/ui/widgets/move_card.dart';
 import 'package:midnight_dancer/ui/widgets/video_preview.dart';
 
-const _levelOptions = [
-  ('Beginner', 'Начинающий'),
-  ('Intermediate', 'Средний'),
-  ('Advanced', 'Профи'),
-];
-
-const _sortOptions = [
-  ('name', 'По А-Я'),
-  ('level', 'По уровню'),
-];
-
 /// Форма добавления/редактирования движения.
-class _MoveFormSheet extends StatefulWidget {
+class _MoveFormSheet extends ConsumerStatefulWidget {
   const _MoveFormSheet({
     required this.scrollController,
     required this.isEdit,
@@ -37,6 +30,8 @@ class _MoveFormSheet extends StatefulWidget {
     required this.initialLevel,
     required this.initialDescription,
     required this.initialVideoPath,
+    required this.initialMasteryPercent,
+    this.onMasteryPercentLive,
     required this.onSave,
     required this.onCancel,
   });
@@ -47,25 +42,31 @@ class _MoveFormSheet extends StatefulWidget {
   final String initialLevel;
   final String initialDescription;
   final String? initialVideoPath;
+  final int initialMasteryPercent;
+  final ValueChanged<int>? onMasteryPercentLive;
   final void Function(
     String name,
     String level,
     String description,
     String? videoPath,
     Uint8List? videoBytes,
+    int masteryPercent,
   ) onSave;
   final VoidCallback onCancel;
 
   @override
-  State<_MoveFormSheet> createState() => _MoveFormSheetState();
+  ConsumerState<_MoveFormSheet> createState() => _MoveFormSheetState();
 }
 
-class _MoveFormSheetState extends State<_MoveFormSheet> {
+class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
   late TextEditingController _nameController;
   late TextEditingController _descController;
   late String _level;
+  late double _masterySlider;
   String? _videoPath;
   Uint8List? _videoBytes;
+  String? _previewVideoPath;
+  bool _resolvingPreview = false;
 
   @override
   void initState() {
@@ -74,7 +75,40 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
     _descController = TextEditingController(text: widget.initialDescription);
     _level = widget.initialLevel;
     _videoPath = widget.initialVideoPath;
+    _masterySlider = widget.initialMasteryPercent.clamp(0, 100).toDouble();
+    _previewVideoPath = _pathUsableByVideoPlayer(widget.initialVideoPath);
     _nameController.addListener(() => setState(() {}));
+    _resolveStorageVideoPreviewIfNeeded();
+  }
+
+  static String? _pathUsableByVideoPlayer(String? p) {
+    if (p == null || p.isEmpty) return null;
+    if (p.startsWith('content:') || p.startsWith('/')) return p;
+    return null;
+  }
+
+  Future<void> _resolveStorageVideoPreviewIfNeeded() async {
+    final path = widget.initialVideoPath;
+    if (path == null || path.isEmpty) return;
+    if (path.startsWith('content:') || path.startsWith('/')) return;
+    if (!mounted) return;
+    setState(() => _resolvingPreview = true);
+    final notifier = ref.read(appDataNotifierProvider.notifier);
+    final bytes = await notifier.loadVideo(path);
+    if (!mounted) return;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() {
+        _resolvingPreview = false;
+        _previewVideoPath = null;
+      });
+      return;
+    }
+    final tmp = await video_temp.writeVideoTemp(bytes);
+    if (!mounted) return;
+    setState(() {
+      _resolvingPreview = false;
+      _previewVideoPath = tmp ?? path;
+    });
   }
 
   @override
@@ -105,6 +139,8 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
         setState(() {
           _videoPath = path;
           _videoBytes = bytes;
+          _previewVideoPath = path;
+          _resolvingPreview = false;
         });
       }
     }
@@ -113,11 +149,13 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
   void _doSave() {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
-    widget.onSave(name, _level, _descController.text.trim(), _videoPath, _videoBytes);
+    final m = _masterySlider.round().clamp(0, 100);
+    widget.onSave(name, _level, _descController.text.trim(), _videoPath, _videoBytes, m);
   }
 
   @override
   Widget build(BuildContext context) {
+    final str = ref.watch(appStringsProvider);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.card,
@@ -128,7 +166,7 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
         padding: const EdgeInsets.all(24),
         children: [
           Text(
-            widget.isEdit ? 'Изменить элемент' : 'Добавить элемент',
+            widget.isEdit ? str.editElement : str.addOrEditElement,
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -138,17 +176,18 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
           const SizedBox(height: 20),
           TextField(
             controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Название',
-              hintText: 'Название элемента',
+            decoration: InputDecoration(
+              labelText: str.nameLabel,
+              hintText: str.elementNameHint,
             ),
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _level,
-            decoration: const InputDecoration(labelText: 'Уровень'),
+            decoration: InputDecoration(labelText: str.levelLabel),
             dropdownColor: AppColors.card,
-            items: _levelOptions
+            items: str.filterLevelOptions
+                .where((e) => e.$1 != 'All')
                 .map((e) => DropdownMenuItem(
                       value: e.$1,
                       child: Text(e.$2, style: const TextStyle(color: Colors.white)),
@@ -161,19 +200,73 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
             onPressed: _pickVideo,
             icon: const Icon(Icons.videocam),
             label: Text(
-              _videoPath != null || _videoBytes != null ? 'Видео выбрано' : 'Выбрать видео',
+              _videoPath != null || _videoBytes != null ? str.videoSelected : str.pickVideo,
             ),
           ),
-          if (_videoPath != null && _videoPath!.isNotEmpty) ...[
+          if (_resolvingPreview) ...[
             const SizedBox(height: 16),
-            VideoPreview(videoPath: _videoPath!, initialSpeed: 1.0),
+            const SizedBox(
+              height: 180,
+              child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+            ),
+          ] else if (_previewVideoPath != null && _previewVideoPath!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            VideoPreview(videoPath: _previewVideoPath!, initialSpeed: 1.0),
           ],
+          const SizedBox(height: 20),
+          Text(
+            str.elementMasteryProgress,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 10,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
+                    activeTrackColor: AppColors.accent,
+                    inactiveTrackColor: Colors.white24,
+                    thumbColor: Colors.white,
+                    overlayColor: AppColors.accent.withOpacity(0.22),
+                  ),
+                  child: Slider(
+                    value: _masterySlider.clamp(0, 100) / 100,
+                    onChanged: (v) => setState(() => _masterySlider = v * 100),
+                    onChangeEnd: (v) {
+                      final p = (v * 100).round().clamp(0, 100);
+                      widget.onMasteryPercentLive?.call(p);
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 52,
+                child: Text(
+                  '${_masterySlider.round().clamp(0, 100)}%',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    color: AppColors.accent,
+                  ),
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _descController,
-            decoration: const InputDecoration(
-              labelText: 'Описание',
-              hintText: 'Опишите детали шага...',
+            decoration: InputDecoration(
+              labelText: str.descriptionLabel,
+              hintText: str.descriptionHint,
               alignLabelWithHint: true,
             ),
             maxLines: 3,
@@ -184,14 +277,14 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
               Expanded(
                 child: ElevatedButton(
                   onPressed: _nameController.text.trim().isEmpty ? null : _doSave,
-                  child: const Text('Сохранить'),
+                  child: Text(str.save),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: OutlinedButton(
                   onPressed: widget.onCancel,
-                  child: const Text('Отмена'),
+                  child: Text(str.cancel),
                 ),
               ),
             ],
@@ -201,13 +294,6 @@ class _MoveFormSheetState extends State<_MoveFormSheet> {
     );
   }
 }
-
-const _filterLevelOptions = [
-  ('All', 'Все уровни'),
-  ('Beginner', 'Начинающий'),
-  ('Intermediate', 'Средний'),
-  ('Advanced', 'Профи'),
-];
 
 class ElementsScreen extends ConsumerStatefulWidget {
   const ElementsScreen({super.key});
@@ -231,6 +317,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   @override
   Widget build(BuildContext context) {
     final asyncData = ref.watch(appDataNotifierProvider);
+    final str = ref.watch(appStringsProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -240,22 +327,59 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
           child: CircularProgressIndicator(color: AppColors.accent),
         ),
         error: (e, _) => Center(
-          child: Text('Ошибка: $e', style: TextStyle(color: AppColors.accent)),
+          child: Text('${str.errorPrefix}: $e', style: TextStyle(color: AppColors.accent)),
         ),
         data: (data) {
           final styles = data.danceStyles;
           if (styles.isEmpty) {
             return _buildEmptyState(context);
           }
-          final selectedId = _selectedStyleId ?? (styles.isEmpty ? null : styles.first.id);
+          final selectedId = _selectedStyleId ?? styles.first.id;
+          // H1: DropdownButton падает, если value нет среди items (битый _selectedStyleId).
+          var dropdownStyleId = selectedId;
+          if (!styles.any((s) => s.id == dropdownStyleId)) {
+            // #region agent log
+            agentDebugLog(
+              hypothesisId: 'H1',
+              location: 'elements_screen.dart:build',
+              message: 'selected_style_id_orphan_fixed',
+              data: {
+                'badId': dropdownStyleId,
+                'validIds': styles.map((s) => s.id).toList(),
+              },
+            );
+            // #endregion
+            dropdownStyleId = styles.first.id;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _selectedStyleId = dropdownStyleId);
+            });
+          }
           DanceStyle? style;
           for (final s in styles) {
-            if (s.id == selectedId) {
+            if (s.id == dropdownStyleId) {
               style = s;
               break;
             }
           }
-          style ??= styles.isEmpty ? null : styles.first;
+          style ??= styles.first;
+          final selectedStyle = style;
+          // H2: DropdownButton падает, если value нет среди items (битый фильтр/сортировка).
+          final levelKeys =
+              str.filterLevelOptions.map((e) => e.$1).toSet();
+          final sortKeys = str.sortOptions.map((e) => e.$1).toSet();
+          final safeFilterLevel =
+              dropdownValueOrFallback(_filterLevel, levelKeys, 'All');
+          final safeSortBy =
+              dropdownValueOrFallback(_sortBy, sortKeys, 'name');
+          if (safeFilterLevel != _filterLevel || safeSortBy != _sortBy) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() {
+                if (!levelKeys.contains(_filterLevel)) _filterLevel = 'All';
+                if (!sortKeys.contains(_sortBy)) _sortBy = 'name';
+              });
+            });
+          }
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(appDataNotifierProvider);
@@ -270,29 +394,37 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                     delegate: SliverChildListDelegate([
                       _buildHeader(context),
                       const SizedBox(height: 16),
-                      _buildStyleSelector(context, styles, selectedId),
+                      _buildStyleSelector(context, styles, dropdownStyleId),
                     ]),
                   ),
                 ),
-                if (style != null) ...[
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 16),
-                          _buildFiltersAndAdd(context, style),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 16),
+                        _buildFiltersAndAdd(
+                          context,
+                          selectedStyle,
+                          safeFilterLevel,
+                          safeSortBy,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                     ),
                   ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    sliver: _buildMovesGridSliver(context, style),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  sliver: _buildMovesGridSliver(
+                    context,
+                    selectedStyle,
+                    safeFilterLevel,
+                    safeSortBy,
                   ),
-                ],
+                ),
               ],
             ),
           );
@@ -303,6 +435,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final str = ref.watch(appStringsProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -312,7 +445,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
             Icon(Icons.format_list_bulleted, size: 64, color: AppColors.textSecondary),
             const SizedBox(height: 16),
             Text(
-              'Добавьте первый стиль',
+              str.addFirstStyle,
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -321,7 +454,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Например: Сальса, Бачата, Кизомба',
+              str.styleNameHint,
               style: TextStyle(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
@@ -329,7 +462,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
             ElevatedButton.icon(
               onPressed: _showNewStyleDialogInner,
               icon: const Icon(Icons.add),
-              label: const Text('Новый стиль'),
+              label: Text(str.newStyle),
             ),
           ],
         ),
@@ -338,12 +471,13 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final str = ref.watch(appStringsProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Элементы',
-          style: TextStyle(
+        Text(
+          str.elementsTitle,
+          style: const TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -358,6 +492,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     List<DanceStyle> styles,
     String? selectedId,
   ) {
+    final str = ref.watch(appStringsProvider);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -374,7 +509,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Текущий стиль',
+                  str.currentStyle,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -392,7 +527,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                       return DropdownMenuItem(
                         value: s.id,
                         child: Text(
-                          s.name,
+                          str.displayDanceStyleName(s.name),
                           style: const TextStyle(color: Colors.white),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -404,20 +539,20 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
               ],
             ),
           ),
-          if (styles.length > 1 && selectedId != null)
+          if (selectedId != null)
             IconButton(
               onPressed: () => _confirmDeleteStyle(context, selectedId),
               icon: const Icon(Icons.delete_outline, color: Colors.white54),
-              tooltip: 'Удалить стиль',
+              tooltip: str.deleteStyleTooltip,
             ),
           const SizedBox(width: 8),
           Flexible(
             child: ElevatedButton.icon(
               onPressed: _showNewStyleDialogInner,
               icon: const Icon(Icons.add, size: 18),
-              label: const FittedBox(
+              label: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text('Новый'),
+                child: Text(str.newLabel),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
@@ -430,7 +565,13 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     );
   }
 
-  Widget _buildFiltersAndAdd(BuildContext context, DanceStyle style) {
+  Widget _buildFiltersAndAdd(
+    BuildContext context,
+    DanceStyle style,
+    String filterLevelForDropdown,
+    String sortByForDropdown,
+  ) {
+    final str = ref.watch(appStringsProvider);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -445,7 +586,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
               Expanded(
                 child: TextField(
                   decoration: InputDecoration(
-                    hintText: 'Поиск...',
+                    hintText: str.searchHint,
                     prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
                     isDense: true,
                   ),
@@ -454,14 +595,12 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              Flexible(
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 88, minHeight: 48),
                 child: ElevatedButton.icon(
                   onPressed: () => _openAddMoveDialog(style.id),
                   icon: const Icon(Icons.add, size: 18),
-                  label: const FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text('Добавить'),
-                  ),
+                  label: Text(str.addLabel),
                 ),
               ),
             ],
@@ -475,16 +614,26 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                 width: 140,
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _filterLevel,
+                    value: filterLevelForDropdown,
                     isExpanded: true,
                     dropdownColor: AppColors.card,
-                    items: _filterLevelOptions
+                    items: str.filterLevelOptions
                         .map((e) => DropdownMenuItem(
                               value: e.$1,
                               child: Text(e.$2, style: const TextStyle(color: Colors.white)),
                             ))
                         .toList(),
-                    onChanged: (v) => setState(() => _filterLevel = v ?? 'All'),
+                    onChanged: (v) {
+                      // #region agent log
+                      agentDebugLog(
+                        hypothesisId: 'H2',
+                        location: 'elements_screen.dart:filterLevel',
+                        message: 'filter_level_changed',
+                        data: {'from': filterLevelForDropdown, 'to': v},
+                      );
+                      // #endregion
+                      setState(() => _filterLevel = v ?? 'All');
+                    },
                   ),
                 ),
               ),
@@ -492,10 +641,10 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                 width: 140,
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _sortBy,
+                    value: sortByForDropdown,
                     isExpanded: true,
                     dropdownColor: AppColors.card,
-                    items: _sortOptions
+                    items: str.sortOptions
                         .map((e) => DropdownMenuItem(
                               value: e.$1,
                               child: Text(e.$2, style: const TextStyle(color: Colors.white)),
@@ -512,46 +661,54 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     );
   }
 
-  List<Move> _filteredMoves(DanceStyle style) {
+  List<Move> _filteredMoves(
+    DanceStyle style,
+    String filterLevel,
+    String sortBy,
+  ) {
+    Move? pinned;
+    final curId = style.currentMoveId;
+    if (curId != null && curId.isNotEmpty) {
+      for (final m in style.moves) {
+        if (m.id == curId) {
+          pinned = m;
+          break;
+        }
+      }
+    }
     var moves = List<Move>.from(style.moves);
-    if (_filterLevel != 'All') {
-      moves = moves.where((m) => m.level == _filterLevel).toList();
+    if (pinned != null) {
+      moves.removeWhere((m) => m.id == pinned!.id);
+    }
+    if (filterLevel != 'All') {
+      moves = moves.where((m) => m.level == filterLevel).toList();
     }
     if (_searchQuery.isNotEmpty) {
-      moves = moves
-          .where((m) => m.name.toLowerCase().contains(_searchQuery.toLowerCase()))
-          .toList();
+      final q = _searchQuery.toLowerCase();
+      moves = moves.where((m) => m.name.toLowerCase().contains(q)).toList();
     }
     moves.sort((a, b) {
-      if (_sortBy == 'name') return a.name.compareTo(b.name);
+      if (sortBy == 'name') return a.name.compareTo(b.name);
       const order = {'Beginner': 1, 'Intermediate': 2, 'Advanced': 3};
       return (order[a.level] ?? 0).compareTo(order[b.level] ?? 0);
     });
+    if (pinned != null) {
+      return [pinned, ...moves];
+    }
     return moves;
   }
 
-  Widget _buildMovesGrid(BuildContext context, DanceStyle style) {
-    final moves = _filteredMoves(style);
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.85,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: moves.length,
-      itemBuilder: (_, i) => _buildMoveCard(moves[i], style),
-    );
-  }
-
-  SliverGrid _buildMovesGridSliver(BuildContext context, DanceStyle style) {
-    final moves = _filteredMoves(style);
+  SliverGrid _buildMovesGridSliver(
+    BuildContext context,
+    DanceStyle style,
+    String filterLevel,
+    String sortBy,
+  ) {
+    final moves = _filteredMoves(style, filterLevel, sortBy);
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.85,
+        childAspectRatio: 0.66,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -563,22 +720,40 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   }
 
   Widget _buildMoveCard(Move move, DanceStyle style) {
+    final isCurrent = style.currentMoveId == move.id;
     return MoveCard(
       move: move,
-      styleId: style.id,
+      isCurrent: isCurrent,
       onEdit: () => _openEditMoveDialog(move, style.id),
       onDelete: () => _showDeleteConfirm((move.id, style.id, move.name)),
+      // H3: не очищаем videoUri при сбое плеера — иначе после сбоя/форса топа данные стираются.
       onVideoUnavailable: () async {
-        await ref.read(appDataNotifierProvider.notifier).clearVideoForMove(style.id, move.id);
+        // #region agent log
+        agentDebugLog(
+          hypothesisId: 'H3',
+          location: 'elements_screen.dart:onVideoUnavailable',
+          message: 'video_player_error_no_db_clear',
+          data: {'styleId': style.id, 'moveId': move.id},
+        );
+        // #endregion
+      },
+      onToggleCurrent: () async {
+        final n = ref.read(appDataNotifierProvider.notifier);
+        if (isCurrent) {
+          await n.setDanceStyleCurrentMove(style.id, null);
+        } else {
+          await n.setDanceStyleCurrentMove(style.id, move.id);
+        }
       },
     );
   }
 
   Future<void> _confirmDeleteStyle(BuildContext context, String styleId) async {
+    final str = ref.read(appStringsProvider);
     final data = ref.read(appDataNotifierProvider).valueOrNull;
     if (data != null && data.danceStyles.length <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Нельзя удалить последний стиль!')),
+        SnackBar(content: Text(str.cannotDeleteLastStyle)),
       );
       return;
     }
@@ -586,18 +761,18 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Удалить стиль?'),
-        content: const Text(
-          'Вы уверены, что хотите удалить стиль и все его элементы?',
+        title: Text(str.deleteStyleConfirm),
+        content: Text(
+          str.deleteStyleMessage,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
+            child: Text(str.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+            child: Text(str.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -636,16 +811,23 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   }
 
   void _showMoveFormSheet() {
+    if (!mounted) return;
     final isEdit = _editingMove != null;
     final name = _moveName;
     final level = _moveLevel;
     final desc = _moveDescription;
     final videoPath = _pickedVideoPath ?? (isEdit ? _editingMove?.$1?.videoUri : null);
+    final editPair = _editingMove;
+    final editMove = editPair?.$1;
+    final editStyleId = editPair?.$2;
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      isDismissible: true,
+      enableDrag: true,
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.9,
         minChildSize: 0.5,
@@ -657,14 +839,25 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
           initialLevel: level,
           initialDescription: desc,
           initialVideoPath: videoPath,
-          onSave: (n, l, d, path, bytes) async {
-            await _saveMoveFromSheet(ctx, n, l, d, videoPath: path, videoBytes: bytes);
+          initialMasteryPercent: editMove?.masteryPercent ?? 0,
+          onMasteryPercentLive: editMove != null && editStyleId != null
+              ? (p) {
+                  ref.read(appDataNotifierProvider.notifier).updateMoveMastery(
+                        editStyleId,
+                        editMove.id,
+                        p,
+                      );
+                }
+              : null,
+          onSave: (n, l, d, path, bytes, mastery) async {
+            await _saveMoveFromSheet(ctx, n, l, d,
+                videoPath: path, videoBytes: bytes, masteryPercent: mastery);
           },
           onCancel: () => Navigator.pop(ctx),
         ),
       ),
     ).then((_) {
-      setState(() {
+      if (mounted) setState(() {
         _editingMove = null;
         _addingMoveStyleId = null;
         _pickedVideoPath = null;
@@ -680,6 +873,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     String description, {
     String? videoPath,
     Uint8List? videoBytes,
+    int masteryPercent = 0,
   }) async {
     if (name.trim().isEmpty) return;
     final styleId = _editingMove?.$2 ?? _addingMoveStyleId;
@@ -693,6 +887,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
       level: level,
       description: description.trim().isEmpty ? null : description.trim(),
       videoUri: null,
+      masteryPercent: masteryPercent.clamp(0, 100),
     );
 
     try {
@@ -703,8 +898,9 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
       }
     } catch (e) {
       if (sheetContext.mounted) {
+        final str = ref.read(appStringsProvider);
         ScaffoldMessenger.of(sheetContext).showSnackBar(
-          SnackBar(content: Text('Ошибка сохранения: $e')),
+          SnackBar(content: Text(str.saveErrorSnackbar(e.toString()))),
         );
       }
       return;
@@ -714,29 +910,30 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
 
 
   Future<void> _showNewStyleDialogInner() async {
+    final str = ref.read(appStringsProvider);
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) {
         var n = '';
         return AlertDialog(
           backgroundColor: AppColors.card,
-          title: const Text('Новый стиль'),
+          title: Text(str.newStyle),
           content: TextField(
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Название стиля',
-              hintText: 'Например: Сальса',
+            decoration: InputDecoration(
+              labelText: str.styleNameLabel,
+              hintText: str.styleNameExample,
             ),
             onChanged: (v) => n = v,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
+              child: Text(str.cancel),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, n.trim()),
-              child: const Text('Создать'),
+              child: Text(str.create),
             ),
           ],
         );
@@ -754,21 +951,22 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   }
 
   Future<void> _showDeleteConfirm((String, String, String) p) async {
+    final str = ref.read(appStringsProvider);
     final (moveId, styleId, name) = p;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        title: const Text('Удалить элемент?'),
-        content: Text('Вы собираетесь удалить "$name". Это нельзя отменить.'),
+        title: Text(str.deleteElementConfirm),
+        content: Text(str.deleteElementMessage(name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
+            child: Text(str.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Удалить навсегда', style: TextStyle(color: Colors.red)),
+            child: Text(str.deletePermanently, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),

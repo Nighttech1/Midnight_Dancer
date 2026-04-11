@@ -32,3 +32,8 @@ Future<void> copyFile(String sourcePath, String destPath) async {
   if (!await src.exists()) throw Exception('Source file not found');
   await src.copy(destPath);
 }
+
+Future<void> deleteDirRecursive(String path) async {
+  final d = Directory(path);
+  if (await d.exists()) await d.delete(recursive: true);
+}

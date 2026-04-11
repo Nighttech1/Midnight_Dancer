@@ -2,40 +2,34 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:midnight_dancer/core/app_strings.dart';
+import 'package:midnight_dancer/core/utils/agent_debug_log.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
-import 'package:midnight_dancer/core/utils/file_copy_platform.dart'
-    if (dart.library.io) 'package:midnight_dancer/core/utils/file_copy_platform_io.dart'
-    as file_copy;
 import 'package:midnight_dancer/core/utils/thumbnail_cache.dart';
 import 'package:midnight_dancer/core/utils/video_temp.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/video_temp_io.dart'
     as video_temp;
 import 'package:midnight_dancer/data/models/move.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
-
-const _levelLabels = {
-  'Beginner': 'Начинающий',
-  'Intermediate': 'Средний',
-  'Advanced': 'Профи',
-};
-
-String _levelLabel(String level) =>
-    _levelLabels[level] ?? level;
+import 'package:midnight_dancer/providers/ui_language_provider.dart';
+import 'package:midnight_dancer/ui/widgets/move_card_video.dart';
 
 class MoveCard extends ConsumerStatefulWidget {
   const MoveCard({
     super.key,
     required this.move,
-    required this.styleId,
+    required this.isCurrent,
     required this.onEdit,
     required this.onDelete,
+    required this.onToggleCurrent,
     this.onVideoUnavailable,
   });
 
   final Move move;
-  final String styleId;
+  final bool isCurrent;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onToggleCurrent;
   final VoidCallback? onVideoUnavailable;
 
   @override
@@ -47,6 +41,8 @@ class _MoveCardState extends ConsumerState<MoveCard> {
   Uint8List? _thumbnailBytes;
   bool _loading = true;
   bool _error = false;
+
+  static const Color _neonOrange = Color(0xFFFF6B35);
 
   @override
   void initState() {
@@ -65,35 +61,52 @@ class _MoveCardState extends ConsumerState<MoveCard> {
   Future<void> _resolveVideo() async {
     final uri = widget.move.videoUri;
     if (uri == null || uri.isEmpty) {
-      if (mounted) setState(() {
-        _loading = false;
-        _videoPathOrUri = null;
-        _thumbnailBytes = null;
-        _error = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _videoPathOrUri = null;
+          _thumbnailBytes = null;
+          _error = false;
+        });
+      }
       return;
     }
     if (uri.startsWith('content:') || uri.startsWith('/')) {
       _videoPathOrUri = uri;
       final bytes = await ThumbnailCache.instance.get(uri);
       if (!mounted) return;
-      if (mounted) setState(() {
-        _thumbnailBytes = bytes;
-        _loading = false;
-        _error = false;
-      });
+      if (mounted) {
+        setState(() {
+          _thumbnailBytes = bytes;
+          _loading = false;
+          _error = false;
+        });
+      }
       return;
     }
     final notifier = ref.read(appDataNotifierProvider.notifier);
-    final bytes = await notifier.loadVideo(uri) as Uint8List?;
+    final bytes = await notifier.loadVideo(uri);
     if (!mounted) return;
     if (bytes == null || bytes.isEmpty) {
-      if (mounted) setState(() {
-        _loading = false;
-        _videoPathOrUri = null;
-        _thumbnailBytes = null;
-        _error = true;
-      });
+      // #region agent log
+      agentDebugLog(
+        hypothesisId: 'H4',
+        location: 'move_card.dart:_resolveVideo',
+        message: 'loadVideo_bytes_empty',
+        data: {
+          'uriLen': uri.length,
+          'uriIsId': !(uri.startsWith('content:') || uri.startsWith('/')),
+        },
+      );
+      // #endregion
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _videoPathOrUri = null;
+          _thumbnailBytes = null;
+          _error = true;
+        });
+      }
       return;
     }
     final path = await video_temp.writeVideoTemp(bytes);
@@ -110,33 +123,179 @@ class _MoveCardState extends ConsumerState<MoveCard> {
     }
   }
 
+  Widget _topRightActions() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            onTap: widget.onToggleCurrent,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(
+                widget.isCurrent ? Icons.flag : Icons.flag_outlined,
+                size: 16,
+                color: widget.isCurrent ? _neonOrange : Colors.white70,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Material(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            onTap: widget.onEdit,
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.all(6),
+              child: Icon(Icons.edit, size: 16, color: Colors.white70),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Material(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(8),
+          child: InkWell(
+            onTap: widget.onDelete,
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.all(6),
+              child: Icon(Icons.close, size: 16, color: Colors.white70),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onEdit,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: AppRadius.radiusXl,
-          border: Border.all(color: AppColors.cardBorder),
+    final str = ref.watch(appStringsProvider);
+    final hasVideo = _videoPathOrUri != null &&
+        _videoPathOrUri!.isNotEmpty &&
+        !_error;
+
+    final inner = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: hasVideo
+              ? MoveCardVideo(
+                  videoPathOrUri: _videoPathOrUri!,
+                  thumbnailBytes: _thumbnailBytes,
+                  levelLabel: str.levelLabelFor(widget.move.level),
+                  masteryPercent: widget.move.masteryPercent,
+                  topRight: _topRightActions(),
+                  onEdit: widget.onEdit,
+                  onError: widget.onVideoUnavailable,
+                )
+              : _buildStaticPreview(),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildPreview(),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          color: Colors.black,
+          child: Text(
+            widget.move.name,
+            textAlign: TextAlign.center,
+            maxLines: 4,
+            softWrap: true,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ClipRRect(
+          borderRadius: AppRadius.radiusXl,
+          child: ColoredBox(
+            color: AppColors.card,
+            child: inner,
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.radiusXl,
+                border: Border.all(
+                  color: widget.isCurrent ? _neonOrange : AppColors.cardBorder,
+                  width: widget.isCurrent ? 2.5 : 1,
+                ),
+                boxShadow: widget.isCurrent
+                    ? [
+                        BoxShadow(
+                          color: _neonOrange.withOpacity(0.5),
+                          blurRadius: 14,
+                          spreadRadius: 0,
+                          offset: Offset.zero,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStaticPreview() {
+    final str = ref.watch(appStringsProvider);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (_loading)
+          const ColoredBox(
+            color: AppColors.background,
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.accent),
+            ),
+          )
+        else if (_thumbnailBytes != null && _thumbnailBytes!.isNotEmpty)
+          Image.memory(
+            _thumbnailBytes!,
+            fit: BoxFit.cover,
+            cacheWidth: 512,
+            cacheHeight: 512,
+          )
+        else
+          ColoredBox(
+            color: AppColors.background,
+            child: Center(
+              child: Icon(Icons.videocam, color: Colors.white24, size: 40),
+            ),
+          ),
+        Positioned(
+          top: 10,
+          left: 10,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+                  border: Border.all(color: AppColors.accent.withOpacity(0.35)),
                 ),
                 child: Text(
-                  _levelLabel(widget.move.level),
+                  str.levelLabelFor(widget.move.level),
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -144,79 +303,28 @@ class _MoveCardState extends ConsumerState<MoveCard> {
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: GestureDetector(
-                onTap: widget.onDelete,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.close,
-                    size: 16,
-                    color: Colors.white70,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black87],
-                  ),
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white24),
                 ),
                 child: Text(
-                  widget.move.name,
+                  '${widget.move.masteryPercent.clamp(0, 100)}%',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 10,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildPreview() {
-    if (_loading) {
-      return Container(
-        color: AppColors.background,
-        child: const Center(
-          child: CircularProgressIndicator(color: AppColors.accent),
-        ),
-      );
-    }
-    if (_thumbnailBytes != null && _thumbnailBytes!.isNotEmpty) {
-      return Image.memory(
-        _thumbnailBytes!,
-        fit: BoxFit.cover,
-        cacheWidth: 512,
-        cacheHeight: 512,
-      );
-    }
-    return Container(
-      color: AppColors.background,
-      child: Center(
-        child: Icon(Icons.videocam, color: Colors.white24, size: 48),
-      ),
+        Positioned(top: 10, right: 10, child: _topRightActions()),
+      ],
     );
   }
 }
