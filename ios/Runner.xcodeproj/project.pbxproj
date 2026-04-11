@@ -662,7 +662,7 @@ F1B6CDE045204BD5B5C6F156 /* Debug */ = {
 			};
 			name = Debug-lite;
 		};
-DD7BFC4DA51540FEA6688E66 /* Debug */ = {
+		DD7BFC4DA51540FEA6688E66 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B660E17E5D2345F1B56329EE /* Debug-lite.xcconfig */;
 			buildSettings = {
@@ -675,7 +675,7 @@ DD7BFC4DA51540FEA6688E66 /* Debug */ = {
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.midnightDancer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.app.lite;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -684,7 +684,7 @@ DD7BFC4DA51540FEA6688E66 /* Debug */ = {
 			};
 			name = Debug-lite;
 		};
-D52B37E8D643411BB4D83A64 /* Debug */ = {
+		D52B37E8D643411BB4D83A64 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -692,7 +692,7 @@ D52B37E8D643411BB4D83A64 /* Debug */ = {
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.midnightDancer.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.app.lite.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -755,7 +755,7 @@ AED1B6B390B64097B4848347 /* Release */ = {
 			};
 			name = Release-lite;
 		};
-0167F80C1AC8400EA52BD649 /* Release */ = {
+		0167F80C1AC8400EA52BD649 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 91D32B109356467F90C2510E /* Release-lite.xcconfig */;
 			buildSettings = {
@@ -768,7 +768,7 @@ AED1B6B390B64097B4848347 /* Release */ = {
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.midnightDancer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.app.lite;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -776,7 +776,7 @@ AED1B6B390B64097B4848347 /* Release */ = {
 			};
 			name = Release-lite;
 		};
-6AC7FDB517394901992AB4EF /* Release */ = {
+		6AC7FDB517394901992AB4EF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -784,7 +784,7 @@ AED1B6B390B64097B4848347 /* Release */ = {
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.midnightDancer.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.app.lite.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
@@ -843,7 +843,7 @@ AED1B6B390B64097B4848347 /* Release */ = {
 			};
 			name = Profile-lite;
 		};
-FCB0E5325CD948A288AD6AEC /* Profile */ = {
+		FCB0E5325CD948A288AD6AEC /* Profile */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EDFFB8AADB174D9BB9495E3F /* Profile-lite.xcconfig */;
 			buildSettings = {
@@ -856,7 +856,7 @@ FCB0E5325CD948A288AD6AEC /* Profile */ = {
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.midnightDancer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.app.lite;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -864,7 +864,7 @@ FCB0E5325CD948A288AD6AEC /* Profile */ = {
 			};
 			name = Profile-lite;
 		};
-BB4F350FF73A4435BEE4A19C /* Profile */ = {
+		BB4F350FF73A4435BEE4A19C /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -872,7 +872,7 @@ BB4F350FF73A4435BEE4A19C /* Profile */ = {
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.midnightDancer.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.midnightdancer.app.lite.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";

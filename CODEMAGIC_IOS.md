@@ -15,10 +15,21 @@
 
 ## 1. Apple Developer и App Store Connect
 
-1. Зарегистрируйте **Bundle ID**: `com.midnightdancer.midnightDancer` (как в Xcode / `project.pbxproj` и в `codemagic.yaml` → `ios_signing.bundle_identifier`).
-2. В [App Store Connect](https://appstoreconnect.apple.com/) создайте приложение с этим идентификатором.
+### Bundle ID по flavor (iOS)
 
-Если позже сделаете **отдельные приложения** под lite/full/english с разными Bundle ID — скопируйте workflow в `codemagic.yaml` и поменяйте `bundle_identifier` и при необходимости target в Xcode.
+| Сборка | App ID (как в Android `applicationId`) | Xcode-конфигурации | `codemagic.yaml` workflow |
+|--------|------------------------------------------|---------------------|---------------------------|
+| **Lite** | **`com.midnightdancer.app.lite`** | `Debug-lite` / `Release-lite` / `Profile-lite` | `ios-ipa-lite` |
+| Standard / Full / English | Пока **`com.midnightdancer.midnightDancer`** (общий) | `*-standard`, `*-full`, `*-english` | `ios-ipa-standard` и т.д. |
+
+Для **lite** в Apple Developer нужен App ID **`com.midnightdancer.app.lite`** и **App Store** provisioning profile на него — тот же идентификатор, что у вас в профиле `MidnightDancerLite…`, если вы заводили lite под пакет как на Android.
+
+Когда появятся отдельные App ID для standard / full / english — задайте в `project.pbxproj` у соответствующих `PRODUCT_BUNDLE_IDENTIFIER` (блоки `*-standard`, `*-full`, `*-english`) и в каждом workflow в `ios_signing.bundle_identifier`.
+
+### Общие шаги
+
+1. Зарегистрируйте нужные **Bundle ID** в [Identifiers](https://developer.apple.com/account/resources/identifiers/list).
+2. В [App Store Connect](https://appstoreconnect.apple.com/) создайте приложение с **тем же** идентификатором, что собираете (для lite — `com.midnightdancer.app.lite`).
 
 ---
 

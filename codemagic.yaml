@@ -61,7 +61,8 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.midnightdancer.midnightDancer
+        # Как Android applicationId для flavor lite (com.midnightdancer.app + .lite)
+        bundle_identifier: com.midnightdancer.app.lite
       vars:
         FLAVOR: lite
     integrations:
