@@ -3,8 +3,9 @@
 # Подробная настройка подписи и App Store Connect — в CODEMAGIC_IOS.md
 
 workflows:
+  # Full flavor: в UI Codemagic можно выбрать схему Xcode `full` или `Runner`.
   ios-ipa:
-    name: Midnight Dancer iOS IPA
+    name: Midnight Dancer iOS IPA (Full)
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
@@ -88,7 +89,46 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
 
-  # Та же сборка с другим flavor (дублируйте при необходимости standard / full):
+  # Standard: схема `standard` в xcschemes + FLAVOR=standard
+  ios-ipa-standard:
+    name: Midnight Dancer iOS IPA (Standard)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.midnightdancer.midnightDancer
+      vars:
+        FLAVOR: standard
+    integrations:
+      app_store_connect: codemagic
+    scripts:
+      - name: Flutter pub get
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter pub get
+      - name: CocoaPods (iOS)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/ios"
+          pod install --repo-update
+      - name: Подпись Xcode
+        script: |
+          set -e
+          xcode-project use-profiles
+      - name: Сборка IPA
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+  # English
   ios-ipa-english:
     name: Midnight Dancer iOS IPA (English)
     max_build_duration: 120
