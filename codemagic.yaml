@@ -49,7 +49,46 @@ workflows:
       - build/ios/ipa/*.ipa
       - build/ios/archive/Runner.xcarchive
 
-  # Та же сборка с другим flavor (дублируйте при необходимости lite / standard / english):
+  # Lite: та же цель Runner, схема `lite` в репозитории — для Codemagic UI, где выбрана схема lite.
+  ios-ipa-lite:
+    name: Midnight Dancer iOS IPA (Lite)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.midnightdancer.midnightDancer
+      vars:
+        FLAVOR: lite
+    integrations:
+      app_store_connect: codemagic
+    scripts:
+      - name: Flutter pub get
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter pub get
+      - name: CocoaPods (iOS)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/ios"
+          pod install --repo-update
+      - name: Подпись Xcode
+        script: |
+          set -e
+          xcode-project use-profiles
+      - name: Сборка IPA
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+  # Та же сборка с другим flavor (дублируйте при необходимости standard / full):
   ios-ipa-english:
     name: Midnight Dancer iOS IPA (English)
     max_build_duration: 120

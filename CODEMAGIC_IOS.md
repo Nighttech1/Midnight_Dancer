@@ -27,6 +27,16 @@
 1. [Codemagic](https://codemagic.io/) → добавьте приложение из **Git** (GitHub / GitLab / Bitbucket и т.д.).
 2. Укажите использование **`codemagic.yaml`** из корня репозитория.
 
+### Схема Xcode (`Runner` / `lite`)
+
+Codemagic при старте проверяет, что выбранная **Xcode scheme** лежит в репозитории:  
+`ios/Runner.xcodeproj/xcshareddata/xcschemes/*.xcscheme`.
+
+- **`Runner`** — основная схема Flutter по умолчанию.
+- **`lite`** — дубликат той же схемы для target `Runner`, если в UI Codemagic вы указали схему **lite** (иначе будет ошибка *Scheme "lite" not found*).
+
+Сборка **lite / full / english** по смыслу приложения задаётся переменной **`FLAVOR`** в workflow (`--dart-define=FLAVOR=...` в `codemagic.yaml`), а не отдельными target’ами в Xcode.
+
 ---
 
 ## 3. Подпись и App Store Connect
