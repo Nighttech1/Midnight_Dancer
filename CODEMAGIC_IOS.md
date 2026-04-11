@@ -35,7 +35,7 @@ Codemagic при старте проверяет, что выбранная **Xc
 - **`Runner`** — основная схема Flutter по умолчанию.
 - **`lite`**, **`standard`**, **`full`** — те же target `Runner`, отдельные имена схем для UI Codemagic (если схемы нет в репозитории — ошибка *Scheme "…" not found*).
 
-Сборка **lite / standard / full / english** по смыслу приложения задаётся переменной **`FLAVOR`** в workflow (`--dart-define=FLAVOR=...` в `codemagic.yaml`), а не отдельными target’ами в Xcode. Подберите workflow: **`ios-ipa-lite`**, **`ios-ipa-standard`**, **`ios-ipa`** (full), **`ios-ipa-english`**.
+Сборка **lite / standard / full / english** по смыслу приложения задаётся переменной **`FLAVOR`** в workflow (`--dart-define=FLAVOR=...` в `codemagic.yaml`), а не отдельными target’ами в Xcode. Подберите workflow: **`ios-ipa-lite`**, **`ios-ipa-standard`**, **`ios-ipa-full`**, **`ios-ipa-english`**.
 
 ---
 

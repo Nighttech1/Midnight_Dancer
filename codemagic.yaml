@@ -4,7 +4,7 @@
 
 workflows:
   # Full flavor: в UI Codemagic можно выбрать схему Xcode `full` или `Runner`.
-  ios-ipa:
+  ios-ipa-full:
     name: Midnight Dancer iOS IPA (Full)
     max_build_duration: 120
     instance_type: mac_mini_m2
