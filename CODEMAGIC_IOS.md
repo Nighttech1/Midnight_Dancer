@@ -33,9 +33,11 @@ Codemagic при старте проверяет, что выбранная **Xc
 `ios/Runner.xcodeproj/xcshareddata/xcschemes/*.xcscheme`.
 
 - **`Runner`** — основная схема Flutter по умолчанию.
-- **`lite`**, **`standard`**, **`full`** — те же target `Runner`, отдельные имена схем для UI Codemagic (если схемы нет в репозитории — ошибка *Scheme "…" not found*).
+- **`lite`**, **`standard`**, **`full`**, **`english`** — те же target `Runner`, отдельные имена схем для UI Codemagic (если схемы нет в репозитории — ошибка *Scheme "…" not found*).
 
-Сборка **lite / standard / full / english** по смыслу приложения задаётся переменной **`FLAVOR`** в workflow (`--dart-define=FLAVOR=...` в `codemagic.yaml`), а не отдельными target’ами в Xcode. Подберите workflow: **`ios-ipa-lite`**, **`ios-ipa-standard`**, **`ios-ipa-full`**, **`ios-ipa-english`**.
+Сборка **lite / standard / full / english** задаётся **`--flavor`** (нативные конфигурации Xcode `Release-lite` и т.д., как в [документации Flutter по flavors](https://docs.flutter.dev/deployment/flavors)) и дублируется **`--dart-define=FLAVOR=...`** для Dart (`lib/core/app_flavor.dart`). В `codemagic.yaml` выберите workflow: **`ios-ipa-lite`**, **`ios-ipa-standard`**, **`ios-ipa-full`**, **`ios-ipa-english`**. Схемы **`english`**, **`lite`**, **`standard`**, **`full`** в репозитории согласованы с этими flavor’ами.
+
+Проект уже пропатчен скриптом `scripts/patch_ios_flavors_pbxproj.py` (повторный запуск не нужен).
 
 ---
 

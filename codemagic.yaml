@@ -45,7 +45,7 @@ workflows:
         script: |
           set -e
           cd "$CM_BUILD_DIR"
-          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+          flutter build ipa --release --flavor "$FLAVOR" --dart-define=FLAVOR="$FLAVOR"
     artifacts:
       - build/ios/ipa/*.ipa
       - build/ios/archive/Runner.xcarchive
@@ -85,7 +85,7 @@ workflows:
         script: |
           set -e
           cd "$CM_BUILD_DIR"
-          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+          flutter build ipa --release --flavor "$FLAVOR" --dart-define=FLAVOR="$FLAVOR"
     artifacts:
       - build/ios/ipa/*.ipa
 
@@ -124,7 +124,7 @@ workflows:
         script: |
           set -e
           cd "$CM_BUILD_DIR"
-          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+          flutter build ipa --release --flavor "$FLAVOR" --dart-define=FLAVOR="$FLAVOR"
     artifacts:
       - build/ios/ipa/*.ipa
 
@@ -163,6 +163,6 @@ workflows:
         script: |
           set -e
           cd "$CM_BUILD_DIR"
-          flutter build ipa --release --dart-define=FLAVOR="$FLAVOR"
+          flutter build ipa --release --flavor "$FLAVOR" --dart-define=FLAVOR="$FLAVOR"
     artifacts:
       - build/ios/ipa/*.ipa
