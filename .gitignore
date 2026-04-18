@@ -20,6 +20,8 @@ android/**/build/
 *.jks
 
 # iOS
+# Локальные ключи и профили — только на своём ПК, не в git (Codemagic их не читает)
+Ключи/
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/Flutter.framework
