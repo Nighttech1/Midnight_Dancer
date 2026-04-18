@@ -20,7 +20,7 @@
 | Сборка | App ID (как в Android `applicationId`) | Xcode-конфигурации | `codemagic.yaml` workflow |
 |--------|------------------------------------------|---------------------|---------------------------|
 | **Lite** | **`com.midnightdancer.app.lite`** | `Debug-lite` / `Release-lite` / `Profile-lite` | `ios-ipa-lite` |
-| Standard / Full / English | Пока **`com.midnightdancer.midnightDancer`** (общий) | `*-standard`, `*-full`, `*-english` | `ios-ipa-standard` и т.д. |
+| Standard / Full / English | Пока **`com.midnightdancer.app`** (общий) | `*-standard`, `*-full`, `*-english` | `ios-ipa-standard` и т.д. |
 
 Для **lite** в Apple Developer нужен App ID **`com.midnightdancer.app.lite`** и **App Store** provisioning profile на него — тот же идентификатор, что у вас в профиле `MidnightDancerLite…`, если вы заводили lite под пакет как на Android.
 

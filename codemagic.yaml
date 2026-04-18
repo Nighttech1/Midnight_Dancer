@@ -14,7 +14,7 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.midnightdancer.midnightDancer
+        bundle_identifier: com.midnightdancer.app
       vars:
         # Совпадает с --dart-define для голосов и строк (см. lib/core/app_flavor.dart)
         FLAVOR: full
@@ -101,7 +101,7 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.midnightdancer.midnightDancer
+        bundle_identifier: com.midnightdancer.app
       vars:
         FLAVOR: standard
     integrations:
@@ -140,7 +140,7 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.midnightdancer.midnightDancer
+        bundle_identifier: com.midnightdancer.app
       vars:
         FLAVOR: english
     integrations:

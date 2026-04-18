@@ -127,4 +127,4 @@ flutter build ios --no-codesign
 
 ### Сборка IPA в Codemagic
 
-В корне репозитория лежит **`codemagic.yaml`** и инструкция **`CODEMAGIC_IOS.md`** (подпись, Bundle ID `com.midnightdancer.midnightDancer`, интеграция App Store Connect). Тексты напоминаний в приложении — **`assets/notifications/dance_reminder_lines.txt`**.
+В корне репозитория лежит **`codemagic.yaml`** и инструкция **`CODEMAGIC_IOS.md`** (подпись, Bundle ID `com.midnightdancer.app`, интеграция App Store Connect). Тексты напоминаний в приложении — **`assets/notifications/dance_reminder_lines.txt`**.
