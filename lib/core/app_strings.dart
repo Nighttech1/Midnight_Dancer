@@ -93,11 +93,11 @@ class AppStrings {
       _t(ru: 'Сохранить архив в Загрузки', en: 'Save archive to Downloads', es: 'Guardar archivo en Descargas');
   String get exchangeShareCardSubtitle => _t(
         ru:
-            'Собрать ZIP со всеми данными и сохранить в папку «Загрузки» на телефоне. Оттуда можно отправить файл куда нужно.',
+            'Собрать ZIP с выбранными данными и сохранить в папку «Загрузки». Перед выгрузкой можно отметить элементы, музыку и хореографии.',
         en:
-            'Create a ZIP with all app data and save it to your Downloads folder. You can share the file from there.',
+            'Create a ZIP with the data you choose and save it to Downloads. Before exporting you can pick elements, music and choreographies.',
         es:
-            'Crea un ZIP con todos los datos y guárdalo en Descargas. Desde ahí puedes compartir el archivo.',
+            'Crea un ZIP con los datos que elijas y guárdalo en Descargas. Antes puedes marcar elementos, música y coreografías.',
       );
 
   String get exchangeImportCardTitle =>
@@ -115,6 +115,11 @@ class AppStrings {
       _t(ru: 'Данные выгружаются…', en: 'Data is being exported…', es: 'Exportando datos…');
   String get exchangeImporting =>
       _t(ru: 'Данные загружаются и устанавливаются…', en: 'Data is being loaded and applied…', es: 'Cargando e importando datos…');
+  String get exchangeParsingBackup => _t(
+        ru: 'Архив проверяется…',
+        en: 'Verifying archive…',
+        es: 'Comprobando archivo…',
+      );
 
   String get exchangeExportDoneTitle =>
       _t(ru: 'Выгрузка завершена', en: 'Export complete', es: 'Exportación completada');
@@ -126,6 +131,70 @@ class AppStrings {
       );
 
   String get exchangeExportDoneOk => _t(ru: 'Понятно', en: 'OK', es: 'Entendido');
+
+  String get fullBackupExportOptionsTitle => _t(
+        ru: 'Что положить в архив',
+        en: 'What to include in the archive',
+        es: 'Qué incluir en el archivo',
+      );
+  String get fullBackupExportOptionsIntro => _t(
+        ru:
+            'Отметь элементы, музыку и хореографию, которыми хочешь поделиться. Для выбранных хореографий в архив автоматически попадут их элементы и треки.',
+        en:
+            'Select elements, music and choreographies you want to share. For selected choreographies, their elements and tracks are included in the archive automatically.',
+        es:
+            'Marca elementos, música y coreografías que quieras compartir. Para las coreografías elegidas, sus elementos y pistas entrarán en el archivo automáticamente.',
+      );
+  String get fullBackupExportOptionsStyleFilter => _t(
+        ru: 'Стиль',
+        en: 'Style',
+        es: 'Estilo',
+      );
+  String get fullBackupExportOptionsAllStyles => _t(
+        ru: 'Все стили',
+        en: 'All styles',
+        es: 'Todos los estilos',
+      );
+  String get fullBackupExportOptionsSelectAllInStyle => _t(
+        ru: 'Выбрать все элементы стиля',
+        en: 'Select all elements of this style',
+        es: 'Seleccionar todos los elementos de este estilo',
+      );
+  String get fullBackupExportOptionsElementsSection => _t(
+        ru: 'Элементы (видео)',
+        en: 'Elements (video)',
+        es: 'Elementos (vídeo)',
+      );
+  String get fullBackupExportOptionsMusicSection => _t(
+        ru: 'Музыка',
+        en: 'Music',
+        es: 'Música',
+      );
+  String get fullBackupExportOptionsSelectAllFiltered => _t(
+        ru: 'Выбрать всё в списке',
+        en: 'Select all in list',
+        es: 'Seleccionar todo en la lista',
+      );
+  String get fullBackupExportOptionsChoreoSection => _t(
+        ru: 'Хореографии',
+        en: 'Choreographies',
+        es: 'Coreografías',
+      );
+  String get fullBackupExportOptionsExport => _t(
+        ru: 'Собрать архив',
+        en: 'Build archive',
+        es: 'Crear archivo',
+      );
+  String get fullBackupExportNothingSelected => _t(
+        ru: 'Ничего не выбрано для выгрузки.',
+        en: 'Nothing was selected to export.',
+        es: 'No hay nada seleccionado para exportar.',
+      );
+  String get fullBackupExportEverythingShortcut => _t(
+        ru: 'Выгрузить все данные',
+        en: 'Export all data',
+        es: 'Exportar todos los datos',
+      );
 
   String get fullBackupExportSaveFailed => _t(
         ru: 'Не удалось сохранить архив в папку «Загрузки» на этом устройстве.',
@@ -157,13 +226,115 @@ class AppStrings {
       );
   String get fullBackupImportConfirmAction =>
       _t(ru: 'Загрузить', en: 'Load', es: 'Cargar');
+  String get fullBackupImportMappingTitle => _t(
+        ru: 'Импорт данных',
+        en: 'Data import',
+        es: 'Importación de datos',
+      );
+  String get fullBackupImportSeparateOnlyTitle => _t(
+        ru: 'Импортировать стили без слияния',
+        en: 'Import styles without merging',
+        es: 'Importar estilos sin fusionar',
+      );
+  String get fullBackupImportSeparateOnlySubtitle => _t(
+        ru:
+            'Всё содержимое архива будет добавлено отдельно, без слияния с уже существующими стилями. Музыка и хореографии останутся привязаны к новым стилям.',
+        en:
+            'Everything from the archive is added separately without merging into your existing styles. Music and choreographies stay linked to the new styles.',
+        es:
+            'Todo el archivo se añade por separado sin fusionar con los estilos que ya tienes. La música y las coreografías quedan enlazadas a los estilos nuevos.',
+      );
+  String get fullBackupImportMappingStylesHeader =>
+      _t(ru: 'Стили из архива', en: 'Styles in the archive', es: 'Estilos en el archivo');
+  String get fullBackupImportMergeById => _t(
+        ru: 'Создать новый стиль',
+        en: 'Create new style',
+        es: 'Crear nuevo estilo',
+      );
+  String get fullBackupImportTargetLabel =>
+      _t(ru: 'Импортировать в стиль', en: 'Import into style', es: 'Importar al estilo');
+  String get fullBackupImportApply =>
+      _t(ru: 'Импортировать', en: 'Import', es: 'Importar');
   String get fullBackupImportSuccess =>
       _t(ru: 'Данные из архива добавлены.', en: 'Archive merged.', es: 'Datos del archivo fusionados.');
+  String get elementStyleLabel =>
+      _t(ru: 'Стиль элемента', en: 'Element style', es: 'Estilo del elemento');
+  String get choreoChangeStyleTooltip => _t(
+        ru: 'Сменить стиль',
+        en: 'Change style',
+        es: 'Cambiar estilo',
+      );
+  String get choreoChangeStyleNeedTwoStyles => _t(
+        ru: 'Нужно как минимум два стиля в приложении. Добавьте стиль в разделе «Элементы».',
+        en: 'You need at least two styles. Add another style in Elements.',
+        es: 'Se necesitan al menos dos estilos. Añade otro en Elementos.',
+      );
+  String get choreoChangeStyleNext =>
+      _t(ru: 'Далее', en: 'Next', es: 'Siguiente');
+  String get choreoChangeStyleCascadeTitle => _t(
+        ru: 'Перенести элементы и музыку?',
+        en: 'Move steps and music too?',
+        es: '¿Mover pasos y música?',
+      );
+  String get choreoChangeStyleCascadeBody => _t(
+        ru:
+            'Все элементы, которые отмечены на таймлайне этой хореографии, будут перенесены в выбранный стиль. У связанного трека в карточке музыки поле «стиль» тоже сменится на этот стиль. Другие хореографии в старом стиле могут потерять метки с этими элементами.',
+        en:
+            'Every step used on this choreography timeline will move to the selected style. The linked track’s style field in Music will match that style too. Other choreographies in the old style may lose markers for those steps.',
+        es:
+            'Todos los pasos usados en la línea de tiempo pasarán al estilo elegido. El campo de estilo del tema enlazado en Música también coincidirá. Otras coreografías del estilo antiguo pueden perder marcas de esos pasos.',
+      );
+  String get choreoChangeStyleCascadeContinue =>
+      _t(ru: 'Продолжить', en: 'Continue', es: 'Continuar');
+  String choreoTimelineOrphan(String ref) => _t(
+        ru: 'В таймлайне есть ссылка «$ref», но такого элемента в исходном стиле нет.',
+        en: 'The timeline references «$ref», but that step is missing in the source style.',
+        es: 'La línea de tiempo usa «$ref», pero ese paso no está en el estilo de origen.',
+      );
+  String choreoChangeStyleTitle(String choreoName) => _t(
+        ru: 'Стиль хореографии «$choreoName»',
+        en: 'Choreography style: $choreoName',
+        es: 'Estilo de la coreografía: $choreoName',
+      );
+  String choreoChangeStyleMissingMove(String moveName) => _t(
+        ru:
+            'В выбранном стиле нет элемента «$moveName» с тем же именем, что в разметке. Сначала добавьте элемент или переименуйте.',
+        en:
+            'The selected style has no step named «$moveName» used on the timeline. Add it or rename first.',
+        es:
+            'El estilo elegido no tiene el paso «$moveName» usado en la línea de tiempo. Añádelo o renómbralo.',
+      );
+  String get choreoChangeStyleDone => _t(
+        ru: 'Стиль хореографии и связанные данные обновлены.',
+        en: 'Choreography style and linked data were updated.',
+        es: 'Estilo de la coreografía y datos enlazados actualizados.',
+      );
+  String get moveTransferIdConflict => _t(
+        ru: 'В другом стиле уже есть карточка с тем же служебным номером. Выберите другой стиль или удалите конфликтующую карточку.',
+        en: 'The other style already has a card with the same internal reference. Pick another style or remove the duplicate card.',
+        es: 'El otro estilo ya tiene una tarjeta con la misma referencia interna. Elige otro estilo o elimina el duplicado.',
+      );
   String fullBackupError(String detail) => _t(
         ru: 'Ошибка резервной копии: $detail',
         en: 'Backup error: $detail',
         es: 'Error de copia de seguridad: $detail',
       );
+
+  String get secureImportInsufficientSpaceTitle =>
+      _t(ru: 'Нехватка места', en: 'Not enough space', es: 'Sin espacio suficiente');
+
+  /// Безопасный импорт ZIP: не хватает места (после preflight + 10% запас).
+  String secureImportInsufficientSpace(String requiredLabel, String freeLabel) => _t(
+        ru:
+            'Недостаточно места для импорта. Требуется: $requiredLabel, свободно: $freeLabel. Пожалуйста, освободите память.',
+        en:
+            'Not enough space to import. Required: $requiredLabel, available: $freeLabel. Please free some storage.',
+        es:
+            'No hay espacio suficiente para importar. Necesario: $requiredLabel, disponible: $freeLabel. Libera espacio.',
+      );
+
+  String get secureImportInsufficientSpaceOk =>
+      _t(ru: 'Понятно', en: 'OK', es: 'Entendido');
 
   // Хореография
   String get choreoTitle => _t(ru: 'Хореография', en: 'Choreography', es: 'Coreografía');
@@ -171,6 +342,24 @@ class AppStrings {
         ru: 'Нет хореографий. Нажмите «Создать» и выберите стиль и музыку.',
         en: 'No choreographies. Tap «Create» and choose style and music.',
         es: 'No hay coreografías. Pulsa «Crear» y elige estilo y música.',
+      );
+  String get choreoFilterEmpty => _t(
+        ru: 'Нет хореографий по выбранным фильтрам. Сбросьте фильтры или измените критерии.',
+        en: 'No choreographies match the filters. Clear filters or change criteria.',
+        es: 'Ninguna coreografía coincide con los filtros. Limpia los filtros o cambia los criterios.',
+      );
+  String get choreoChangeLabelOnlyTitle => _t(
+        ru: 'Только метка стиля',
+        en: 'Style label only',
+        es: 'Solo la etiqueta de estilo',
+      );
+  String get choreoChangeLabelOnlyBody => _t(
+        ru:
+            'Меняется только поле «стиль» у этой хореографии. Элементы на линии времени и карточка музыки остаются как есть — они могут относиться к другим стилям.',
+        en:
+            'Only this choreography’s style field changes. Timeline steps and the linked music card stay as they are — they may belong to other styles.',
+        es:
+            'Solo cambia el campo de estilo de esta coreografía. Los pasos de la línea de tiempo y la pista enlazada se mantienen — pueden pertenecer a otros estilos.',
       );
   String get create => _t(ru: 'Создать', en: 'Create', es: 'Crear');
   String get addStylesAndTracks => _t(
@@ -288,7 +477,6 @@ class AppStrings {
 
   /// Обмен хореографиями (ZIP-пакет)
   String get shareChoreography => _t(ru: 'Поделиться', en: 'Share', es: 'Compartir');
-  String get uploadChoreography => _t(ru: 'Загрузить', en: 'Upload', es: 'Subir');
   String get shareChoreographyFailed => _t(
         ru: 'Не удалось собрать пакет (проверьте, что файл трека доступен).',
         en: 'Could not build the package (check that the track file is available).',

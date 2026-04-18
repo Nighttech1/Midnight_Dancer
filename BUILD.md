@@ -14,6 +14,15 @@
 | full     | Три голоса                  | ~50 MB                      |
 | english  | Интерфейс на английском, два голоса (Kamila, Ruslan) | ~35 MB |
 
+В **`pubspec.yaml`** в APK попадают **только** Piper-папки выбранного flavor (между `# BEGIN_PIPER_VOICE_ASSETS` и `# END_PIPER_VOICE_ASSETS`). В репозитории по умолчанию записан **full** (три голоса). Перед сборкой другого варианта выполни:
+
+```powershell
+.\scripts\set_pubspec_voice_assets.ps1 -Flavor standard   # или lite | full | english
+flutter pub get
+```
+
+Скрипт **`scripts\build_apks.ps1`** сам подставляет голоса для каждого flavor и в конце восстанавливает `pubspec.yaml` из резервной копии. **`scripts\run_android_debug.ps1`** перед запуском тоже выставляет Piper-ассеты под выбранный `-Flavor`.
+
 ## Android SDK (Gradle и телефон)
 
 Путь к SDK задаётся в **`android/local.properties`** (файл локальный, в git не коммитится):
@@ -51,8 +60,8 @@ flutter run --flavor english --dart-define=FLAVOR=english
 
 **Из корня проекта** (папка `Midnight_Dancer`):
 
-```bash
-# По одному (для english обязательно --dart-define FLAVOR=english):
+```powershell
+# Перед сборкой подставьте Piper-голоса этого flavor (см. блок выше), затем:
 flutter build apk --flavor lite --release --dart-define=FLAVOR=lite
 flutter build apk --flavor standard --release --dart-define=FLAVOR=standard
 flutter build apk --flavor full --release --dart-define=FLAVOR=full
@@ -65,12 +74,12 @@ flutter build apk --flavor english --release --dart-define=FLAVOR=english
 .\scripts\build_apks.ps1
 ```
 
-Готовые APK:
+Готовые APK (путь от корня проекта):
 
-- `android/app/build/outputs/flutter-apk/app-lite-release.apk`
-- `android/app/build/outputs/flutter-apk/app-standard-release.apk`
-- `android/app/build/outputs/flutter-apk/app-full-release.apk`
-- `android/app/build/outputs/flutter-apk/app-english-release.apk`
+- `build/app/outputs/flutter-apk/app-lite-release.apk`
+- `build/app/outputs/flutter-apk/app-standard-release.apk`
+- `build/app/outputs/flutter-apk/app-full-release.apk`
+- `build/app/outputs/flutter-apk/app-english-release.apk`
 
 ## Подпись (релиз)
 

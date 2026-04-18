@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
-import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/ui/navigation/main_scaffold.dart';
 
 /// Стартовый экран при первом запуске. Показывается 4 секунды, круг плавно заполняется. При переключении вкладок (возврат в приложение) не показывается — пользователь остаётся на MainScaffold.
@@ -69,7 +68,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    final str = ref.watch(appStringsProvider);
     return RepaintBoundary(
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -90,18 +88,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
               ),
               const SizedBox(height: 8),
               Text(
-                str.appSubtitle,
-                style: const TextStyle(
+                'Dance training app',
+                style: TextStyle(
                   fontSize: 16,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondary.withValues(alpha: 0.95),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                str.byNighttech,
-                style: const TextStyle(
+                'by Nighttech',
+                style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
                 ),
               ),
               const SizedBox(height: 32),

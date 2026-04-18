@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/utils/audio_source_platform.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/audio_source_platform_io.dart'
     as audio_platform;

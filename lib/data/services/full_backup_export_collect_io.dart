@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -10,8 +11,12 @@ import 'package:midnight_dancer/core/utils/read_bytes.dart'
     as read_bytes;
 import 'package:midnight_dancer/data/models/app_data.dart';
 import 'package:midnight_dancer/data/models/song.dart';
-import 'package:midnight_dancer/data/services/full_backup_service.dart';
+import 'package:midnight_dancer/data/services/full_backup_zip_isolate.dart';
 import 'package:midnight_dancer/data/services/storage_service.dart';
+
+/// Чуть уступить UI isolate между тяжёлыми шагами чтения файлов.
+Future<void> _yieldUi() =>
+    Future<void>.delayed(const Duration(milliseconds: 12));
 
 Future<Uint8List?> collectAndBuildFullBackupZip(
   StorageService storage,
@@ -22,7 +27,7 @@ Future<Uint8List?> collectAndBuildFullBackupZip(
 
   for (final style in data.danceStyles) {
     for (final move in style.moves) {
-      await Future<void>.delayed(Duration.zero);
+      await _yieldUi();
       final uri = move.videoUri;
       if (uri == null || uri.isEmpty) continue;
       Uint8List? bytes;
@@ -58,7 +63,7 @@ Future<Uint8List?> collectAndBuildFullBackupZip(
 
   final musicEntries = <({String songId, String ext, Uint8List bytes})>[];
   for (final song in data.songs) {
-    await Future<void>.delayed(Duration.zero);
+    await _yieldUi();
     final ext = extFromSong(song);
     final bytes = await storage.loadMediaFile(
       song.id,
@@ -72,7 +77,7 @@ Future<Uint8List?> collectAndBuildFullBackupZip(
     }
   }
 
-  await Future<void>.delayed(Duration.zero);
+  await _yieldUi();
 
   final exportStyles = data.danceStyles.map((s) {
     final moves = s.moves.map((m) {
@@ -86,14 +91,23 @@ Future<Uint8List?> collectAndBuildFullBackupZip(
 
   final exportData = data.copyWith(danceStyles: exportStyles);
 
-  await Future<void>.delayed(Duration.zero);
+  await _yieldUi();
 
-  final zip = FullBackupService.buildZipBytes(
-    appData: exportData,
-    videoByMoveId: videoByMoveId,
-    musicEntries: musicEntries,
+  final isolateMusic = <FullBackupIsolateMusicEntry>[
+    for (final e in musicEntries)
+      FullBackupIsolateMusicEntry(songId: e.songId, ext: e.ext, bytes: e.bytes),
+  ];
+
+  final zip = await Isolate.run(
+    () => fullBackupBuildZipInIsolate(
+      FullBackupIsolateZipArgs(
+        exportData: exportData,
+        videoByMoveId: videoByMoveId,
+        musicEntries: isolateMusic,
+      ),
+    ),
   );
-  await Future<void>.delayed(Duration.zero);
+  await _yieldUi();
   if (zip.isEmpty) return null;
   return zip;
 }

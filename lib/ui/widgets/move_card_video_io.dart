@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
-import 'package:midnight_dancer/core/utils/agent_debug_log.dart';
 import 'package:video_player/video_player.dart';
 
 /// Видео в карточке элемента: воспроизведение, пауза и ползунок позиции снизу.
@@ -61,20 +60,6 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
       await _controller!.pause();
     } catch (e, _) {
       _initError = true;
-      final p = widget.videoPathOrUri;
-      // #region agent log
-      agentDebugLog(
-        hypothesisId: 'H3',
-        location: 'move_card_video_io.dart:_init',
-        message: 'video_player_initialize_failed',
-        data: {
-          'uriKind': p.startsWith('content:')
-              ? 'content'
-              : (p.startsWith('/') ? 'file' : 'other'),
-          'error': e.toString(),
-        },
-      );
-      // #endregion
       widget.onError?.call();
     } finally {
       _initializing = false;

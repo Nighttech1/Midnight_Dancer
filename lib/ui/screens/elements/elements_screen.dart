@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
@@ -17,7 +16,6 @@ import 'package:midnight_dancer/core/utils/video_temp.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/video_temp_io.dart'
     as video_temp;
 import 'package:midnight_dancer/core/utils/formatters.dart';
-import 'package:midnight_dancer/core/utils/agent_debug_log.dart';
 import 'package:midnight_dancer/ui/widgets/move_card.dart';
 import 'package:midnight_dancer/ui/widgets/video_preview.dart';
 
@@ -32,6 +30,8 @@ class _MoveFormSheet extends ConsumerStatefulWidget {
     required this.initialVideoPath,
     required this.initialMasteryPercent,
     this.onMasteryPercentLive,
+    required this.initialPersistStyleId,
+    this.editStyleChoices,
     required this.onSave,
     required this.onCancel,
   });
@@ -44,6 +44,9 @@ class _MoveFormSheet extends ConsumerStatefulWidget {
   final String? initialVideoPath;
   final int initialMasteryPercent;
   final ValueChanged<int>? onMasteryPercentLive;
+  /// Стиль, в котором сохраняется элемент (редактирование: можно сменить).
+  final String initialPersistStyleId;
+  final List<DanceStyle>? editStyleChoices;
   final void Function(
     String name,
     String level,
@@ -51,6 +54,7 @@ class _MoveFormSheet extends ConsumerStatefulWidget {
     String? videoPath,
     Uint8List? videoBytes,
     int masteryPercent,
+    String persistStyleId,
   ) onSave;
   final VoidCallback onCancel;
 
@@ -63,6 +67,7 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
   late TextEditingController _descController;
   late String _level;
   late double _masterySlider;
+  late String _persistStyleId;
   String? _videoPath;
   Uint8List? _videoBytes;
   String? _previewVideoPath;
@@ -74,6 +79,7 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
     _nameController = TextEditingController(text: widget.initialName);
     _descController = TextEditingController(text: widget.initialDescription);
     _level = widget.initialLevel;
+    _persistStyleId = widget.initialPersistStyleId;
     _videoPath = widget.initialVideoPath;
     _masterySlider = widget.initialMasteryPercent.clamp(0, 100).toDouble();
     _previewVideoPath = _pathUsableByVideoPlayer(widget.initialVideoPath);
@@ -150,7 +156,15 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
     final m = _masterySlider.round().clamp(0, 100);
-    widget.onSave(name, _level, _descController.text.trim(), _videoPath, _videoBytes, m);
+    widget.onSave(
+      name,
+      _level,
+      _descController.text.trim(),
+      _videoPath,
+      _videoBytes,
+      m,
+      _persistStyleId,
+    );
   }
 
   @override
@@ -174,6 +188,32 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
             ),
           ),
           const SizedBox(height: 20),
+          if (widget.isEdit &&
+              widget.editStyleChoices != null &&
+              widget.editStyleChoices!.length > 1) ...[
+            DropdownButtonFormField<String>(
+              value: _persistStyleId,
+              decoration: InputDecoration(labelText: str.elementStyleLabel),
+              dropdownColor: AppColors.card,
+              isExpanded: true,
+              items: widget.editStyleChoices!
+                  .map(
+                    (s) => DropdownMenuItem(
+                      value: s.id,
+                      child: Text(
+                        str.displayDanceStyleName(s.name),
+                        style: const TextStyle(color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _persistStyleId = v);
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
           TextField(
             controller: _nameController,
             decoration: InputDecoration(
@@ -335,20 +375,8 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
             return _buildEmptyState(context);
           }
           final selectedId = _selectedStyleId ?? styles.first.id;
-          // H1: DropdownButton падает, если value нет среди items (битый _selectedStyleId).
           var dropdownStyleId = selectedId;
           if (!styles.any((s) => s.id == dropdownStyleId)) {
-            // #region agent log
-            agentDebugLog(
-              hypothesisId: 'H1',
-              location: 'elements_screen.dart:build',
-              message: 'selected_style_id_orphan_fixed',
-              data: {
-                'badId': dropdownStyleId,
-                'validIds': styles.map((s) => s.id).toList(),
-              },
-            );
-            // #endregion
             dropdownStyleId = styles.first.id;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) setState(() => _selectedStyleId = dropdownStyleId);
@@ -363,7 +391,6 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
           }
           style ??= styles.first;
           final selectedStyle = style;
-          // H2: DropdownButton падает, если value нет среди items (битый фильтр/сортировка).
           final levelKeys =
               str.filterLevelOptions.map((e) => e.$1).toSet();
           final sortKeys = str.sortOptions.map((e) => e.$1).toSet();
@@ -623,17 +650,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                               child: Text(e.$2, style: const TextStyle(color: Colors.white)),
                             ))
                         .toList(),
-                    onChanged: (v) {
-                      // #region agent log
-                      agentDebugLog(
-                        hypothesisId: 'H2',
-                        location: 'elements_screen.dart:filterLevel',
-                        message: 'filter_level_changed',
-                        data: {'from': filterLevelForDropdown, 'to': v},
-                      );
-                      // #endregion
-                      setState(() => _filterLevel = v ?? 'All');
-                    },
+                    onChanged: (v) => setState(() => _filterLevel = v ?? 'All'),
                   ),
                 ),
               ),
@@ -726,17 +743,6 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
       isCurrent: isCurrent,
       onEdit: () => _openEditMoveDialog(move, style.id),
       onDelete: () => _showDeleteConfirm((move.id, style.id, move.name)),
-      // H3: не очищаем videoUri при сбое плеера — иначе после сбоя/форса топа данные стираются.
-      onVideoUnavailable: () async {
-        // #region agent log
-        agentDebugLog(
-          hypothesisId: 'H3',
-          location: 'elements_screen.dart:onVideoUnavailable',
-          message: 'video_player_error_no_db_clear',
-          data: {'styleId': style.id, 'moveId': move.id},
-        );
-        // #endregion
-      },
       onToggleCurrent: () async {
         final n = ref.read(appDataNotifierProvider.notifier);
         if (isCurrent) {
@@ -820,6 +826,12 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     final editPair = _editingMove;
     final editMove = editPair?.$1;
     final editStyleId = editPair?.$2;
+    final data = ref.read(appDataNotifierProvider).valueOrNull;
+    final persistStyleId = isEdit
+        ? (editStyleId ?? '')
+        : (_addingMoveStyleId ??
+            (data != null && data.danceStyles.isNotEmpty ? data.danceStyles.first.id : ''));
+    final editChoices = isEdit ? data?.danceStyles : null;
 
     showModalBottomSheet<void>(
       context: context,
@@ -840,6 +852,8 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
           initialDescription: desc,
           initialVideoPath: videoPath,
           initialMasteryPercent: editMove?.masteryPercent ?? 0,
+          initialPersistStyleId: persistStyleId,
+          editStyleChoices: editChoices,
           onMasteryPercentLive: editMove != null && editStyleId != null
               ? (p) {
                   ref.read(appDataNotifierProvider.notifier).updateMoveMastery(
@@ -849,9 +863,9 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
                       );
                 }
               : null,
-          onSave: (n, l, d, path, bytes, mastery) async {
+          onSave: (n, l, d, path, bytes, mastery, sid) async {
             await _saveMoveFromSheet(ctx, n, l, d,
-                videoPath: path, videoBytes: bytes, masteryPercent: mastery);
+                videoPath: path, videoBytes: bytes, masteryPercent: mastery, persistStyleId: sid);
           },
           onCancel: () => Navigator.pop(ctx),
         ),
@@ -874,10 +888,10 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     String? videoPath,
     Uint8List? videoBytes,
     int masteryPercent = 0,
+    required String persistStyleId,
   }) async {
     if (name.trim().isEmpty) return;
-    final styleId = _editingMove?.$2 ?? _addingMoveStyleId;
-    if (styleId == null || styleId.isEmpty) return;
+    if (persistStyleId.isEmpty) return;
     final notifier = ref.read(appDataNotifierProvider.notifier);
 
     final moveId = _editingMove?.$1?.id ?? 'move-${DateTime.now().millisecondsSinceEpoch}';
@@ -892,9 +906,28 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
 
     try {
       if (_editingMove != null) {
-        await notifier.updateMove(styleId, move, videoBytes: videoBytes, videoPath: videoPath);
+        final fromStyle = _editingMove!.$2;
+        if (fromStyle == null || fromStyle.isEmpty) return;
+        if (fromStyle != persistStyleId) {
+          final mErr = await notifier.moveMoveBetweenStyles(
+            fromStyleId: fromStyle,
+            toStyleId: persistStyleId,
+            moveId: moveId,
+          );
+          if (mErr != null) {
+            if (sheetContext.mounted) {
+              final str = ref.read(appStringsProvider);
+              final msg = mErr == 'move_id_conflict'
+                  ? str.moveTransferIdConflict
+                  : str.saveErrorSnackbar(mErr);
+              ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(msg)));
+            }
+            return;
+          }
+        }
+        await notifier.updateMove(persistStyleId, move, videoBytes: videoBytes, videoPath: videoPath);
       } else {
-        await notifier.addMove(styleId, move, videoBytes: videoBytes, videoPath: videoPath);
+        await notifier.addMove(persistStyleId, move, videoBytes: videoBytes, videoPath: videoPath);
       }
     } catch (e) {
       if (sheetContext.mounted) {

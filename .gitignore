@@ -28,7 +28,7 @@ ios/Flutter/Flutter.podspec
 # Сгенерированные файлы
 *.g.dart
 *.freezed.dart
-
+*.p8
 
 
 

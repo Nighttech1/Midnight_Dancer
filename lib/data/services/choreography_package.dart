@@ -3,8 +3,10 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
+import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
 import 'package:midnight_dancer/data/models/song.dart';
+import 'package:midnight_dancer/data/services/choreography_timeline_ref.dart';
 
 /// Ошибка разбора или сборки ZIP-пакета хореографии Midnight Dancer.
 class ChoreographyPackageException implements Exception {
@@ -55,30 +57,57 @@ class ChoreographyPackage {
         masteryPercent: 0,
       );
 
-  /// Элементы для выгрузки: по значениям из таймлайна (имя элемента **или** его id);
-  /// если таймлайн пуст — все элементы стиля. Видео в пакет не входят.
-  static List<Move> movesForExport(Choreography choreography, List<Move> styleMoves) {
+  /// Элементы для выгрузки: по значениям из таймлайна (ссылка `styleId::moveId`, имя или id);
+  /// если таймлайн пуст — все элементы стиля хореографии. Видео в пакет не входят.
+  static List<Move> movesForExport(Choreography choreography, List<DanceStyle> allStyles) {
     final keys = choreography.timeline.values.where((n) => n.isNotEmpty).toSet();
     if (keys.isEmpty) {
-      return styleMoves.map(_moveWithoutVideo).toList();
+      DanceStyle? primary;
+      for (final s in allStyles) {
+        if (s.id == choreography.styleId) {
+          primary = s;
+          break;
+        }
+      }
+      if (primary == null) return [];
+      return primary.moves.map(_moveWithoutVideo).toList();
     }
     final sortedKeys = keys.toList()..sort();
     final out = <Move>[];
     final seenIds = <String>{};
     for (final key in sortedKeys) {
-      Move? found;
-      for (final mv in styleMoves) {
-        if (mv.name == key || mv.id == key) {
-          found = mv;
-          break;
-        }
-      }
+      final found = ChoreographyTimelineRef.resolveMove(allStyles, choreography.styleId, key);
       if (found != null && !seenIds.contains(found.id)) {
         seenIds.add(found.id);
         out.add(_moveWithoutVideo(found));
       }
     }
     return out;
+  }
+
+  /// Подготовить таймлайн к ZIP: имена или id (при неоднозначных именах), как в [encode].
+  static Choreography choreographyTimelineForShareZip(
+    Choreography choreography,
+    List<Move> exportMoves,
+    List<DanceStyle> allStyles,
+    String primaryStyleId,
+  ) {
+    if (choreography.timeline.isEmpty) return choreography;
+    final nameCount = <String, int>{};
+    for (final m in exportMoves) {
+      nameCount[m.name] = (nameCount[m.name] ?? 0) + 1;
+    }
+    final newT = <double, String>{};
+    for (final e in choreography.timeline.entries) {
+      final m = ChoreographyTimelineRef.resolveMove(allStyles, primaryStyleId, e.value);
+      if (m == null) {
+        newT[e.key] = e.value;
+        continue;
+      }
+      final ambiguous = (nameCount[m.name] ?? 0) > 1;
+      newT[e.key] = ambiguous ? m.id : m.name;
+    }
+    return choreography.copyWith(timeline: newT);
   }
 
   /// В таймлайне подставляем имена вместо id (для импорта на другом устройстве id не совпадут).

@@ -2,9 +2,13 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
+import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
 import 'package:midnight_dancer/data/models/song.dart';
 import 'package:midnight_dancer/data/services/choreography_package.dart';
+import 'package:midnight_dancer/data/services/choreography_timeline_ref.dart';
+
+DanceStyle _st(String id, List<Move> moves) => DanceStyle(id: id, name: 'n$id', moves: moves);
 
 void main() {
   test('movesForExport: timeline names pick matching moves, strip video', () {
@@ -22,7 +26,7 @@ void main() {
       Move(id: 'm2', name: 'B', level: 'Advanced', videoUri: 'x', masteryPercent: 10),
       Move(id: 'm3', name: 'Unused', level: 'Beginner'),
     ];
-    final exp = ChoreographyPackage.movesForExport(choreo, moves);
+    final exp = ChoreographyPackage.movesForExport(choreo, [_st('st1', moves)]);
     expect(exp.length, 2);
     expect(exp.any((m) => m.name == 'A' && m.videoUri == null && m.masteryPercent == 0), isTrue);
     expect(exp.any((m) => m.name == 'B' && m.videoUri == null), isTrue);
@@ -42,7 +46,7 @@ void main() {
       Move(id: 'mv1', name: 'Jump', level: 'Beginner', videoUri: 'x'),
       Move(id: 'mv2', name: 'Spin', level: 'Advanced'),
     ];
-    final exp = ChoreographyPackage.movesForExport(choreo, moves);
+    final exp = ChoreographyPackage.movesForExport(choreo, [_st('st1', moves)]);
     expect(exp.length, 2);
     expect(exp.map((m) => m.name).toSet(), {'Jump', 'Spin'});
   });
@@ -60,7 +64,7 @@ void main() {
     final moves = [
       Move(id: 'm1', name: 'X', level: 'Beginner', videoUri: 'v'),
     ];
-    final exp = ChoreographyPackage.movesForExport(choreo, moves);
+    final exp = ChoreographyPackage.movesForExport(choreo, [_st('st1', moves)]);
     expect(exp.length, 1);
     expect(exp.first.videoUri, isNull);
   });
@@ -141,7 +145,7 @@ void main() {
       choreography: choreo,
       song: song,
       styleName: 'Kizomba',
-      moves: ChoreographyPackage.movesForExport(choreo, moves),
+      moves: ChoreographyPackage.movesForExport(choreo, [_st('old-style', moves)]),
       timelineResolverMoves: moves,
       musicBytes: music,
     );
@@ -150,6 +154,24 @@ void main() {
     expect(payload.choreography.timeline[0.5], 'Step one');
     expect(payload.choreography.timeline[3.0], 'Step two');
     expect(payload.moves.length, 2);
+  });
+
+  test('movesForExport: styleId::moveId pulls move from another style', () {
+    final choreo = Choreography(
+      id: 'c1',
+      name: 'Mix',
+      songId: 's1',
+      styleId: 'st1',
+      timeline: {1.0: ChoreographyTimelineRef.encode('st2', 'mZ')},
+      startTime: 0,
+      endTime: 10,
+    );
+    final st1Moves = [Move(id: 'onlyIn1', name: 'Local', level: 'Beginner')];
+    final st2Moves = [Move(id: 'mZ', name: 'FromTwo', level: 'Intermediate', videoUri: 'v')];
+    final exp = ChoreographyPackage.movesForExport(choreo, [_st('st1', st1Moves), _st('st2', st2Moves)]);
+    expect(exp.length, 1);
+    expect(exp.first.name, 'FromTwo');
+    expect(exp.first.videoUri, isNull);
   });
 
   test('decode rejects wrong format', () {

@@ -35,6 +35,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
   flutter_timezone: ^5.0.2
+  disk_space_2: ^1.0.12
 
 dev_dependencies:
   flutter_test:
@@ -56,17 +57,15 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
   assets:
-    - assets/
-    - assets/fonts/
+    # Не используйте здесь общий assets/ — в APK попадут все голоса сразу.
+    - assets/icon.png
     - assets/notifications/dance_reminder_lines.txt
-    # assets/voices/ не перечисляем — в бандл не попадёт README.md; голоса и espeak — явно ниже
-    # Piper-голоса (подставляются скриптом сборки по flavor; по умолчанию — full):
-    - assets/voices/lite/ruslan/
-    - assets/voices/standard/ruslan/
-    - assets/voices/standard/irina/
+    # BEGIN_PIPER_VOICE_ASSETS
+    # Piper voices (flavor: full)
     - assets/voices/full/ruslan/
     - assets/voices/full/irina/
     - assets/voices/full/kamila/
+    # END_PIPER_VOICE_ASSETS
     # espeak-ng-data для Sherpa VITS (Piper) — минимальный набор ru/en
     - assets/voices/espeak-ng-data-manifest.txt
     - assets/voices/espeak-ng-data/

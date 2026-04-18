@@ -1,34 +1,90 @@
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
-import 'package:midnight_dancer/core/utils/picker_file_bytes_stub.dart'
-    if (dart.library.io) 'package:midnight_dancer/core/utils/picker_file_bytes_io.dart' as picker_file;
+import 'package:midnight_dancer/core/utils/formatters.dart' show dropdownValueOrFallback;
 import 'package:midnight_dancer/data/models/app_data.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
-import 'package:midnight_dancer/data/services/choreography_package.dart';
+import 'package:midnight_dancer/data/models/dance_style.dart';
+import 'package:midnight_dancer/data/models/song.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/ui/screens/choreography/sequence_editor_screen.dart';
 import 'package:midnight_dancer/ui/screens/choreography/choreography_share_zip_stub.dart'
     if (dart.library.io) 'package:midnight_dancer/ui/screens/choreography/choreography_share_zip_io.dart' as share_zip;
 
-class ChoreographyScreen extends ConsumerWidget {
+String _choreoStyleName(AppData data, String styleId) {
+  final s = data.danceStyles.where((x) => x.id == styleId).toList();
+  return s.isEmpty ? styleId : s.first.name;
+}
+
+String _choreoSongTitle(AppData data, String songId) {
+  final s = data.songs.where((x) => x.id == songId).toList();
+  return s.isEmpty ? songId : s.first.title;
+}
+
+class ChoreographyScreen extends ConsumerStatefulWidget {
   const ChoreographyScreen({super.key});
 
-  static String _styleName(AppData data, String styleId) {
-    final s = data.danceStyles.where((x) => x.id == styleId).toList();
-    return s.isEmpty ? styleId : s.first.name;
+  @override
+  ConsumerState<ChoreographyScreen> createState() => _ChoreographyScreenState();
+}
+
+class _ChoreographyScreenState extends ConsumerState<ChoreographyScreen> {
+  String? _filterStyle;
+  String _filterLevel = 'All';
+
+  InputDecoration _dropdownDecoration() {
+    return InputDecoration(
+      border: OutlineInputBorder(borderRadius: AppRadius.radiusMd),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: AppRadius.radiusMd,
+        borderSide: const BorderSide(color: AppColors.cardBorder),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: AppRadius.radiusMd,
+        borderSide: const BorderSide(color: AppColors.accent, width: 2),
+      ),
+      filled: true,
+      fillColor: AppColors.card,
+    );
   }
 
-  static String _songTitle(AppData data, String songId) {
-    final s = data.songs.where((x) => x.id == songId).toList();
-    return s.isEmpty ? songId : s.first.title;
+  List<String> _uniqueStyleNames(List<DanceStyle> styles) {
+    final seen = <String>{};
+    final out = <String>[];
+    for (final s in styles) {
+      final key = s.name.toLowerCase();
+      if (seen.add(key)) {
+        out.add(s.name);
+      }
+    }
+    return out;
+  }
+
+  List<Choreography> _filteredChoreographies(AppData data) {
+    var list = List<Choreography>.from(data.choreographies);
+    if (_filterStyle != null && _filterStyle!.isNotEmpty) {
+      final f = _filterStyle!.toLowerCase();
+      list = list.where((c) => _choreoStyleName(data, c.styleId).toLowerCase() == f).toList();
+    }
+    if (_filterLevel != 'All') {
+      list = list.where((c) {
+        Song? song;
+        for (final s in data.songs) {
+          if (s.id == c.songId) {
+            song = s;
+            break;
+          }
+        }
+        return song != null && song.level == _filterLevel;
+      }).toList();
+    }
+    list.sort((a, b) => a.name.compareTo(b.name));
+    return list;
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final asyncData = ref.watch(appDataNotifierProvider);
     final str = ref.watch(appStringsProvider);
 
@@ -39,7 +95,25 @@ class ChoreographyScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
           error: (e, _) => Center(child: Text('${str.errorPrefix}: $e', style: const TextStyle(color: AppColors.accent))),
           data: (data) {
-            final list = data.choreographies;
+            final styleNames = _uniqueStyleNames(data.danceStyles);
+            final levelKeys = str.filterLevelOptions.map((e) => e.$1).toSet();
+            final safeFilterLevel = dropdownValueOrFallback(_filterLevel, levelKeys, 'All');
+            if (safeFilterLevel != _filterLevel) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() => _filterLevel = 'All');
+              });
+            }
+            final filterDropdownValue = _filterStyle == null || _filterStyle!.isEmpty
+                ? null
+                : () {
+                    final f = _filterStyle!.toLowerCase();
+                    for (final n in styleNames) {
+                      if (n.toLowerCase() == f) return n;
+                    }
+                    return null;
+                  }();
+            final list = _filteredChoreographies(data);
             return RefreshIndicator(
               onRefresh: () async => ref.invalidate(appDataNotifierProvider),
               color: AppColors.accent,
@@ -64,9 +138,10 @@ class ChoreographyScreen extends ConsumerWidget {
                               borderRadius: AppRadius.radiusMd,
                               border: Border.all(color: AppColors.cardBorder),
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                Expanded(
+                                SizedBox(
+                                  width: double.infinity,
                                   child: ElevatedButton.icon(
                                     onPressed: () => _showCreateDialog(context, ref, data),
                                     icon: const Icon(Icons.add, size: 18),
@@ -77,17 +152,41 @@ class ChoreographyScreen extends ConsumerWidget {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => _importChoreographyPackage(context, ref),
-                                    icon: const Icon(Icons.upload_file, size: 18),
-                                    label: Text(str.uploadChoreography),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: const BorderSide(color: AppColors.cardBorder),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<String?>(
+                                        value: filterDropdownValue,
+                                        decoration: _dropdownDecoration().copyWith(labelText: str.style, isDense: true),
+                                        dropdownColor: AppColors.card,
+                                        isExpanded: true,
+                                        items: [
+                                          DropdownMenuItem(value: null, child: Text(str.allStyles, overflow: TextOverflow.ellipsis)),
+                                          ...styleNames.map(
+                                            (s) => DropdownMenuItem<String?>(
+                                              value: s,
+                                              child: Text(str.displayDanceStyleName(s), overflow: TextOverflow.ellipsis),
+                                            ),
+                                          ),
+                                        ],
+                                        onChanged: (v) => setState(() => _filterStyle = v),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: safeFilterLevel,
+                                        decoration: _dropdownDecoration().copyWith(labelText: str.levelLabel, isDense: true),
+                                        dropdownColor: AppColors.card,
+                                        isExpanded: true,
+                                        items: str.filterLevelOptions
+                                            .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2, overflow: TextOverflow.ellipsis)))
+                                            .toList(),
+                                        onChanged: (v) => setState(() => _filterLevel = v ?? 'All'),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -98,7 +197,7 @@ class ChoreographyScreen extends ConsumerWidget {
                               padding: const EdgeInsets.only(top: 24),
                               child: Center(
                                 child: Text(
-                                  str.choreoEmpty,
+                                  data.choreographies.isEmpty ? str.choreoEmpty : str.choreoFilterEmpty,
                                   style: const TextStyle(color: AppColors.textSecondary),
                                   textAlign: TextAlign.center,
                                 ),
@@ -107,11 +206,13 @@ class ChoreographyScreen extends ConsumerWidget {
                           else
                             ...list.map((c) => _ChoreoCard(
                                   choreography: c,
-                                  styleName: _styleName(data, c.styleId),
-                                  songTitle: _songTitle(data, c.songId),
+                                  styleName: _choreoStyleName(data, c.styleId),
+                                  songTitle: _choreoSongTitle(data, c.songId),
                                   shareTooltip: str.shareChoreography,
+                                  changeStyleTooltip: str.choreoChangeStyleTooltip,
                                   onTap: () => _openEditor(context, ref, c, data),
                                   onRename: () => _renameChoreography(context, ref, c),
+                                  onChangeStyle: () => _changeChoreographyStyle(context, ref, c, data),
                                   onShare: () => _shareChoreography(context, ref, c),
                                   onCopy: () => _copyChoreography(context, ref, c, data),
                                   onDelete: () => _deleteChoreography(context, ref, c),
@@ -130,16 +231,14 @@ class ChoreographyScreen extends ConsumerWidget {
   }
 
   void _openEditor(BuildContext context, WidgetRef ref, Choreography choreography, AppData data) {
-    final styles = data.danceStyles.where((s) => s.id == choreography.styleId).toList();
     final songs = data.songs.where((s) => s.id == choreography.songId).toList();
-    if (styles.isEmpty || songs.isEmpty) return;
-    final style = styles.first;
+    if (songs.isEmpty || data.danceStyles.isEmpty) return;
     final song = songs.first;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (ctx) => SequenceEditorScreen(
           choreography: choreography,
-          style: style,
+          appData: data,
           song: song,
           onSave: (updated) async {
             await ref.read(appDataNotifierProvider.notifier).updateChoreography(updated);
@@ -250,6 +349,83 @@ class ChoreographyScreen extends ConsumerWidget {
     }
   }
 
+  void _changeChoreographyStyle(BuildContext context, WidgetRef ref, Choreography c, AppData data) async {
+    final str = ref.read(appStringsProvider);
+    if (data.danceStyles.length < 2) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(str.choreoChangeStyleNeedTwoStyles)),
+        );
+      }
+      return;
+    }
+    var styleId = c.styleId;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(str.choreoChangeStyleTitle(c.name)),
+          content: DropdownButtonFormField<String>(
+            value: styleId,
+            decoration: InputDecoration(labelText: str.style),
+            dropdownColor: AppColors.card,
+            isExpanded: true,
+            items: data.danceStyles
+                .map(
+                  (s) => DropdownMenuItem(
+                    value: s.id,
+                    child: Text(str.displayDanceStyleName(s.name), overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: (v) {
+              if (v != null) setSt(() => styleId = v);
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(str.cancel)),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, styleId),
+              child: Text(str.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!context.mounted || picked == null || picked == c.styleId) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text(
+          str.choreoChangeLabelOnlyTitle,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          str.choreoChangeLabelOnlyBody,
+          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 15, height: 1.45),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(str.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(str.choreoChangeStyleCascadeContinue, style: const TextStyle(color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted || confirmed != true) return;
+
+    await ref.read(appDataNotifierProvider.notifier).updateChoreography(c.copyWith(styleId: picked));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(str.choreoChangeStyleDone)),
+      );
+    }
+  }
+
   void _renameChoreography(BuildContext context, WidgetRef ref, Choreography c) async {
     final str = ref.read(appStringsProvider);
     final nameController = TextEditingController(text: c.name);
@@ -347,184 +523,6 @@ class ChoreographyScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _importChoreographyPackage(BuildContext context, WidgetRef ref) async {
-    final str = ref.read(appStringsProvider);
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['zip'],
-      withData: kIsWeb,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.single;
-    final bytes = await picker_file.completePickerFileBytes(file);
-    if (!context.mounted) return;
-    if (bytes == null || bytes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(str.importChoreographyNoFile)),
-      );
-      return;
-    }
-
-    late final ChoreographyPackagePayload payload;
-    try {
-      payload = ChoreographyPackage.decode(bytes);
-    } on ChoreographyPackageException catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(str.choreoPackageImportError(e.message))),
-        );
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-    final data = ref.read(appDataNotifierProvider).valueOrNull ?? AppData();
-
-    final hasStyles = data.danceStyles.isNotEmpty;
-    var createNewStyle = !hasStyles;
-    String? mergeStyleId = hasStyles ? data.danceStyles.first.id : null;
-    final nameController = TextEditingController(text: payload.styleName);
-
-    try {
-      final go = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setSt) => AlertDialog(
-            backgroundColor: AppColors.card,
-            title: Text(str.uploadChoreography),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    str.importChoreographyStyleInfo(payload.styleName),
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                  if (!hasStyles) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      str.importChoreographyNoStylesYet,
-                      style: const TextStyle(color: Colors.white60, fontSize: 13),
-                    ),
-                  ],
-                  if (hasStyles) ...[
-                    const SizedBox(height: 12),
-                    if (!createNewStyle) ...[
-                      Text(
-                        str.importChoreographyMergeHint,
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    RadioListTile<bool>(
-                      title: Text(
-                        str.importChoreographyPickTargetStyle,
-                        style: const TextStyle(fontSize: 14, color: Colors.white),
-                      ),
-                      value: false,
-                      groupValue: createNewStyle,
-                      activeColor: AppColors.accent,
-                      onChanged: (_) => setSt(() => createNewStyle = false),
-                    ),
-                    if (!createNewStyle) ...[
-                      const SizedBox(height: 4),
-                      DropdownButtonFormField<String>(
-                        value: mergeStyleId,
-                        decoration: InputDecoration(
-                          labelText: str.style,
-                          border: const OutlineInputBorder(),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: AppRadius.radiusMd,
-                            borderSide: const BorderSide(color: AppColors.cardBorder),
-                          ),
-                        ),
-                        dropdownColor: AppColors.card,
-                        isExpanded: true,
-                        items: data.danceStyles
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s.id,
-                                child: Text(
-                                  str.displayDanceStyleName(s.name),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setSt(() => mergeStyleId = v),
-                      ),
-                    ],
-                    RadioListTile<bool>(
-                      title: Text(
-                        str.importChoreographyCreateNewStyle,
-                        style: const TextStyle(fontSize: 14, color: Colors.white),
-                      ),
-                      value: true,
-                      groupValue: createNewStyle,
-                      activeColor: AppColors.accent,
-                      onChanged: (_) => setSt(() => createNewStyle = true),
-                    ),
-                    if (createNewStyle) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        str.importChoreographyNewStyleHintBody,
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
-                    ],
-                  ],
-                  if (createNewStyle || !hasStyles) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        labelText: str.importChoreographyNewStyleNameHint,
-                        hintText: payload.styleName,
-                      ),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text(str.cancel),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(str.importChoreographyImport),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (go != true || !context.mounted) return;
-
-      final effectiveCreateNew = !hasStyles || createNewStyle;
-      final err = await ref.read(appDataNotifierProvider.notifier).importChoreographyFromPackagePayload(
-            payload,
-            createNewStyle: effectiveCreateNew,
-            mergeIntoStyleId: effectiveCreateNew ? null : mergeStyleId,
-            newStyleName: effectiveCreateNew ? nameController.text : '',
-          );
-      if (!context.mounted) return;
-      if (err != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(str.choreoPackageImportErrorExtra(err))),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(str.importChoreographySuccess)),
-        );
-      }
-    } finally {
-      nameController.dispose();
-    }
-  }
-
   void _deleteChoreography(BuildContext context, WidgetRef ref, Choreography c) async {
     final str = ref.read(appStringsProvider);
     final ok = await showDialog<bool>(
@@ -554,8 +552,10 @@ class _ChoreoCard extends StatelessWidget {
     required this.styleName,
     required this.songTitle,
     required this.shareTooltip,
+    required this.changeStyleTooltip,
     required this.onTap,
     required this.onRename,
+    required this.onChangeStyle,
     required this.onShare,
     required this.onCopy,
     required this.onDelete,
@@ -565,8 +565,10 @@ class _ChoreoCard extends StatelessWidget {
   final String styleName;
   final String songTitle;
   final String shareTooltip;
+  final String changeStyleTooltip;
   final VoidCallback onTap;
   final VoidCallback onRename;
+  final VoidCallback onChangeStyle;
   final VoidCallback onShare;
   final VoidCallback onCopy;
   final VoidCallback onDelete;
@@ -613,6 +615,12 @@ class _ChoreoCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.drive_file_rename_outline, color: Colors.white70, size: 22),
                   onPressed: onRename,
+                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                IconButton(
+                  tooltip: changeStyleTooltip,
+                  icon: const Icon(Icons.swap_horiz, color: Colors.white70, size: 22),
+                  onPressed: onChangeStyle,
                   style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 ),
                 IconButton(

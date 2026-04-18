@@ -14,6 +14,10 @@ Set-Location $root
 
 $env:ANDROID_HOME = "D:\Applications\Android\Sdk"
 
+& "$PSScriptRoot\set_pubspec_voice_assets.ps1" -Flavor $Flavor
+flutter pub get
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 Write-Host "ANDROID_HOME=$env:ANDROID_HOME" -ForegroundColor Gray
 Write-Host "flutter run --flavor $Flavor --debug --dart-define=FLAVOR=$Flavor" -ForegroundColor Cyan
 

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:video_player/video_player.dart';

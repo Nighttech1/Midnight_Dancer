@@ -2,8 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
-import 'package:midnight_dancer/core/utils/agent_debug_log.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/core/utils/thumbnail_cache.dart';
 import 'package:midnight_dancer/core/utils/video_temp.dart'
@@ -88,17 +86,6 @@ class _MoveCardState extends ConsumerState<MoveCard> {
     final bytes = await notifier.loadVideo(uri);
     if (!mounted) return;
     if (bytes == null || bytes.isEmpty) {
-      // #region agent log
-      agentDebugLog(
-        hypothesisId: 'H4',
-        location: 'move_card.dart:_resolveVideo',
-        message: 'loadVideo_bytes_empty',
-        data: {
-          'uriLen': uri.length,
-          'uriIsId': !(uri.startsWith('content:') || uri.startsWith('/')),
-        },
-      );
-      // #endregion
       if (mounted) {
         setState(() {
           _loading = false;

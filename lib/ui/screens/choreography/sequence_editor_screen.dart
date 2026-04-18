@@ -3,13 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/core/utils/formatters.dart';
+import 'package:midnight_dancer/data/models/app_data.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
 import 'package:midnight_dancer/data/models/song.dart';
+import 'package:midnight_dancer/data/services/choreography_timeline_ref.dart';
 
 const _zoomOptions = [25, 50, 100, 200, 400];
 const _basePixelsPerSecond = 18.0;
@@ -18,13 +19,13 @@ class SequenceEditorScreen extends ConsumerStatefulWidget {
   const SequenceEditorScreen({
     super.key,
     required this.choreography,
-    required this.style,
+    required this.appData,
     required this.song,
     required this.onSave,
   });
 
   final Choreography choreography;
-  final DanceStyle style;
+  final AppData appData;
   final Song song;
   final void Function(Choreography updated) onSave;
 
@@ -54,23 +55,49 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     return list;
   }
 
+  List<DanceStyle> get _styles => widget.appData.danceStyles;
+
+  String _timelineLabel(String raw) {
+    final str = ref.watch(appStringsProvider);
+    return ChoreographyTimelineRef.displayLabel(
+      _styles,
+      _choreo.styleId,
+      raw,
+      str.displayDanceStyleName,
+    );
+  }
+
+  DanceStyle? _firstStyleWithMoves() {
+    for (final s in _styles) {
+      if (s.moves.isNotEmpty) return s;
+    }
+    return null;
+  }
+
+  String _defaultNewTimelineRef() {
+    final st = _firstStyleWithMoves();
+    if (st == null || st.moves.isEmpty) return '';
+    return ChoreographyTimelineRef.encode(st.id, st.moves.first.id);
+  }
+
   void _addPoint() {
     final time = (_choreo.startTime + _duration * 0.25).clamp(_choreo.startTime, _choreo.endTime);
-    final moveName = widget.style.moves.isNotEmpty ? widget.style.moves.first.name : '';
 
     showDialog<void>(
       context: context,
       builder: (ctx) => _PointDialog(
         initialTimes: [time],
-        moveName: moveName,
-        moves: widget.style.moves,
+        initialTimelineValue: _defaultNewTimelineRef(),
+        allStyles: _styles,
+        choreographyStyleId: _choreo.styleId,
         startTime: _choreo.startTime,
         endTime: _choreo.endTime,
         removeTime: null,
-        onSave: (times, name) {
+        timeLabelStart: 1,
+        onSave: (times, timelineValue) {
           final newMap = Map<double, String>.from(_choreo.timeline);
           for (final t in times) {
-            newMap[t] = name;
+            newMap[t] = timelineValue;
           }
           setState(() => _choreo = _choreo.copyWith(timeline: newMap));
         },
@@ -79,22 +106,23 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     );
   }
 
-  void _editPoint(double time, String moveName, {int pointIndex1Based = 1}) {
+  void _editPoint(double time, String timelineRaw, {int pointIndex1Based = 1}) {
     showDialog<void>(
       context: context,
       builder: (ctx) => _PointDialog(
         initialTimes: [time],
-        moveName: moveName,
-        moves: widget.style.moves,
+        initialTimelineValue: timelineRaw,
+        allStyles: _styles,
+        choreographyStyleId: _choreo.styleId,
         startTime: _choreo.startTime,
         endTime: _choreo.endTime,
         removeTime: time,
         timeLabelStart: pointIndex1Based,
-        onSave: (times, name) {
+        onSave: (times, timelineValue) {
           final newMap = Map<double, String>.from(_choreo.timeline);
           newMap.remove(time);
           for (final t in times) {
-            newMap[t] = name;
+            newMap[t] = timelineValue;
           }
           setState(() => _choreo = _choreo.copyWith(timeline: newMap));
         },
@@ -266,7 +294,6 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
   }
 
   Widget _timelineSection() {
-    final l10n = ref.watch(appStringsProvider);
     final screenWidth = MediaQuery.of(context).size.width - 32;
     final width = math.max(_trackWidth, screenWidth);
     return SingleChildScrollView(
@@ -491,7 +518,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
                               children: [
                                 Text(formatDuration(e.key), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis),
                                 const SizedBox(height: 4),
-                                Text(e.value, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                Text(_timelineLabel(e.value), style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
                               ],
                             ),
                           ),
@@ -611,8 +638,9 @@ class _FadeInContentState extends State<_FadeInContent> with SingleTickerProvide
 class _PointDialog extends ConsumerStatefulWidget {
   const _PointDialog({
     required this.initialTimes,
-    required this.moveName,
-    required this.moves,
+    required this.initialTimelineValue,
+    required this.allStyles,
+    required this.choreographyStyleId,
     required this.startTime,
     required this.endTime,
     required this.removeTime,
@@ -622,13 +650,14 @@ class _PointDialog extends ConsumerStatefulWidget {
   });
 
   final List<double> initialTimes;
-  final String moveName;
-  final List<Move> moves;
+  final String initialTimelineValue;
+  final List<DanceStyle> allStyles;
+  final String choreographyStyleId;
   final double startTime;
   final double endTime;
   final double? removeTime;
   final int timeLabelStart;
-  final void Function(List<double> times, String moveName) onSave;
+  final void Function(List<double> times, String timelineValue) onSave;
   final VoidCallback? onDelete;
 
   @override
@@ -637,16 +666,71 @@ class _PointDialog extends ConsumerStatefulWidget {
 
 class _PointDialogState extends ConsumerState<_PointDialog> {
   late List<TextEditingController> _timeControllers;
-  late String _moveName;
+  late String? _styleId;
+  late String? _moveId;
 
   @override
   void initState() {
     super.initState();
     _timeControllers = widget.initialTimes.map((t) => TextEditingController(text: t.toStringAsFixed(1))).toList();
-    _moveName = widget.moveName;
-    if (widget.moves.isNotEmpty && !widget.moves.any((m) => m.name == _moveName)) {
-      _moveName = widget.moves.first.name;
+    _initStyleAndMove();
+  }
+
+  void _initStyleAndMove() {
+    final v = widget.initialTimelineValue;
+    final m = ChoreographyTimelineRef.resolveMove(widget.allStyles, widget.choreographyStyleId, v);
+    if (m != null) {
+      final dec = ChoreographyTimelineRef.decode(v);
+      if (dec != null) {
+        _styleId = dec.styleId;
+        _moveId = dec.moveId;
+      } else {
+        for (final s in widget.allStyles) {
+          if (s.moves.any((x) => x.id == m.id)) {
+            _styleId = s.id;
+            _moveId = m.id;
+            break;
+          }
+        }
+      }
     }
+    _styleId ??= _firstStyleWithMoves()?.id;
+    final st = _styleForId(_styleId);
+    if (st != null && st.moves.isNotEmpty) {
+      _moveId ??= st.moves.first.id;
+      if (!st.moves.any((x) => x.id == _moveId)) {
+        _moveId = st.moves.first.id;
+      }
+    } else {
+      _moveId = null;
+    }
+    if (_styleId != null && !widget.allStyles.any((s) => s.id == _styleId)) {
+      _styleId = _firstStyleWithMoves()?.id ?? (widget.allStyles.isNotEmpty ? widget.allStyles.first.id : null);
+    }
+    final stN = _styleForId(_styleId);
+    if (stN == null || stN.moves.isEmpty) {
+      _moveId = null;
+    } else if (_moveId == null || !stN.moves.any((m) => m.id == _moveId)) {
+      _moveId = stN.moves.first.id;
+    }
+  }
+
+  DanceStyle? _firstStyleWithMoves() {
+    for (final s in widget.allStyles) {
+      if (s.moves.isNotEmpty) return s;
+    }
+    for (final s in widget.allStyles) {
+      return s;
+    }
+    return null;
+  }
+
+  DanceStyle? _styleForId(String? id) {
+    if (id == null) return null;
+    for (final s in widget.allStyles) {
+      if (s.id == id) return s;
+    }
+    return null;
   }
 
   @override
@@ -667,6 +751,9 @@ class _PointDialogState extends ConsumerState<_PointDialog> {
   }
 
   void _submit() {
+    final sid = _styleId;
+    final mid = _moveId;
+    if (sid == null || mid == null || sid.isEmpty || mid.isEmpty) return;
     final times = <double>[];
     for (final c in _timeControllers) {
       final v = double.tryParse(c.text.replaceAll(',', '.'));
@@ -675,14 +762,17 @@ class _PointDialogState extends ConsumerState<_PointDialog> {
       }
     }
     if (times.isEmpty) return;
-    widget.onSave(times, _moveName);
+    widget.onSave(times, ChoreographyTimelineRef.encode(sid, mid));
     Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(appStringsProvider);
-    final dropdownValue = widget.moves.any((m) => m.name == _moveName) ? _moveName : (widget.moves.isEmpty ? _moveName : widget.moves.first.name);
+    final styles = widget.allStyles;
+    final st = _styleForId(_styleId);
+    final moves = st?.moves ?? const <Move>[];
+
     return AlertDialog(
       backgroundColor: AppColors.card,
       title: Text(l10n.pointOnTimeline),
@@ -725,17 +815,52 @@ class _PointDialogState extends ConsumerState<_PointDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-              value: dropdownValue,
-              decoration: InputDecoration(labelText: l10n.movement, isDense: true),
-              dropdownColor: AppColors.card,
-              isExpanded: true,
-              items: widget.moves.isEmpty
-                  ? [DropdownMenuItem(value: _moveName, child: Text(_moveName.isEmpty ? '—' : _moveName, overflow: TextOverflow.ellipsis))]
-                  : widget.moves.map((m) => DropdownMenuItem(value: m.name, child: Text(m.name, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: widget.moves.isEmpty ? null : (v) => setState(() => _moveName = v ?? _moveName),
-              style: const TextStyle(color: Colors.white),
-            ),
+              if (styles.isEmpty)
+                Text(l10n.addStyleFirst, style: const TextStyle(color: Colors.white70))
+              else ...[
+                DropdownButtonFormField<String>(
+                  value: _styleId,
+                  decoration: InputDecoration(labelText: l10n.style, isDense: true),
+                  dropdownColor: AppColors.card,
+                  isExpanded: true,
+                  items: styles
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s.id,
+                          child: Text(l10n.displayDanceStyleName(s.name), overflow: TextOverflow.ellipsis),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    final ns = _styleForId(v);
+                    setState(() {
+                      _styleId = v;
+                      _moveId = ns != null && ns.moves.isNotEmpty ? ns.moves.first.id : null;
+                    });
+                  },
+                  style: const TextStyle(color: Colors.white),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  value: moves.isEmpty ? null : _moveId,
+                  decoration: InputDecoration(labelText: l10n.movement, isDense: true),
+                  dropdownColor: AppColors.card,
+                  isExpanded: true,
+                  items: moves
+                      .map(
+                        (m) => DropdownMenuItem<String?>(
+                          value: m.id,
+                          child: Text(m.name, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: moves.isEmpty
+                      ? null
+                      : (v) => setState(() => _moveId = v),
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
             ],
           ),
         ),
@@ -749,7 +874,10 @@ class _PointDialogState extends ConsumerState<_PointDialog> {
             child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
           ),
         TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.cancel)),
-        FilledButton(onPressed: _submit, child: Text(l10n.save)),
+        FilledButton(
+          onPressed: (styles.isEmpty || moves.isEmpty || _moveId == null) ? null : _submit,
+          child: Text(l10n.save),
+        ),
       ],
     );
   }

@@ -2,7 +2,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/core/utils/picker_file_bytes_stub.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/picker_file_bytes_io.dart'
@@ -10,10 +9,15 @@ import 'package:midnight_dancer/core/utils/picker_file_bytes_stub.dart'
 import 'package:midnight_dancer/core/utils/full_backup_save_downloads_stub.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/full_backup_save_downloads_io.dart'
     as backup_dl;
+import 'package:midnight_dancer/data/models/app_data.dart';
+import 'package:midnight_dancer/data/services/full_backup_service.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/providers/music_playback_provider.dart';
 import 'package:midnight_dancer/ui/widgets/exchange_fullscreen_loading.dart';
+import 'package:midnight_dancer/ui/widgets/full_backup_export_options_dialog.dart';
+import 'package:midnight_dancer/ui/widgets/full_backup_import_mapping_dialog.dart';
+import 'package:midnight_dancer/ui/widgets/secure_zip_insufficient_space_dialog.dart';
 
 /// Раздел «Обмен»: выгрузка и загрузка полного ZIP с данными приложения.
 class ExchangeScreen extends ConsumerStatefulWidget {
@@ -82,9 +86,21 @@ class _ExchangeScreenState extends ConsumerState<ExchangeScreen> {
 
   Future<void> _exportFullBackup() async {
     final str = ref.read(appStringsProvider);
+    final appData = ref.read(appDataNotifierProvider).valueOrNull;
+    if (!mounted || appData == null) return;
+
+    final exportData = await showFullBackupExportOptionsDialog(
+      context: context,
+      str: str,
+      appData: appData,
+    );
+    if (!mounted || exportData == null) return;
+
     await _withFullscreenExchangeLoading(str.exchangeExporting, () async {
       try {
-        final zip = await ref.read(appDataNotifierProvider.notifier).buildFullBackupZip();
+        final zip = await ref
+            .read(appDataNotifierProvider.notifier)
+            .buildFullBackupZip(data: exportData);
         if (!mounted) return;
         if (zip == null || zip.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -147,39 +163,101 @@ class _ExchangeScreenState extends ConsumerState<ExchangeScreen> {
       withData: kIsWeb,
     );
     if (result == null || result.files.isEmpty || !mounted) return;
-    final bytes = await picker_file.completePickerFileBytes(result.files.single);
+    final picked = result.files.single;
+    final zipPath = picked.path;
+
+    FullBackupParseResult? parsed;
+    String? parseErr;
+
+    await _withFullscreenExchangeLoading(str.exchangeParsingBackup, () async {
+      try {
+        if (!kIsWeb && zipPath != null && zipPath.isNotEmpty) {
+          final r = await ref.read(appDataNotifierProvider.notifier).tryParseFullBackupFromSecureFilePath(zipPath);
+          parsed = r.$1;
+          parseErr = r.$2;
+        } else {
+          final bytes = await picker_file.completePickerFileBytes(picked);
+          if (!mounted) return;
+          if (bytes == null || bytes.isEmpty) {
+            parseErr = 'no_file';
+            return;
+          }
+          final r = ref.read(appDataNotifierProvider.notifier).tryParseFullBackupBytes(bytes);
+          parsed = r.$1;
+          parseErr = r.$2;
+        }
+      } catch (e) {
+        parseErr = e.toString();
+      }
+    });
+
     if (!mounted) return;
-    if (bytes == null || bytes.isEmpty) {
+
+    if (parseErr != null) {
+      final pe = parseErr!;
+      if (pe == 'no_file') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(str.importChoreographyNoFile)),
+        );
+        return;
+      }
+      if (pe.startsWith('insufficient_space:')) {
+        final parts = pe.split(':');
+        if (parts.length >= 3) {
+          final req = int.tryParse(parts[1]);
+          final free = int.tryParse(parts[2]);
+          if (req != null && free != null) {
+            await showSecureZipInsufficientSpaceDialog(
+              context: context,
+              str: str,
+              requiredBytes: req,
+              freeBytes: free,
+            );
+            return;
+          }
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(str.importChoreographyNoFile)),
+        SnackBar(content: Text(str.fullBackupError(pe))),
       );
       return;
     }
 
+    final okParsed = parsed;
+    if (okParsed == null || !okParsed.isOk || okParsed.appData == null) return;
+
+    final localData = ref.read(appDataNotifierProvider).valueOrNull;
+    final plan = await showFullBackupImportMappingDialog(
+      context: context,
+      str: str,
+      localData: localData ?? AppData(),
+      importedStyles: okParsed.appData!.danceStyles,
+    );
+    if (!mounted || plan == null) return;
+
+    String? mergeErr;
     await _withFullscreenExchangeLoading(str.exchangeImporting, () async {
       try {
-        final err = await ref.read(appDataNotifierProvider.notifier).importFullBackup(bytes);
-        if (!mounted) return;
-        if (err != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(str.fullBackupError(err))),
-          );
-          return;
-        }
-        await ref.read(musicPlaybackProvider.notifier).stopPlayback();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(str.fullBackupImportSuccess)),
-          );
-        }
+        mergeErr = await ref.read(appDataNotifierProvider.notifier).mergeParsedFullBackup(okParsed, plan);
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(str.fullBackupError(e.toString()))),
-          );
-        }
+        mergeErr = e.toString();
       }
     });
+
+    if (!mounted) return;
+    if (mergeErr != null) {
+      final me = mergeErr!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(str.fullBackupError(me))),
+      );
+      return;
+    }
+    await ref.read(musicPlaybackProvider.notifier).stopPlayback();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(str.fullBackupImportSuccess)),
+      );
+    }
   }
 
   @override

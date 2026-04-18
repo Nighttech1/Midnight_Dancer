@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/app_ui_language.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/data/services/dance_reminder_config.dart';

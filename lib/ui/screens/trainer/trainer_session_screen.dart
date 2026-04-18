@@ -12,9 +12,9 @@ import 'package:midnight_dancer/data/models/app_data.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/song.dart';
+import 'package:midnight_dancer/data/services/choreography_timeline_ref.dart';
 import 'package:midnight_dancer/data/services/tts_service.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
-import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/ui/screens/trainer/trainer_screen.dart';
 
@@ -259,13 +259,6 @@ class _TrainerSessionScreenState extends ConsumerState<TrainerSessionScreen> {
         return;
       }
 
-      final style = data.danceStyles.cast<DanceStyle?>().firstWhere(
-            (s) => s?.id == choreo.styleId,
-            orElse: () => null,
-          );
-      final moveNames = <String, String>{};
-      if (style != null) for (final m in style.moves) moveNames[m.id] = m.name;
-
       if (_musicPreloadFuture != null) {
         await _musicPreloadFuture;
         if (!_active) return;
@@ -293,8 +286,9 @@ class _TrainerSessionScreenState extends ConsumerState<TrainerSessionScreen> {
         for (final t in sortedTimes) {
           if (t <= sec && !_spokenTimelinePoints.contains(t)) {
             _spokenTimelinePoints.add(t);
-            final moveId = choreo.timeline[t];
-            final name = moveNames[moveId] ?? moveId ?? '';
+            final raw = choreo.timeline[t] ?? '';
+            final m = ChoreographyTimelineRef.resolveMove(data.danceStyles, choreo.styleId, raw);
+            final name = m?.name ?? raw;
             if (name.isEmpty) continue;
             if (!_active || !mounted) return;
             setState(() => _currentMoveName = name);

@@ -39,7 +39,9 @@ class DanceReminderScheduler {
       tz.setLocalLocation(tz.UTC);
     }
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    // Use a flat drawable for notifications — adaptive @mipmap icons often glitch
+    // (e.g. icon vanishing when expanding/tapping the notification on some OEM skins).
+    const androidInit = AndroidInitializationSettings('ic_dance_notification');
     const darwinInit = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -215,6 +217,7 @@ class DanceReminderScheduler {
       _channel.id,
       _channel.name,
       channelDescription: _channel.description,
+      icon: 'ic_dance_notification',
       importance: Importance.high,
       priority: Priority.high,
     );
