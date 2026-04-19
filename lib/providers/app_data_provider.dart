@@ -228,11 +228,35 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
   Future<void> deleteMove(String styleId, String moveId) async {
     final current = state.valueOrNull ?? AppData();
     final style = current.danceStyles.firstWhere((s) => s.id == styleId);
+    Move? removed;
+    for (final m in style.moves) {
+      if (m.id == moveId) {
+        removed = m;
+        break;
+      }
+    }
+    if (removed == null) return;
+    final moveName = removed.name;
+
+    final updatedChoreos = current.choreographies.map((c) {
+      final tl = Map<double, String>.from(c.timeline);
+      tl.removeWhere((_, val) {
+        final dec = ChoreographyTimelineRef.decode(val);
+        if (dec != null) {
+          return dec.styleId == styleId && dec.moveId == moveId;
+        }
+        if (c.styleId != styleId) return false;
+        return val == moveName || val == moveId;
+      });
+      return c.copyWith(timeline: tl);
+    }).toList();
+
     final updatedStyle = style.copyWith(
       moves: style.moves.where((m) => m.id != moveId).toList(),
       currentMoveId: style.currentMoveId == moveId ? null : style.currentMoveId,
     );
-    await updateStyle(updatedStyle);
+    final ds = current.danceStyles.map((s) => s.id == styleId ? updatedStyle : s).toList();
+    await save(current.copyWith(danceStyles: ds, choreographies: updatedChoreos));
   }
 
   Future<void> updateMoveMastery(String styleId, String moveId, int percent) async {
@@ -299,8 +323,13 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
       final ext = _extensionFromFileName(song.first.fileName);
       await _storage.deleteMediaFile(songId, 'music', musicExtension: ext);
     }
+    final updatedChoreos = current.choreographies.map((c) {
+      if (c.songId != songId) return c;
+      return c.copyWith(songId: '');
+    }).toList();
     final updated = current.copyWith(
       songs: current.songs.where((s) => s.id != songId).toList(),
+      choreographies: updatedChoreos,
     );
     await save(updated);
   }

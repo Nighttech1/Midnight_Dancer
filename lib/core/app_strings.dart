@@ -711,6 +711,45 @@ class AppStrings {
         en: '«$name» will be deleted and cannot be restored.',
         es: '«$name» se eliminará y no se podrá recuperar.',
       );
+  String get deleteTrackUsedInChoreographiesTitle => _t(
+        ru: 'Трек используется в хореографиях',
+        en: 'Track is used in choreographies',
+        es: 'La pista se usa en coreografías',
+      );
+  String deleteTrackUsedInChoreographiesBody(String trackTitle, String choreoList) => _t(
+        ru:
+            'Трек «$trackTitle» сейчас привязан к:\n\n$choreoList\n\nУдалить трек всё равно? В этих хореографиях нужно будет снова выбрать музыку.',
+        en:
+            'Track «$trackTitle» is linked to:\n\n$choreoList\n\nDelete it anyway? You will need to pick music again for those choreographies.',
+        es:
+            'La pista «$trackTitle» está enlazada a:\n\n$choreoList\n\n¿Eliminarla igual? Habrá que elegir música otra vez en esas coreografías.',
+      );
+  String get deleteTrackUsedInChoreographiesAnyway => _t(
+        ru: 'Всё равно удалить',
+        en: 'Delete anyway',
+        es: 'Eliminar igual',
+      );
+  String get choreoMissingTrack => _t(
+        ru: 'нет трека',
+        en: 'no track',
+        es: 'sin pista',
+      );
+  String get choreoChangeTrackTooltip =>
+      _t(ru: 'Сменить трек', en: 'Change track', es: 'Cambiar pista');
+  String get choreoChangeTrackDone =>
+      _t(ru: 'Трек хореографии обновлён', en: 'Choreography track updated', es: 'Pista de coreografía actualizada');
+  String get selectTrackForChoreographyTitle =>
+      _t(ru: 'Трек хореографии', en: 'Choreography track', es: 'Pista de la coreografía');
+  String get needTrackToAddElements => _t(
+        ru: 'Сначала выберите трек (кнопка «Трек» или с экрана хореографий).',
+        en: 'Pick a track first (the «Track» button or from the choreography list).',
+        es: 'Elige primero una pista (botón «Pista» o desde la lista de coreografías).',
+      );
+  String get addMusicOrOpenExchange => _t(
+        ru: 'Добавьте музыку в разделе «Музыка».',
+        en: 'Add music in the Music section.',
+        es: 'Añade música en la sección Música.',
+      );
   String get loadTrack => _t(ru: 'Загрузить трек', en: 'Load track', es: 'Cargar pista');
   String get trackPlaybackSpeed =>
       _t(ru: 'Скорость трека', en: 'Track speed', es: 'Velocidad de la pista');

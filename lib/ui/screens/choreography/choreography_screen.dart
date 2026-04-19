@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/core/utils/formatters.dart' show dropdownValueOrFallback;
 import 'package:midnight_dancer/data/models/app_data.dart';
@@ -17,7 +18,8 @@ String _choreoStyleName(AppData data, String styleId) {
   return s.isEmpty ? styleId : s.first.name;
 }
 
-String _choreoSongTitle(AppData data, String songId) {
+String _choreoSongTitle(AppData data, String songId, AppStrings str) {
+  if (songId.isEmpty) return str.choreoMissingTrack;
   final s = data.songs.where((x) => x.id == songId).toList();
   return s.isEmpty ? songId : s.first.title;
 }
@@ -207,11 +209,13 @@ class _ChoreographyScreenState extends ConsumerState<ChoreographyScreen> {
                             ...list.map((c) => _ChoreoCard(
                                   choreography: c,
                                   styleName: _choreoStyleName(data, c.styleId),
-                                  songTitle: _choreoSongTitle(data, c.songId),
+                                  songTitle: _choreoSongTitle(data, c.songId, str),
                                   shareTooltip: str.shareChoreography,
                                   changeStyleTooltip: str.choreoChangeStyleTooltip,
+                                  changeTrackTooltip: str.choreoChangeTrackTooltip,
                                   onTap: () => _openEditor(context, ref, c, data),
                                   onRename: () => _renameChoreography(context, ref, c),
+                                  onChangeTrack: () => _changeChoreographySong(context, ref, c, data),
                                   onChangeStyle: () => _changeChoreographyStyle(context, ref, c, data),
                                   onShare: () => _shareChoreography(context, ref, c),
                                   onCopy: () => _copyChoreography(context, ref, c, data),
@@ -231,15 +235,11 @@ class _ChoreographyScreenState extends ConsumerState<ChoreographyScreen> {
   }
 
   void _openEditor(BuildContext context, WidgetRef ref, Choreography choreography, AppData data) {
-    final songs = data.songs.where((s) => s.id == choreography.songId).toList();
-    if (songs.isEmpty || data.danceStyles.isEmpty) return;
-    final song = songs.first;
+    if (data.danceStyles.isEmpty) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (ctx) => SequenceEditorScreen(
           choreography: choreography,
-          appData: data,
-          song: song,
           onSave: (updated) async {
             await ref.read(appDataNotifierProvider.notifier).updateChoreography(updated);
             if (context.mounted) Navigator.of(context).pop();
@@ -346,6 +346,66 @@ class _ChoreographyScreenState extends ConsumerState<ChoreographyScreen> {
     await ref.read(appDataNotifierProvider.notifier).addChoreography(copy);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(str.copiedSnackbar(copy.name))));
+    }
+  }
+
+  void _changeChoreographySong(BuildContext context, WidgetRef ref, Choreography c, AppData data) async {
+    final str = ref.read(appStringsProvider);
+    if (data.songs.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(str.addMusicOrOpenExchange)),
+        );
+      }
+      return;
+    }
+    var songId = c.songId.isNotEmpty && data.songs.any((s) => s.id == c.songId) ? c.songId : data.songs.first.id;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(str.selectTrackForChoreographyTitle),
+          content: DropdownButtonFormField<String>(
+            value: songId,
+            decoration: InputDecoration(labelText: str.music),
+            dropdownColor: AppColors.card,
+            isExpanded: true,
+            items: data.songs
+                .map((s) => DropdownMenuItem(value: s.id, child: Text(s.title, overflow: TextOverflow.ellipsis)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) setSt(() => songId = v);
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(str.cancel)),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, songId),
+              child: Text(str.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!context.mounted || picked == null || picked == c.songId) return;
+    final song = data.songs.firstWhere((s) => s.id == picked);
+    final maxDur = song.duration > 0 ? song.duration : 300.0;
+    var end = c.endTime.clamp(0.0, maxDur);
+    var start = c.startTime.clamp(0.0, end);
+    final newMap = <double, String>{};
+    for (final e in c.timeline.entries) {
+      if (e.key >= start && e.key <= end) {
+        newMap[e.key] = e.value;
+      }
+    }
+    await ref.read(appDataNotifierProvider.notifier).updateChoreography(
+          c.copyWith(songId: picked, startTime: start, endTime: end, timeline: newMap),
+        );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(str.choreoChangeTrackDone)),
+      );
     }
   }
 
@@ -553,8 +613,10 @@ class _ChoreoCard extends StatelessWidget {
     required this.songTitle,
     required this.shareTooltip,
     required this.changeStyleTooltip,
+    required this.changeTrackTooltip,
     required this.onTap,
     required this.onRename,
+    required this.onChangeTrack,
     required this.onChangeStyle,
     required this.onShare,
     required this.onCopy,
@@ -566,8 +628,10 @@ class _ChoreoCard extends StatelessWidget {
   final String songTitle;
   final String shareTooltip;
   final String changeStyleTooltip;
+  final String changeTrackTooltip;
   final VoidCallback onTap;
   final VoidCallback onRename;
+  final VoidCallback onChangeTrack;
   final VoidCallback onChangeStyle;
   final VoidCallback onShare;
   final VoidCallback onCopy;
@@ -615,6 +679,12 @@ class _ChoreoCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.drive_file_rename_outline, color: Colors.white70, size: 22),
                   onPressed: onRename,
+                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                IconButton(
+                  tooltip: changeTrackTooltip,
+                  icon: const Icon(Icons.library_music_outlined, color: Colors.white70, size: 22),
+                  onPressed: onChangeTrack,
                   style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 ),
                 IconButton(

@@ -383,19 +383,49 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
 
   Future<void> _deleteSong(Song song) async {
     final str = ref.read(appStringsProvider);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: Text(str.deleteTrackConfirm),
-        content: Text(str.deleteTrackMessage(song.title)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(str.cancel)),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(str.delete, style: const TextStyle(color: Colors.red))),
-        ],
-      ),
-    );
-    if (ok == true && mounted) {
+    final data = ref.read(appDataNotifierProvider).valueOrNull ?? AppData();
+    final usedBy = data.choreographies.where((c) => c.songId == song.id).toList();
+
+    Future<bool> confirmSimple() async {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(str.deleteTrackConfirm),
+          content: Text(str.deleteTrackMessage(song.title)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(str.cancel)),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(str.delete, style: const TextStyle(color: Colors.red))),
+          ],
+        ),
+      );
+      return ok == true;
+    }
+
+    Future<bool> confirmWithChoreographies() async {
+      final lines = usedBy.map((c) => '• ${c.name}').join('\n');
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(str.deleteTrackUsedInChoreographiesTitle),
+          content: SingleChildScrollView(
+            child: Text(str.deleteTrackUsedInChoreographiesBody(song.title, lines)),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(str.cancel)),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(str.deleteTrackUsedInChoreographiesAnyway, style: const TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+      return ok == true;
+    }
+
+    final bool go = usedBy.isEmpty ? await confirmSimple() : await confirmWithChoreographies();
+    if (go && mounted) {
       final mp = ref.read(musicPlaybackProvider.notifier);
       await mp.onSongRemovedFromData(song.id);
       await ref.read(appDataNotifierProvider.notifier).deleteSong(song.id);

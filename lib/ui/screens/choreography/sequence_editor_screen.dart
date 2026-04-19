@@ -6,6 +6,7 @@ import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/core/utils/formatters.dart';
 import 'package:midnight_dancer/data/models/app_data.dart';
+import 'package:midnight_dancer/providers/app_data_provider.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
@@ -19,14 +20,10 @@ class SequenceEditorScreen extends ConsumerStatefulWidget {
   const SequenceEditorScreen({
     super.key,
     required this.choreography,
-    required this.appData,
-    required this.song,
     required this.onSave,
   });
 
   final Choreography choreography;
-  final AppData appData;
-  final Song song;
   final void Function(Choreography updated) onSave;
 
   @override
@@ -55,40 +52,55 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     return list;
   }
 
-  List<DanceStyle> get _styles => widget.appData.danceStyles;
+  List<DanceStyle> _styles(AppData data) => data.danceStyles;
 
-  String _timelineLabel(String raw) {
+  Song? _resolveSong(AppData data) {
+    if (_choreo.songId.isEmpty) return null;
+    for (final s in data.songs) {
+      if (s.id == _choreo.songId) return s;
+    }
+    return null;
+  }
+
+  String _timelineLabel(AppData data, String raw) {
     final str = ref.watch(appStringsProvider);
     return ChoreographyTimelineRef.displayLabel(
-      _styles,
+      _styles(data),
       _choreo.styleId,
       raw,
       str.displayDanceStyleName,
     );
   }
 
-  DanceStyle? _firstStyleWithMoves() {
-    for (final s in _styles) {
+  DanceStyle? _firstStyleWithMoves(AppData data) {
+    for (final s in _styles(data)) {
       if (s.moves.isNotEmpty) return s;
     }
     return null;
   }
 
-  String _defaultNewTimelineRef() {
-    final st = _firstStyleWithMoves();
+  String _defaultNewTimelineRef(AppData data) {
+    final st = _firstStyleWithMoves(data);
     if (st == null || st.moves.isEmpty) return '';
     return ChoreographyTimelineRef.encode(st.id, st.moves.first.id);
   }
 
-  void _addPoint() {
+  void _addPoint(AppData data) {
+    if (_resolveSong(data) == null) {
+      final str = ref.read(appStringsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(str.needTrackToAddElements)),
+      );
+      return;
+    }
     final time = (_choreo.startTime + _duration * 0.25).clamp(_choreo.startTime, _choreo.endTime);
 
     showDialog<void>(
       context: context,
       builder: (ctx) => _PointDialog(
         initialTimes: [time],
-        initialTimelineValue: _defaultNewTimelineRef(),
-        allStyles: _styles,
+        initialTimelineValue: _defaultNewTimelineRef(data),
+        allStyles: _styles(data),
         choreographyStyleId: _choreo.styleId,
         startTime: _choreo.startTime,
         endTime: _choreo.endTime,
@@ -106,13 +118,13 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     );
   }
 
-  void _editPoint(double time, String timelineRaw, {int pointIndex1Based = 1}) {
+  void _editPoint(AppData data, double time, String timelineRaw, {int pointIndex1Based = 1}) {
     showDialog<void>(
       context: context,
       builder: (ctx) => _PointDialog(
         initialTimes: [time],
         initialTimelineValue: timelineRaw,
-        allStyles: _styles,
+        allStyles: _styles(data),
         choreographyStyleId: _choreo.styleId,
         startTime: _choreo.startTime,
         endTime: _choreo.endTime,
@@ -140,8 +152,8 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     setState(() => _choreo = _choreo.copyWith(timeline: newMap));
   }
 
-  void _updateTrim(double start, double end) {
-    final songDuration = widget.song.duration > 0 ? widget.song.duration : 300.0;
+  void _updateTrim(double start, double end, double songMaxDuration) {
+    final songDuration = songMaxDuration > 0 ? songMaxDuration : 300.0;
     start = start.clamp(0.0, songDuration);
     end = end.clamp(start, songDuration);
     final newMap = <double, String>{};
@@ -176,8 +188,71 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     }
   }
 
+  Future<void> _pickSong(AppData data) async {
+    final str = ref.read(appStringsProvider);
+    if (data.songs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(str.addMusicOrOpenExchange)),
+        );
+      }
+      return;
+    }
+    var songId = _choreo.songId.isNotEmpty && data.songs.any((s) => s.id == _choreo.songId)
+        ? _choreo.songId
+        : data.songs.first.id;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: Text(str.selectTrackForChoreographyTitle),
+          content: DropdownButtonFormField<String>(
+            value: songId,
+            decoration: InputDecoration(labelText: str.music),
+            dropdownColor: AppColors.card,
+            isExpanded: true,
+            items: data.songs
+                .map((s) => DropdownMenuItem(value: s.id, child: Text(s.title, overflow: TextOverflow.ellipsis)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) setSt(() => songId = v);
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(str.cancel)),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, songId),
+              child: Text(str.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final newSong = data.songs.firstWhere((s) => s.id == picked);
+    final maxDur = newSong.duration > 0 ? newSong.duration : 300.0;
+    var end = _choreo.endTime.clamp(0.0, maxDur);
+    var start = _choreo.startTime.clamp(0.0, end);
+    final newMap = <double, String>{};
+    for (final e in _choreo.timeline.entries) {
+      if (e.key >= start && e.key <= end) newMap[e.key] = e.value;
+    }
+    final updated = _choreo.copyWith(songId: picked, startTime: start, endTime: end, timeline: newMap);
+    await ref.read(appDataNotifierProvider.notifier).updateChoreography(updated);
+    if (mounted) setState(() => _choreo = updated);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final str = ref.watch(appStringsProvider);
+    final data = ref.watch(appDataNotifierProvider).valueOrNull ?? AppData();
+    final song = _resolveSong(data);
+    final songMaxForTrim = () {
+      if (song != null && song.duration > 0) return song.duration;
+      return math.max(math.max(_choreo.endTime, 1.0), 300.0);
+    }();
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -192,6 +267,11 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
         title: Text(_choreo.name, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
+            tooltip: str.choreoChangeTrackTooltip,
+            icon: const Icon(Icons.library_music_outlined),
+            onPressed: _saving ? null : () => _pickSong(data),
+          ),
+          IconButton(
             icon: _saving ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save),
             onPressed: _saving ? null : _save,
           ),
@@ -201,13 +281,13 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _trimSection(),
+            _trimSection(data, song, songMaxForTrim),
             _zoomSection(),
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: _timelineSection(),
+              child: _timelineSection(data),
             ),
-            _pointsListSection(),
+            _pointsListSection(data),
           ],
         ),
       ),
@@ -215,9 +295,9 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     );
   }
 
-  Widget _trimSection() {
+  Widget _trimSection(AppData data, Song? song, double songMaxForTrim) {
     final l10n = ref.watch(appStringsProvider);
-    final songMax = widget.song.duration > 0 ? widget.song.duration : 300.0;
+    final hasTrack = song != null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: AppColors.card.withOpacity(0.5),
@@ -229,7 +309,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
               label: l10n.trimStart,
               value: _choreo.startTime,
               max: _choreo.endTime,
-              onChanged: (v) => _updateTrim(v, _choreo.endTime),
+              onChanged: (v) => _updateTrim(v, _choreo.endTime, songMaxForTrim),
             ),
           ),
           const SizedBox(width: 8),
@@ -239,17 +319,17 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
               label: l10n.trimEnd,
               value: _choreo.endTime,
               min: _choreo.startTime,
-              max: songMax,
-              onChanged: (v) => _updateTrim(_choreo.startTime, v),
+              max: songMaxForTrim,
+              onChanged: (v) => _updateTrim(_choreo.startTime, v, songMaxForTrim),
             ),
           ),
           const Spacer(),
           ElevatedButton.icon(
-            onPressed: _addPoint,
+            onPressed: hasTrack ? () => _addPoint(data) : null,
             icon: const Icon(Icons.add, size: 18),
             label: Text(l10n.addElement),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
+              backgroundColor: hasTrack ? AppColors.accent : AppColors.cardBorder,
               foregroundColor: Colors.white,
             ),
           ),
@@ -293,7 +373,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     return 1;
   }
 
-  Widget _timelineSection() {
+  Widget _timelineSection(AppData data) {
     final screenWidth = MediaQuery.of(context).size.width - 32;
     final width = math.max(_trackWidth, screenWidth);
     return SingleChildScrollView(
@@ -322,7 +402,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
                     ),
                   ),
                   _buildStartEndMarkers(width),
-                  _buildTimelineSegments(width),
+                  _buildTimelineSegments(data, width),
                 ],
               ),
             ),
@@ -408,7 +488,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
     );
   }
 
-  Widget _buildTimelineSegments(double totalWidth) {
+  Widget _buildTimelineSegments(AppData data, double totalWidth) {
     final l10n = ref.watch(appStringsProvider);
     final points = _sortedPoints;
     if (points.isEmpty) {
@@ -433,7 +513,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
             left: _offsetFromTime(points[i].key) - 8,
             top: (88 - 24) / 2,
             child: GestureDetector(
-              onTap: () => _editPoint(points[i].key, points[i].value, pointIndex1Based: i + 1),
+              onTap: () => _editPoint(data, points[i].key, points[i].value, pointIndex1Based: i + 1),
               behavior: HitTestBehavior.opaque,
               child: Container(
                 width: 24,
@@ -452,14 +532,14 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
             width: (i + 1 < points.length ? _offsetFromTime(points[i + 1].key) : _offsetFromTime(_choreo.endTime)) - _offsetFromTime(points[i].key),
             time: points[i].key,
             moveName: points[i].value,
-            onTap: () => _editPoint(points[i].key, points[i].value, pointIndex1Based: i + 1),
+            onTap: () => _editPoint(data, points[i].key, points[i].value, pointIndex1Based: i + 1),
           ),
         ],
       ],
     );
   }
 
-  Widget _pointsListSection() {
+  Widget _pointsListSection(AppData data) {
     final l10n = ref.watch(appStringsProvider);
     final points = _sortedPoints;
     if (points.isEmpty) {
@@ -508,7 +588,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
                         color: AppColors.card,
                         borderRadius: AppRadius.radiusSm,
                         child: InkWell(
-                          onTap: () => _editPoint(e.key, e.value, pointIndex1Based: i + 1),
+                          onTap: () => _editPoint(data, e.key, e.value, pointIndex1Based: i + 1),
                           borderRadius: AppRadius.radiusSm,
                           child: Container(
                             padding: const EdgeInsets.all(10),
@@ -518,7 +598,7 @@ class _SequenceEditorScreenState extends ConsumerState<SequenceEditorScreen> {
                               children: [
                                 Text(formatDuration(e.key), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600, fontSize: 13), overflow: TextOverflow.ellipsis),
                                 const SizedBox(height: 4),
-                                Text(_timelineLabel(e.value), style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                Text(_timelineLabel(data, e.value), style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
                               ],
                             ),
                           ),
