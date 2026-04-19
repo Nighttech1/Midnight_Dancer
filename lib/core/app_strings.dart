@@ -718,16 +718,11 @@ class AppStrings {
       );
   String deleteTrackUsedInChoreographiesBody(String trackTitle, String choreoList) => _t(
         ru:
-            'Трек «$trackTitle» сейчас привязан к:\n\n$choreoList\n\nУдалить трек всё равно? В этих хореографиях нужно будет снова выбрать музыку.',
+            'Трек «$trackTitle» сейчас привязан к:\n\n$choreoList\n\nПосле удаления в этих хореографиях нужно будет снова выбрать музыку.',
         en:
-            'Track «$trackTitle» is linked to:\n\n$choreoList\n\nDelete it anyway? You will need to pick music again for those choreographies.',
+            'Track «$trackTitle» is linked to:\n\n$choreoList\n\nAfter deletion you will need to pick music again for those choreographies.',
         es:
-            'La pista «$trackTitle» está enlazada a:\n\n$choreoList\n\n¿Eliminarla igual? Habrá que elegir música otra vez en esas coreografías.',
-      );
-  String get deleteTrackUsedInChoreographiesAnyway => _t(
-        ru: 'Всё равно удалить',
-        en: 'Delete anyway',
-        es: 'Eliminar igual',
+            'La pista «$trackTitle» está enlazada a:\n\n$choreoList\n\nTras eliminarla, habrá que elegir música otra vez en esas coreografías.',
       );
   String get choreoMissingTrack => _t(
         ru: 'нет трека',

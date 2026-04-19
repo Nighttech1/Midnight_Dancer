@@ -652,62 +652,91 @@ class _ChoreoCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: AppRadius.radiusMd,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                Text(
+                  choreography.name,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$styleName · $songTitle',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 0,
+                    runSpacing: 4,
                     children: [
-                      Text(
-                        choreography.name,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 16),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      IconButton(
+                        icon: const Icon(Icons.drive_file_rename_outline, color: Colors.white70, size: 22),
+                        onPressed: onRename,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$styleName · $songTitle',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      IconButton(
+                        tooltip: changeTrackTooltip,
+                        icon: const Icon(Icons.library_music_outlined, color: Colors.white70, size: 22),
+                        onPressed: onChangeTrack,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: changeStyleTooltip,
+                        icon: const Icon(Icons.swap_horiz, color: Colors.white70, size: 22),
+                        onPressed: onChangeStyle,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: shareTooltip,
+                        icon: const Icon(Icons.share, color: Colors.white70, size: 22),
+                        onPressed: onShare,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy, color: Colors.white70, size: 22),
+                        onPressed: onCopy,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.white54, size: 22),
+                        onPressed: onDelete,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(40, 40),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                       ),
                     ],
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.drive_file_rename_outline, color: Colors.white70, size: 22),
-                  onPressed: onRename,
-                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                IconButton(
-                  tooltip: changeTrackTooltip,
-                  icon: const Icon(Icons.library_music_outlined, color: Colors.white70, size: 22),
-                  onPressed: onChangeTrack,
-                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                IconButton(
-                  tooltip: changeStyleTooltip,
-                  icon: const Icon(Icons.swap_horiz, color: Colors.white70, size: 22),
-                  onPressed: onChangeStyle,
-                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                IconButton(
-                  tooltip: shareTooltip,
-                  icon: const Icon(Icons.share, color: Colors.white70, size: 22),
-                  onPressed: onShare,
-                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.copy, color: Colors.white70, size: 22),
-                  onPressed: onCopy,
-                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.white54, size: 22),
-                  onPressed: onDelete,
-                  style: IconButton.styleFrom(minimumSize: const Size(36, 36), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 ),
               ],
             ),

@@ -416,7 +416,7 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(str.cancel)),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(str.deleteTrackUsedInChoreographiesAnyway, style: const TextStyle(color: Colors.red)),
+              child: Text(str.delete, style: const TextStyle(color: Colors.red)),
             ),
           ],
         ),
