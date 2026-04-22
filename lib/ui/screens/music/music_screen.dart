@@ -91,64 +91,73 @@ class _MusicScreenState extends ConsumerState<MusicScreen> {
 
   Future<void> _pickAndAddSong() async {
     final str = ref.read(appStringsProvider);
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
-      allowMultiple: false,
-      withData: kIsWeb,
-    );
-    if (result == null || result.files.single.path == null && result.files.single.bytes == null) return;
-
-    final file = result.files.single;
-    String? path = file.path;
-    Uint8List? bytes = file.bytes;
-    final name = file.name;
-    final ext = name.contains('.') ? p.extension(name).toLowerCase().replaceFirst('.', '') : 'mp3';
-    if (!['mp3', 'm4a', 'wav'].contains(ext)) return;
-
-    final appNotifier = ref.read(appDataNotifierProvider.notifier);
-    final mp = ref.read(musicPlaybackProvider.notifier);
-    var data = ref.read(appDataNotifierProvider).valueOrNull ?? AppData();
-    var styles = data.danceStyles.map((s) => s.name).toList();
-    if (styles.isEmpty) {
-      final defaultStyle = DanceStyle(
-        id: 'style-default',
-        name: kCanonicalDefaultDanceStyleName,
-        moves: [],
+    try {
+      // FileType.audio на iOS трогает медиатеку и требует NSAppleMusicUsageDescription (иначе TCC SIGABRT).
+      // Ограничение по расширениям открывает обычный документ-пикер (файлы / iCloud Drive).
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['mp3', 'm4a', 'wav'],
+        allowMultiple: false,
+        withData: kIsWeb,
       );
-      await appNotifier.addStyle(defaultStyle);
-      styles = [kCanonicalDefaultDanceStyleName];
-    }
+      if (result == null || result.files.single.path == null && result.files.single.bytes == null) return;
 
-    double durationSec = 0;
-    if (!kIsWeb && path != null && path.isNotEmpty) {
-      durationSec = await mp.probeDurationSecFromPath(path);
-    } else if (kIsWeb && bytes != null && bytes.isNotEmpty) {
-      durationSec = await mp.probeDurationSecFromBytes(bytes, ext);
-    }
+      final file = result.files.single;
+      String? path = file.path;
+      Uint8List? bytes = file.bytes;
+      final name = file.name;
+      final ext = name.contains('.') ? p.extension(name).toLowerCase().replaceFirst('.', '') : 'mp3';
+      if (!['mp3', 'm4a', 'wav'].contains(ext)) return;
 
-    final title = p.basenameWithoutExtension(name);
-    final songId = 'song-${DateTime.now().millisecondsSinceEpoch}';
-    final fileName = '$songId.$ext';
-    final sizeBytes = bytes?.length ?? (path != null ? await audio_platform.getFileSizeFromPath(path) : 0);
-    final song = Song(
-      id: songId,
-      title: title,
-      danceStyle: styles.first,
-      level: 'Beginner',
-      fileName: fileName,
-      duration: durationSec,
-      sizeBytes: sizeBytes,
-    );
+      final appNotifier = ref.read(appDataNotifierProvider.notifier);
+      final mp = ref.read(musicPlaybackProvider.notifier);
+      var data = ref.read(appDataNotifierProvider).valueOrNull ?? AppData();
+      var styles = data.danceStyles.map((s) => s.name).toList();
+      if (styles.isEmpty) {
+        final defaultStyle = DanceStyle(
+          id: 'style-default',
+          name: kCanonicalDefaultDanceStyleName,
+          moves: [],
+        );
+        await appNotifier.addStyle(defaultStyle);
+        styles = [kCanonicalDefaultDanceStyleName];
+      }
 
-    if (bytes != null && bytes.isNotEmpty) {
-      await appNotifier.addSong(song, bytes);
-    } else if (!kIsWeb && path != null) {
-      final b = await audio_platform.readFileAsBytes(path);
-      if (b != null && b.isNotEmpty) await appNotifier.addSong(song, b);
-    }
+      double durationSec = 0;
+      if (!kIsWeb && path != null && path.isNotEmpty) {
+        durationSec = await mp.probeDurationSecFromPath(path);
+      } else if (kIsWeb && bytes != null && bytes.isNotEmpty) {
+        durationSec = await mp.probeDurationSecFromBytes(bytes, ext);
+      }
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(str.addedSnackbar(title))));
+      final title = p.basenameWithoutExtension(name);
+      final songId = 'song-${DateTime.now().millisecondsSinceEpoch}';
+      final fileName = '$songId.$ext';
+      final sizeBytes = bytes?.length ?? (path != null ? await audio_platform.getFileSizeFromPath(path) : 0);
+      final song = Song(
+        id: songId,
+        title: title,
+        danceStyle: styles.first,
+        level: 'Beginner',
+        fileName: fileName,
+        duration: durationSec,
+        sizeBytes: sizeBytes,
+      );
+
+      if (bytes != null && bytes.isNotEmpty) {
+        await appNotifier.addSong(song, bytes);
+      } else if (!kIsWeb && path != null) {
+        final b = await audio_platform.readFileAsBytes(path);
+        if (b != null && b.isNotEmpty) await appNotifier.addSong(song, b);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(str.addedSnackbar(title))));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(str.loadTrackErrorSnackbar(e.toString()))));
+      }
     }
   }
 

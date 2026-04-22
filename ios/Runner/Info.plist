@@ -61,9 +61,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Доступ к микрофону необходим для голосового управления ИИ-ассистентом во время танцевальных тренировок.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Доступ к галерее нужен для загрузки пользовательского аватара и сохранения видеозаписей ваших танцевальных элементов.</string>
+	<string>Midnight Dancer uses your photo library only when you choose a photo or video from Photos—for example a profile image or a practice video for a dance element.</string>
 </dict>
 </plist>

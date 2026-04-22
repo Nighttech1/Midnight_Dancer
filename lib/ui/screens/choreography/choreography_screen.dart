@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/app_strings.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/core/utils/formatters.dart' show dropdownValueOrFallback;
+import 'package:midnight_dancer/core/utils/share_position_origin.dart';
 import 'package:midnight_dancer/data/models/app_data.dart';
 import 'package:midnight_dancer/data/models/choreography.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
@@ -571,7 +572,12 @@ class _ChoreographyScreenState extends ConsumerState<ChoreographyScreen> {
       closeLoader();
       await Future<void>.delayed(const Duration(milliseconds: 50));
       if (!context.mounted) return;
-      await share_zip.shareChoreographyZipBytes(zip, name, c.name);
+      await share_zip.shareChoreographyZipBytes(
+        zip,
+        name,
+        c.name,
+        sharePositionOrigin: sharePositionOriginForContext(context),
+      );
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

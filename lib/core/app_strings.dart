@@ -703,6 +703,16 @@ class AppStrings {
       _t(ru: 'Добавлен: $title', en: 'Added: $title', es: 'Añadido: $title');
   String playErrorSnackbar(String e) =>
       _t(ru: 'Ошибка воспроизведения: $e', en: 'Playback error: $e', es: 'Error de reproducción: $e');
+  String loadTrackErrorSnackbar(String e) => _t(
+        ru: 'Не удалось загрузить трек: $e',
+        en: 'Could not load track: $e',
+        es: 'No se pudo cargar la pista: $e',
+      );
+  String videoPickErrorSnackbar(String e) => _t(
+        ru: 'Не удалось выбрать видео: $e',
+        en: 'Could not pick video: $e',
+        es: 'No se pudo elegir el vídeo: $e',
+      );
   String get editTrack => _t(ru: 'Редактировать трек', en: 'Edit track', es: 'Editar pista');
   String get deleteTrackConfirm =>
       _t(ru: 'Удалить трек?', en: 'Delete track?', es: '¿Eliminar pista?');

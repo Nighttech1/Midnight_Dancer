@@ -157,11 +157,20 @@ class _ExchangeScreenState extends ConsumerState<ExchangeScreen> {
     );
     if (ok != true || !mounted) return;
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['zip'],
-      withData: kIsWeb,
-    );
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['zip'],
+        withData: kIsWeb,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(str.fullBackupError(e.toString()))),
+      );
+      return;
+    }
     if (result == null || result.files.isEmpty || !mounted) return;
     final picked = result.files.single;
     final zipPath = picked.path;

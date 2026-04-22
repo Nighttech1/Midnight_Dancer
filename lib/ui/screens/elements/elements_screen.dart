@@ -125,29 +125,40 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
   }
 
   Future<void> _pickVideo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-      allowMultiple: false,
-      withData: kIsWeb,
-    );
-    if (result != null) {
-      final file = result.files.single;
-      String? path = file.path;
-      Uint8List? bytes = file.bytes;
-      if (!kIsWeb && path != null && path.isNotEmpty) {
-        if (path.startsWith('content:')) {
-          await file_copy.takeUriPermission(path);
+    final str = ref.read(appStringsProvider);
+    try {
+      // Как и для аудио: FileType.video на iOS может уводить в приватные API каталогов; custom → документ-пикер.
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['mp4', 'mov', 'm4v'],
+        allowMultiple: false,
+        withData: kIsWeb,
+      );
+      if (result != null) {
+        final file = result.files.single;
+        String? path = file.path;
+        Uint8List? bytes = file.bytes;
+        if (!kIsWeb && path != null && path.isNotEmpty) {
+          if (path.startsWith('content:')) {
+            await file_copy.takeUriPermission(path);
+          }
+        } else if (kIsWeb && bytes != null && bytes.isNotEmpty) {
+          path = await video_temp.writeVideoTemp(bytes);
         }
-      } else if (kIsWeb && bytes != null && bytes.isNotEmpty) {
-        path = await video_temp.writeVideoTemp(bytes);
+        if (mounted) {
+          setState(() {
+            _videoPath = path;
+            _videoBytes = bytes;
+            _previewVideoPath = path;
+            _resolvingPreview = false;
+          });
+        }
       }
+    } catch (e) {
       if (mounted) {
-        setState(() {
-          _videoPath = path;
-          _videoBytes = bytes;
-          _previewVideoPath = path;
-          _resolvingPreview = false;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(str.videoPickErrorSnackbar(e.toString()))),
+        );
       }
     }
   }
