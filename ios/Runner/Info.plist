@@ -69,5 +69,7 @@
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Midnight Dancer uses your photo library only when you choose a photo or video from Photos—for example a profile image or a practice video for a dance element.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Midnight Dancer needs access to your media library only when you choose music for dance practice from your device.</string>
 </dict>
 </plist>
