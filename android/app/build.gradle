@@ -20,6 +20,18 @@ if (keystorePropertiesFile.exists()) {
     }
 }
 
+// Релизная подпись: пароли из переменных окружения имеют приоритет (Codemagic / CI),
+// затем android/key.properties. Файл ключа по умолчанию — ../Ключи/upload-keystore.jks (не в git).
+def midnightStorePathRaw = System.getenv('MIDNIGHT_UPLOAD_KEYSTORE')
+        ?: keystoreProperties['storeFile']
+        ?: '../Ключи/upload-keystore.jks'
+// Пути относительно папки android/; абсолютный путь тоже поддерживается.
+def midnightStoreFile = rootProject.file(midnightStorePathRaw)
+def midnightStorePassword = System.getenv('MIDNIGHT_UPLOAD_STORE_PASSWORD') ?: keystoreProperties['storePassword']
+def midnightKeyPassword = System.getenv('MIDNIGHT_UPLOAD_KEY_PASSWORD') ?: keystoreProperties['keyPassword']
+def midnightKeyAlias = System.getenv('MIDNIGHT_UPLOAD_KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'upload'
+def useMidnightReleaseSigning = midnightStoreFile.exists() && midnightStorePassword && midnightKeyPassword
+
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
 if (flutterVersionCode == null) {
     flutterVersionCode = '1'
@@ -53,7 +65,7 @@ android {
         versionName flutterVersionName
     }
 
-    // Разные applicationId: Lite, Standard, Full, English (менять в android/app/build.gradle здесь)
+    // Разные applicationId: lite / standard / english — с суффиксом. Full — базовый com.midnightdancer.app (один ID с Google Play / RuStore).
     flavorDimensions += "app"
     productFlavors {
         lite {
@@ -66,28 +78,31 @@ android {
         }
         full {
             dimension "app"
-            applicationIdSuffix ".full"
         }
         english {
             dimension "app"
             applicationIdSuffix ".english"
         }
+        // Узкий APK: те же 3 голоса и com.midnightdancer.app, что full. Один ABI — через сборку (см. BUILD.md: --split-per-abi или --target-platform).
+        playverify {
+            dimension "app"
+        }
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (useMidnightReleaseSigning) {
             release {
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-                storeFile rootProject.file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
+                storeFile midnightStoreFile
+                storePassword midnightStorePassword
+                keyAlias midnightKeyAlias
+                keyPassword midnightKeyPassword
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            signingConfig useMidnightReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

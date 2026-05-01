@@ -6,6 +6,7 @@ import 'package:midnight_dancer/data/services/dance_reminder_config.dart';
 import 'package:midnight_dancer/data/services/dance_reminder_scheduler.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
+import 'package:midnight_dancer/ui/widgets/legal_ru_en_links_rich_text.dart';
 
 /// Настройки приложения (пока только напоминания о тренировке).
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -279,6 +280,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ],
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            str.settingsLegalSection,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.65),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: LegalRuEnLinksRichText(
+                leading: str.legalTermsSettingsLinksLeading,
               ),
             ),
           ),

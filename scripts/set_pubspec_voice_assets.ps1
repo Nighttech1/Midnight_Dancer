@@ -4,7 +4,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('lite', 'standard', 'full', 'english')]
+    [ValidateSet('lite', 'standard', 'full', 'english', 'playverify')]
     [string]$Flavor
 )
 
@@ -32,6 +32,10 @@ $voiceBlocks = @{
         '    # Piper voices (flavor: english, Kamila + Ruslan from full/)'
         '    - assets/voices/full/ruslan/'
         '    - assets/voices/full/kamila/'
+    )
+    playverify = @(
+        '    # Piper voices (flavor: playverify, Ruslan only — small APK for Play ownership check)'
+        '    - assets/voices/full/ruslan/'
     )
 }
 

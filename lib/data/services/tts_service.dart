@@ -39,8 +39,12 @@ class TtsService {
 
   /// Доступные голоса в зависимости от flavor.
   /// Lite: только Руслан. Standard: Руслан + Ирина. Full: Руслан + Ирина + Камила. English: Камила + Руслан.
+  /// playverify: только Руслан (одна модель в APK под лимит Play Console).
   List<TtsVoice> get availableVoices {
-    if (AppFlavor.isFull) return [TtsVoice.ruslan, TtsVoice.irina, TtsVoice.kamila];
+    if (AppFlavor.isPlayverify) return [TtsVoice.ruslan];
+    if (AppFlavor.hasFullVoiceSet) {
+      return [TtsVoice.ruslan, TtsVoice.irina, TtsVoice.kamila];
+    }
     if (AppFlavor.isStandard) return [TtsVoice.ruslan, TtsVoice.irina];
     if (AppFlavor.isEnglish) return [TtsVoice.kamila, TtsVoice.ruslan];
     return [TtsVoice.ruslan];
@@ -69,8 +73,8 @@ class TtsService {
     }
 
     try {
-      // English-сборка использует голоса из папки full (kamila, ruslan)
-      final flavor = AppFlavor.isEnglish ? 'full' : AppFlavor.name;
+      // English и playverify используют layout папки full для Piper.
+      final flavor = AppFlavor.voiceAssetsFlavor;
       _loadProgress.value = 0.2;
       onProgress?.call(0.2);
 

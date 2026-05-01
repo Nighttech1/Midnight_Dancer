@@ -13,13 +13,32 @@
 | standard | Два голоса                  | ~35 MB                      |
 | full     | Три голоса                  | ~50 MB                      |
 | english  | Интерфейс на английском, два голоса (Kamila, Ruslan) | ~35 MB |
+| playverify | Только Android: **один** голос Piper (Руслан), тот же `applicationId`, что у full; сборка с `--split-per-abi` — для проверки владения пакетом под лимит **160 МБ** (берите arm64-сплит) | зависит от сборки |
 
 В **`pubspec.yaml`** в APK попадают **только** Piper-папки выбранного flavor (между `# BEGIN_PIPER_VOICE_ASSETS` и `# END_PIPER_VOICE_ASSETS`). В репозитории по умолчанию записан **full** (три голоса). Перед сборкой другого варианта выполни:
 
 ```powershell
-.\scripts\set_pubspec_voice_assets.ps1 -Flavor standard   # или lite | full | english
+.\scripts\set_pubspec_voice_assets.ps1 -Flavor standard   # или lite | full | english | playverify
 flutter pub get
 ```
+
+**Сборка release APK `playverify`** (один голос Руслан, `com.midnightdancer.app`; для лимита Play Console **160 MB** загружайте **arm64** из split):
+
+```powershell
+.\scripts\set_pubspec_voice_assets.ps1 -Flavor playverify
+flutter pub get
+flutter build apk --flavor playverify --release --dart-define=FLAVOR=playverify --split-per-abi
+```
+
+Файлы в `build/app/outputs/flutter-apk/`:
+
+- **`app-arm64-v8a-playverify-release.apk`** — для большинства телефонов и для проверки в консоли;
+- `app-armeabi-v7a-playverify-release.apk`, `app-x86_64-playverify-release.apk` — другие ABI.
+
+Проверка в тестах, что в playverify в UI попадёт только Руслан:  
+`flutter test test/playverify_tts_config_test.dart --dart-define=FLAVOR=playverify`
+
+Один «толстый» APK без split снова тянет все ABI (~300 MB). **iOS** этого flavor нет — только Android.
 
 Скрипт **`scripts\build_apks.ps1`** сам подставляет голоса для каждого flavor и в конце восстанавливает `pubspec.yaml` из резервной копии. **`scripts\run_android_debug.ps1`** перед запуском тоже выставляет Piper-ассеты под выбранный `-Flavor`.
 
@@ -83,36 +102,52 @@ flutter build apk --flavor english --release --dart-define=FLAVOR=english
 
 ## Подпись (релиз)
 
-Для публикации в Store используется свой keystore. В `android/app/build.gradle` настроены чтение `key.properties` и `signingConfigs.release`; при наличии файла подпись подставляется автоматически.
+Для RuStore / Google Play используется **релизный keystore**. В `android/app/build.gradle` подключены `signingConfigs.release`: пароли можно задать **либо** в `android/key.properties`, **либо** через переменные окружения (удобно для CI и Codemagic).
+
+По умолчанию ожидается файл **`Ключи/upload-keystore.jks`** в корне проекта (папка `Ключи/` в `.gitignore`). Путь по умолчанию от папки `android/`: `storeFile=../Ключи/upload-keystore.jks`. Шаблон без паролей: **`android/key.properties.example`** → скопировать в `android/key.properties`.
+
+### Переменные окружения (имеют приоритет над строками в `key.properties`)
+
+| Переменная | Назначение |
+|------------|------------|
+| `MIDNIGHT_UPLOAD_STORE_PASSWORD` | Пароль хранилища ключей (.jks) |
+| `MIDNIGHT_UPLOAD_KEY_PASSWORD` | Пароль ключа (часто совпадает с store) |
+| `MIDNIGHT_UPLOAD_KEY_ALIAS` | Алиас ключа (если не задан — используется `upload`) |
+| `MIDNIGHT_UPLOAD_KEYSTORE` | Полный путь к `.jks`, если не используете путь по умолчанию |
+
+Пример в PowerShell перед `flutter build apk`:
+
+```powershell
+$env:MIDNIGHT_UPLOAD_STORE_PASSWORD = 'ВАШ_ПАРОЛЬ'
+$env:MIDNIGHT_UPLOAD_KEY_PASSWORD = 'ВАШ_ПАРОЛЬ'
+flutter build apk --flavor full --release --dart-define=FLAVOR=full
+```
+
+Релизная подпись включается только если файл keystore **существует** и заданы оба пароля (файл или env).
 
 ---
 
-### Где вписать свои данные для подписи
+### Где вписать свои данные для подписи (файл)
 
-**Пароли вписываешь только в файл `key.properties`, нигде в коде их не указывай.**
+**Пароли храни только в `android/key.properties` или в секретах CI, не в коде.**
 
-**Файл:** `android/key.properties` (создай его сам в папке `android/`, в репозиторий он не попадает).
-
-В этом файле должны быть **четыре строки** (подставь свои значения):
+**Файл:** `android/key.properties` (создай в папке `android/`, в git не коммитится).
 
 | Строка | Что вписать | Пример |
 |--------|-------------|--------|
-| `storePassword=` | Пароль от keystore-файла (тот, что задал при создании `.jks`) | `storePassword=мой_секретный_пароль` |
-| `keyPassword=` | Пароль ключа (часто совпадает с storePassword) | `keyPassword=мой_секретный_пароль` |
-| `keyAlias=` | Имя ключа (алиас), который задал при создании keystore | `keyAlias=upload` |
-| `storeFile=` | Путь к файлу keystore **относительно папки android**. Если файл лежит в корне проекта: `../upload-keystore.jks`; если в папке android: `upload-keystore.jks` | `storeFile=../upload-keystore.jks` |
-
-**Итого в файле `android/key.properties` должно быть что-то вроде:**
+| `storePassword=` | Пароль от `.jks` | см. выше |
+| `keyPassword=` | Пароль ключа | часто как у store |
+| `keyAlias=` | Алиас при создании keystore | `upload` |
+| `storeFile=` | Путь к `.jks` **относительно папки `android/`** | `storeFile=../Ключи/upload-keystore.jks` |
 
 ```properties
 storePassword=твой_пароль
 keyPassword=твой_пароль
 keyAlias=upload
-storeFile=../upload-keystore.jks
+storeFile=../Ключи/upload-keystore.jks
 ```
 
-- Файл `upload-keystore.jks` создаётся один раз командой из RELEASE_PLAN (шаг 0.1). Храни его и пароли в безопасном месте, не коммить в git.
-- После создания и заполнения `android/key.properties` сборка релизных APK будет подписываться этим ключом автоматически.
+- Файл keystore и пароли не коммить; после заполнения релизные APK подписываются автоматически при сборке.
 
 ## iOS (локальные уведомления)
 

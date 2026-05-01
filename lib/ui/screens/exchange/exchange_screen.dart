@@ -269,9 +269,48 @@ class _ExchangeScreenState extends ConsumerState<ExchangeScreen> {
     }
   }
 
+  Future<void> _revertLastImport() async {
+    final str = ref.read(appStringsProvider);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text(
+          str.exchangeRevertLastImportConfirmTitle,
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          str.exchangeRevertLastImportConfirmBody,
+          style: TextStyle(color: Colors.white.withOpacity(0.9)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(str.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              str.exchangeRevertLastImportButton,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    await _withFullscreenExchangeLoading(str.exchangeImporting, () async {
+      await ref.read(appDataNotifierProvider.notifier).revertLastImport();
+    });
+    await ref.read(musicPlaybackProvider.notifier).stopPlayback();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(str.exchangeRevertLastImportSuccess)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final str = ref.watch(appStringsProvider);
+    final canRevert = ref.watch(lastImportRevertAvailableProvider);
     return SafeArea(
       child: CustomScrollView(
         slivers: [
@@ -314,7 +353,7 @@ class _ExchangeScreenState extends ConsumerState<ExchangeScreen> {
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             sliver: SliverToBoxAdapter(
               child: _ExchangeActionCard(
                 icon: Icons.cloud_download_outlined,
@@ -325,6 +364,45 @@ class _ExchangeScreenState extends ConsumerState<ExchangeScreen> {
               ),
             ),
           ),
+          if (canRevert)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      str.exchangeRevertLastImportTitle,
+                      style: const TextStyle(
+                        color: Color(0xFFFF6B6B),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      str.exchangeRevertLastImportSubtitle,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.72),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _revertLastImport,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFFF6B6B),
+                        side: const BorderSide(color: Color(0xFFFF6B6B)),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      ),
+                      icon: const Icon(Icons.undo, size: 20),
+                      label: Text(str.exchangeRevertLastImportTitle),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

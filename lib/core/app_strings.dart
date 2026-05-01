@@ -33,8 +33,26 @@ class AppStrings {
 
   // Настройки
   String get settingsTitle => _t(ru: 'Настройки', en: 'Settings', es: 'Ajustes');
+  String get settingsLegalSection =>
+      _t(ru: 'Юридическая информация', en: 'Legal information', es: 'Información legal');
   String get settingsNotificationsSection =>
       _t(ru: 'Уведомления', en: 'Notifications', es: 'Notificaciones');
+
+  /// Текст до кликабельных RU | EN (включая открывающую скобку «(»).
+  String get legalTermsCheckboxLeading => _t(
+        ru:
+            'Я прочитал(а) и согласен(на) с Пользовательским соглашением и Политикой конфиденциальности (',
+        en: 'I have read and agree to the Terms of Use and Privacy Policy (',
+        es: 'He leído y acepto los Términos de uso y la Política de privacidad (',
+      );
+
+  String get legalTermsSettingsLinksLeading => _t(
+        ru: 'Пользовательское соглашение и политика конфиденциальности (',
+        en: 'Terms of Use and Privacy Policy (',
+        es: 'Términos de uso y política de privacidad (',
+      );
+
+  String get legalTermsContinue => _t(ru: 'Начать', en: 'Continue', es: 'Comenzar');
   String get danceReminderTitle =>
       _t(ru: 'Напоминания о тренировке', en: 'Practice reminders', es: 'Recordatorios de práctica');
   String get danceReminderSubtitle => _t(
@@ -82,33 +100,33 @@ class AppStrings {
   String get exchangeTitle => _t(ru: 'Обмен данными', en: 'Data sharing', es: 'Compartir datos');
   String get exchangeIntro => _t(
         ru:
-            'Выгрузите ZIP со стилями, элементами, музыкой, хореографиями и медиа или добавьте данные из файла. Уже имеющиеся данные не удаляются — архив подмешивается к текущим.',
+            'Делитесь своими танцевальными подборками с друзьями или загружайте их архивы. Ваши текущие записи в безопасности — новые данные ничего не удалят, а просто дополнят вашу коллекцию.',
         en:
-            'Export a ZIP with your styles, elements, music, choreographies and media, or add data from a file. Existing data is kept; the archive is merged in.',
+            'Share your dance collections with friends or load their archives. Your current data stays safe — nothing is deleted; new content simply adds to your collection.',
         es:
-            'Exporta un ZIP con tus estilos, elementos, música, coreografías y medios, o añade datos desde un archivo. Los datos existentes se conservan; el archivo se fusiona.',
+            'Comparte tus selecciones de baile con amigos o carga sus archivos. Tus datos actuales están a salvo: no se borra nada; lo nuevo solo amplía tu colección.',
       );
 
   String get exchangeShareCardTitle =>
-      _t(ru: 'Сохранить архив в Загрузки', en: 'Save archive to Downloads', es: 'Guardar archivo en Descargas');
+      _t(ru: 'Поделиться своими данными', en: 'Share your data', es: 'Compartir tus datos');
   String get exchangeShareCardSubtitle => _t(
         ru:
-            'Собрать ZIP с выбранными данными и сохранить в папку «Загрузки». Перед выгрузкой можно отметить элементы, музыку и хореографии.',
+            'Выберите элементы, музыку и хореографию, чтобы собрать их в один файл. Сохраните его и отправьте кому угодно.',
         en:
-            'Create a ZIP with the data you choose and save it to Downloads. Before exporting you can pick elements, music and choreographies.',
+            'Choose elements, music, and choreographies to pack into one file. Save it and send it to anyone.',
         es:
-            'Crea un ZIP con los datos que elijas y guárdalo en Descargas. Antes puedes marcar elementos, música y coreografías.',
+            'Elige elementos, música y coreografía para empaquetarlos en un archivo. Guárdalo y envíalo a quien quieras.',
       );
 
   String get exchangeImportCardTitle =>
-      _t(ru: 'Загрузить архив', en: 'Load archive', es: 'Cargar archivo');
+      _t(ru: 'Загрузить чужой архив', en: "Load someone else's archive", es: 'Cargar archivo de otra persona');
   String get exchangeImportCardSubtitle => _t(
         ru:
-            'Выберите ZIP резервной копии Midnight Dancer. Новые стили, треки и хореографии добавятся к уже имеющимся.',
+            'Распакуйте файл от другого пользователя. Вы сможете встроить новые движения в свои стили или создать для них отдельный.',
         en:
-            'Pick a Midnight Dancer backup ZIP. New styles, tracks and choreographies will be added; existing ones stay.',
+            'Unpack a file from another user. You can merge new moves into your styles or create a separate style for them.',
         es:
-            'Elige un ZIP de copia de Midnight Dancer. Se añadirán estilos, pistas y coreografías nuevas; las actuales se mantienen.',
+            'Desempaqueta un archivo de otro usuario. Puedes integrar movimientos nuevos en tus estilos o crear uno aparte.',
       );
 
   String get exchangeExporting =>
@@ -257,6 +275,38 @@ class AppStrings {
       _t(ru: 'Импортировать', en: 'Import', es: 'Importar');
   String get fullBackupImportSuccess =>
       _t(ru: 'Данные из архива добавлены.', en: 'Archive merged.', es: 'Datos del archivo fusionados.');
+  String get exchangeRevertLastImportTitle => _t(
+        ru: 'Удалить последний импортированный пакет',
+        en: 'Remove last imported package',
+        es: 'Eliminar el último paquete importado',
+      );
+  String get exchangeRevertLastImportSubtitle => _t(
+        ru:
+            'Удалит только то, что было добавлено при последней загрузке ZIP (стили, элементы, треки, хореографии и файлы). Ранее импортированное после новой загрузки архива снова считается «своим» и не удаляется этой кнопкой.',
+        en:
+            'Removes only what the last ZIP import added (styles, steps, tracks, choreographies and files). After you import a new archive, older imports are treated as yours and are not removed by this action.',
+        es:
+            'Quita solo lo añadido en la última importación ZIP (estilos, pasos, pistas, coreografías y archivos). Tras importar un archivo nuevo, lo anterior pasa a ser tuyo y no se borra con este botón.',
+      );
+  String get exchangeRevertLastImportConfirmTitle => _t(
+        ru: 'Удалить последний импорт?',
+        en: 'Remove the last import?',
+        es: '¿Eliminar la última importación?',
+      );
+  String get exchangeRevertLastImportConfirmBody => _t(
+        ru:
+            'Будут безвозвратно удалены данные и медиафайлы, относящиеся только к последней загрузке архива. Действие нельзя отменить.',
+        en:
+            'Data and media from the last archive import will be permanently deleted. This cannot be undone.',
+        es:
+            'Se eliminarán de forma permanente los datos y medios de la última importación. No se puede deshacer.',
+      );
+  String get exchangeRevertLastImportButton => _t(ru: 'Удалить', en: 'Delete', es: 'Eliminar');
+  String get exchangeRevertLastImportSuccess => _t(
+        ru: 'Последний импорт удалён.',
+        en: 'Last import was removed.',
+        es: 'Se eliminó la última importación.',
+      );
   String get elementStyleLabel =>
       _t(ru: 'Стиль элемента', en: 'Element style', es: 'Estilo del elemento');
   String get choreoChangeStyleTooltip => _t(
@@ -626,11 +676,34 @@ class AppStrings {
       _t(ru: 'Опишите детали шага...', en: 'Describe the step...', es: 'Describe el paso...');
   String get addFirstStyle =>
       _t(ru: 'Добавьте первый стиль', en: 'Add first style', es: 'Añade el primer estilo');
-  String get styleNameHint => _t(
-        ru: 'Например: Сальса, Бачата, Кизомба',
-        en: 'e.g. Salsa, Bachata, Kizomba',
-        es: 'p. ej. Salsa, Bachata, Kizomba',
-      );
+  /// Варианты подсказки под «Добавьте первый стиль» — по очереди сменяются в UI.
+  List<String> get styleNameHintVariants => [
+        _t(
+          ru: 'Например: Хип-хоп, Сальса',
+          en: 'e.g. Hip-hop, Salsa',
+          es: 'p. ej. Hip-hop, Salsa',
+        ),
+        _t(
+          ru: 'Например: Бачата, Кизомба',
+          en: 'e.g. Bachata, Kizomba',
+          es: 'p. ej. Bachata, Kizomba',
+        ),
+        _t(
+          ru: 'Например: Сальса, Реггетон',
+          en: 'e.g. Salsa, Reggaeton',
+          es: 'p. ej. Salsa, Reggaeton',
+        ),
+        _t(
+          ru: 'Например: Contemporary, Джаз',
+          en: 'e.g. Contemporary, Jazz',
+          es: 'p. ej. Contemporary, Jazz',
+        ),
+        _t(
+          ru: 'Например: Зук, Вальс',
+          en: 'e.g. Zouk, Waltz',
+          es: 'p. ej. Zouk, Vals',
+        ),
+      ];
   String get newStyle => _t(ru: 'Новый стиль', en: 'New style', es: 'Estilo nuevo');
   String get currentStyle => _t(ru: 'Текущий стиль', en: 'Current style', es: 'Estilo actual');
   String get deleteStyleTooltip =>
@@ -648,8 +721,6 @@ class AppStrings {
         es: '¿Seguro que quieres eliminar este estilo y todos sus elementos?',
       );
   String get styleNameLabel => _t(ru: 'Название стиля', en: 'Style name', es: 'Nombre del estilo');
-  String get styleNameExample =>
-      _t(ru: 'Например: Сальса', en: 'e.g. Salsa', es: 'p. ej. Salsa');
   String get deleteElementConfirm =>
       _t(ru: 'Удалить элемент?', en: 'Delete element?', es: '¿Eliminar elemento?');
   String deleteElementMessage(String name) => _t(

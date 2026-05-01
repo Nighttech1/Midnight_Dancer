@@ -1,0 +1,9 @@
+# Скопируйте этот файл как android/key.properties и впишите пароли (файл не коммитится).
+# Либо не создавайте key.properties и передайте пароли через переменные окружения:
+#   MIDNIGHT_UPLOAD_STORE_PASSWORD, MIDNIGHT_UPLOAD_KEY_PASSWORD
+# Опционально: MIDNIGHT_UPLOAD_KEYSTORE (полный путь к .jks), MIDNIGHT_UPLOAD_KEY_ALIAS (по умолчанию upload).
+
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=../Ключи/upload-keystore.jks

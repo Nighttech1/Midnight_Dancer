@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -491,11 +492,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              str.styleNameHint,
-              style: TextStyle(color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
+            _RotatingStyleNameHints(variants: str.styleNameHintVariants),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _showNewStyleDialogInner,
@@ -966,7 +963,6 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
             autofocus: true,
             decoration: InputDecoration(
               labelText: str.styleNameLabel,
-              hintText: str.styleNameExample,
             ),
             onChanged: (v) => n = v,
           ),
@@ -1018,5 +1014,53 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
     if (ok == true && mounted) {
       await ref.read(appDataNotifierProvider.notifier).deleteMove(styleId, moveId);
     }
+  }
+}
+
+/// Подсказки со стилями под «Добавьте первый стиль» — меняются каждые несколько секунд.
+class _RotatingStyleNameHints extends StatefulWidget {
+  const _RotatingStyleNameHints({required this.variants});
+
+  final List<String> variants;
+
+  @override
+  State<_RotatingStyleNameHints> createState() => _RotatingStyleNameHintsState();
+}
+
+class _RotatingStyleNameHintsState extends State<_RotatingStyleNameHints> {
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.variants.length > 1) {
+      _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+        if (!mounted) return;
+        setState(() => _index = (_index + 1) % widget.variants.length);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.variants.isEmpty ? '' : widget.variants[_index % widget.variants.length];
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeOut,
+      child: Text(
+        text,
+        key: ValueKey<String>(text),
+        style: TextStyle(color: AppColors.textSecondary),
+        textAlign: TextAlign.center,
+      ),
+    );
   }
 }

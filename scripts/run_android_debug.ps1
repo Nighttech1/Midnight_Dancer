@@ -4,7 +4,7 @@
 # Пример с flavor: .\scripts\run_android_debug.ps1 -Flavor standard
 
 param(
-    [ValidateSet("lite", "standard", "full", "english")]
+    [ValidateSet("lite", "standard", "full", "english", "playverify")]
     [string]$Flavor = "full"
 )
 

@@ -21,6 +21,8 @@ import 'package:midnight_dancer/data/services/full_backup_parse_extracted_stub.d
 import 'package:midnight_dancer/data/services/full_backup_import_merge.dart';
 import 'package:midnight_dancer/data/services/full_backup_import_style_plan.dart';
 import 'package:midnight_dancer/data/services/dance_reminder_config.dart';
+import 'package:midnight_dancer/data/services/legal_terms_consent.dart';
+import 'package:midnight_dancer/data/services/last_import_manifest.dart';
 import 'package:midnight_dancer/data/services/dance_reminder_notification_copy.dart';
 import 'package:midnight_dancer/data/services/dance_reminder_scheduler.dart';
 import 'package:midnight_dancer/data/services/full_backup_service.dart';
@@ -93,6 +95,84 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
     final merged = Map<String, dynamic>.from(current.settings)..addAll(lang.toSettingsEntry());
     await save(current.copyWith(settings: merged));
     await _syncDanceReminders(merged);
+  }
+
+  /// Один раз при первом запуске: согласие с юридическими документами.
+  Future<void> saveLegalTermsAccepted() async {
+    final current = state.valueOrNull ?? AppData();
+    final merged = Map<String, dynamic>.from(current.settings)
+      ..addAll(LegalTermsConsent.acceptedSettingsEntry());
+    await save(current.copyWith(settings: merged));
+    await _syncDanceReminders(merged);
+  }
+
+  /// Заменить манифест «последнего импорта» (при каждом успешном ZIP-импорте).
+  Future<void> replaceLastImportManifest(LastImportManifest manifest) async {
+    final current = state.valueOrNull ?? AppData();
+    final settings = LastImportManifest.embedInSettings(current.settings, manifest);
+    await save(current.copyWith(settings: settings));
+  }
+
+  Future<void> _deleteStoredVideoForMove(Move m) async {
+    final u = m.videoUri;
+    if (u == null || u.isEmpty) return;
+    if (u.startsWith('content:') || u.startsWith('/')) return;
+    await _storage.deleteMediaFile(u, 'video');
+  }
+
+  /// Удалить из данных и с диска всё, что было добавлено последним импортом архива.
+  Future<String?> revertLastImport() async {
+    final current = state.valueOrNull ?? await _storage.loadAppData();
+    final manifest = LastImportManifest.fromSettings(current.settings);
+    if (manifest.isEmpty) return null;
+
+    final movesRemovedWithWholeStyles = <String>{};
+    for (final sid in manifest.wholeStyleIds) {
+      for (final s in current.danceStyles) {
+        if (s.id != sid) continue;
+        for (final mv in s.moves) {
+          movesRemovedWithWholeStyles.add(mv.id);
+          await _deleteStoredVideoForMove(mv);
+        }
+      }
+    }
+
+    for (final cid in manifest.choreographyIds) {
+      await deleteChoreography(cid);
+    }
+
+    for (final sid in manifest.songIds) {
+      await deleteSong(sid);
+    }
+
+    for (final styleId in manifest.wholeStyleIds) {
+      await deleteStyle(styleId);
+    }
+
+    for (final moveId in manifest.moveIds) {
+      if (movesRemovedWithWholeStyles.contains(moveId)) continue;
+      final fresh = state.valueOrNull ?? await _storage.loadAppData();
+      String? hostSid;
+      Move? mv;
+      outer:
+      for (final s in fresh.danceStyles) {
+        for (final m in s.moves) {
+          if (m.id == moveId) {
+            hostSid = s.id;
+            mv = m;
+            break outer;
+          }
+        }
+      }
+      if (hostSid != null && mv != null) {
+        await _deleteStoredVideoForMove(mv);
+        await deleteMove(hostSid, moveId);
+      }
+    }
+
+    await replaceLastImportManifest(LastImportManifest.empty());
+    await _load();
+    return null;
   }
 
   Future<void> addStyle(DanceStyle style) async {
@@ -550,10 +630,14 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
         local: local,
         imported: parsed.appData!,
       );
+      final manifest = LastImportManifest.computeFullBackupDelta(local, plan.merged);
+      var mergedApp = plan.merged.copyWith(
+        settings: LastImportManifest.embedInSettings(plan.merged.settings, manifest),
+      );
       // Если в метаданных есть ссылка на видео в хранилище приложения, а файла нет
       // (обновление, сбой, очистка кэша) — подтянуть байты из архива, если они там есть.
       var videoIdsToWrite = {...plan.videoMoveIdsToWrite};
-      for (final style in plan.merged.danceStyles) {
+      for (final style in mergedApp.danceStyles) {
         for (final m in style.moves) {
           final u = m.videoUri;
           if (u == null || u.isEmpty) continue;
@@ -578,7 +662,7 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
           musicExtension: m.ext,
         );
       }
-      await _storage.saveAppData(plan.merged);
+      await _storage.saveAppData(mergedApp);
       await _load();
       return null;
     } catch (e) {
@@ -644,6 +728,16 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
         await addSong(song, payload.musicBytes);
         await addStyle(style);
         await addChoreography(choreo);
+        final moveIdList = moves.map((m) => m.id).toList();
+        await replaceLastImportManifest(
+          LastImportManifest.forChoreographyPackageImport(
+            createdNewStyle: true,
+            styleId: styleId,
+            importedMoveIds: moveIdList,
+            songId: songId,
+            choreographyId: choreoId,
+          ),
+        );
         return null;
       }
 
@@ -687,12 +781,30 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
       await addSong(song, payload.musicBytes);
       await updateStyle(mergedStyle);
       await addChoreography(choreo);
+      await replaceLastImportManifest(
+        LastImportManifest.forChoreographyPackageImport(
+          createdNewStyle: false,
+          styleId: sid,
+          importedMoveIds: newImportedMoves.map((m) => m.id).toList(),
+          songId: songId,
+          choreographyId: choreoId,
+        ),
+      );
       return null;
     } catch (e) {
       return e.toString();
     }
   }
 }
+
+/// Есть ли данные последнего импорта, которые можно откатить.
+final lastImportRevertAvailableProvider = Provider<bool>((ref) {
+  final async = ref.watch(appDataNotifierProvider);
+  return async.maybeWhen(
+    data: (d) => !LastImportManifest.fromSettings(d.settings).isEmpty,
+    orElse: () => false,
+  );
+});
 
 final appDataNotifierProvider =
     StateNotifierProvider<AppDataNotifier, AsyncValue<AppData>>((ref) {
