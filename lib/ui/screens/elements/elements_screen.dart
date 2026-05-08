@@ -81,6 +81,12 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
     _descController = TextEditingController(text: widget.initialDescription);
     _level = widget.initialLevel;
     _persistStyleId = widget.initialPersistStyleId;
+    if (widget.isEdit &&
+        widget.editStyleChoices != null &&
+        widget.editStyleChoices!.length > 1 &&
+        !widget.editStyleChoices!.any((s) => s.id == _persistStyleId)) {
+      _persistStyleId = widget.editStyleChoices!.first.id;
+    }
     _videoPath = widget.initialVideoPath;
     _masterySlider = widget.initialMasteryPercent.clamp(0, 100).toDouble();
     _previewVideoPath = _pathUsableByVideoPlayer(widget.initialVideoPath);
@@ -90,14 +96,22 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
 
   static String? _pathUsableByVideoPlayer(String? p) {
     if (p == null || p.isEmpty) return null;
-    if (p.startsWith('content:') || p.startsWith('/')) return p;
+    if (p.startsWith('content:')) return p;
+    if (p.startsWith('file://')) {
+      try {
+        return Uri.parse(p).toFilePath();
+      } catch (_) {
+        return null;
+      }
+    }
+    if (p.startsWith('/')) return p;
     return null;
   }
 
   Future<void> _resolveStorageVideoPreviewIfNeeded() async {
     final path = widget.initialVideoPath;
     if (path == null || path.isEmpty) return;
-    if (path.startsWith('content:') || path.startsWith('/')) return;
+    if (path.startsWith('content:') || path.startsWith('/') || path.startsWith('file://')) return;
     if (!mounted) return;
     setState(() => _resolvingPreview = true);
     final notifier = ref.read(appDataNotifierProvider.notifier);

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:midnight_dancer/data/models/app_data.dart';
 import 'package:midnight_dancer/data/models/dance_style.dart';
 import 'package:midnight_dancer/data/models/move.dart';
+import 'package:midnight_dancer/data/services/choreography_timeline_ref.dart';
 import 'package:midnight_dancer/data/services/full_backup_service.dart';
 
 /// Настройки ручного сопоставления стилей при импорте полного архива.
@@ -59,10 +60,19 @@ FullBackupParseResult remapImportedSubtreeToNewIds(FullBackupParseResult parsed)
   final newSongs = app.songs.map((s) => s.copyWith(id: songOldToNew[s.id]!)).toList();
 
   final newChoreos = app.choreographies.map((c) {
+    final newStyleId = styleOldToNew[c.styleId]!;
+    final tl = ChoreographyTimelineRef.remapTimelineAfterFullIdRemap(
+      timeline: c.timeline,
+      styleOldToNew: styleOldToNew,
+      moveOldToNew: moveOldToNew,
+      choreographyRemappedStyleId: newStyleId,
+      remappedStyles: newStyles,
+    );
     return c.copyWith(
       id: choreoOldToNew[c.id]!,
-      styleId: styleOldToNew[c.styleId]!,
+      styleId: newStyleId,
       songId: songOldToNew[c.songId]!,
+      timeline: tl,
     );
   }).toList();
 
@@ -179,8 +189,13 @@ FullBackupParseResult applyStyleRedirectBeforeMerge(
 
   final newChoreos = imp.choreographies.map((c) {
     final r = redirect[c.styleId];
-    if (r != null) return c.copyWith(styleId: r);
-    return c;
+    final withStyle = r != null ? c.copyWith(styleId: r) : c;
+    return withStyle.copyWith(
+      timeline: ChoreographyTimelineRef.remapTimelineForArchiveStyleRedirect(
+        withStyle.timeline,
+        redirect,
+      ),
+    );
   }).toList();
 
   final newImp = AppData(

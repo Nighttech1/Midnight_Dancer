@@ -35,6 +35,21 @@ import 'package:midnight_dancer/data/services/secure_zip/secure_zip_whitelist.da
 import 'package:midnight_dancer/data/services/storage_service.dart';
 import 'package:midnight_dancer/data/services/tts_service.dart';
 
+/// После записи видео из бэкапа в `videos/<moveId>.mp4` — в метаданных [Move.videoUri] должен совпадать с id (ключ в хранилище), иначе на другом устройстве остаётся путь с экспортера.
+AppData _appDataWithVideoUrisForImportedMoves(AppData data, Set<String> moveIds) {
+  if (moveIds.isEmpty) return data;
+  final styles = data.danceStyles.map((s) {
+    final moves = s.moves.map((m) {
+      if (moveIds.contains(m.id)) {
+        return m.copyWith(videoUri: m.id);
+      }
+      return m;
+    }).toList();
+    return s.copyWith(moves: moves);
+  }).toList();
+  return data.copyWith(danceStyles: styles);
+}
+
 final storageServiceProvider = Provider<StorageService>((ref) {
   return StorageService.instance;
 });
@@ -653,6 +668,7 @@ class AppDataNotifier extends StateNotifier<AsyncValue<AppData>> {
         if (!videoIdsToWrite.contains(e.key)) continue;
         await _storage.saveMediaFile(e.key, e.value, 'video');
       }
+      mergedApp = _appDataWithVideoUrisForImportedMoves(mergedApp, videoIdsToWrite);
       for (final m in parsed.musicEntries) {
         if (!plan.musicSongIdsToWrite.contains(m.songId)) continue;
         await _storage.saveMediaFile(

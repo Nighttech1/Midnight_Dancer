@@ -45,6 +45,62 @@ class ChoreographyTimelineRef {
     return null;
   }
 
+  /// После импорта бэкапа: стиль из архива сливают в локальный [archiveStyleIdToTargetId],
+  /// а поля таймлайна остаются в формате `архивныйСтиль::элемент` — переписываем префикс стиля.
+  static Map<double, String> remapTimelineForArchiveStyleRedirect(
+    Map<double, String> timeline,
+    Map<String, String> archiveStyleIdToTargetId,
+  ) {
+    if (archiveStyleIdToTargetId.isEmpty) return Map<double, String>.from(timeline);
+    final out = <double, String>{};
+    for (final e in timeline.entries) {
+      final dec = decode(e.value);
+      if (dec != null) {
+        final to = archiveStyleIdToTargetId[dec.styleId];
+        out[e.key] = to != null ? encode(to, dec.moveId) : e.value;
+      } else {
+        out[e.key] = e.value;
+      }
+    }
+    return out;
+  }
+
+  /// После `remapImportedSubtreeToNewIds`: обновить `styleId::moveId` и голые id элементов в таймлайне.
+  static Map<double, String> remapTimelineAfterFullIdRemap({
+    required Map<double, String> timeline,
+    required Map<String, String> styleOldToNew,
+    required Map<String, String> moveOldToNew,
+    required String choreographyRemappedStyleId,
+    required List<DanceStyle> remappedStyles,
+  }) {
+    String? styleContainingMove(String moveId) {
+      for (final s in remappedStyles) {
+        if (s.moves.any((m) => m.id == moveId)) return s.id;
+      }
+      return null;
+    }
+
+    final out = <double, String>{};
+    for (final e in timeline.entries) {
+      final v = e.value;
+      final dec = decode(v);
+      if (dec != null) {
+        final ns = styleOldToNew[dec.styleId] ?? dec.styleId;
+        final nm = moveOldToNew[dec.moveId] ?? dec.moveId;
+        out[e.key] = encode(ns, nm);
+        continue;
+      }
+      final nm = moveOldToNew[v];
+      if (nm != null) {
+        final st = styleContainingMove(nm) ?? choreographyRemappedStyleId;
+        out[e.key] = encode(st, nm);
+        continue;
+      }
+      out[e.key] = v;
+    }
+    return out;
+  }
+
   /// Подпись в списке точек / сегментах.
   static String displayLabel(
     List<DanceStyle> styles,
