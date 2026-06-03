@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:midnight_dancer/core/theme/app_theme.dart';
 import 'package:midnight_dancer/core/utils/thumbnail_cache.dart';
-import 'package:midnight_dancer/core/utils/video_temp.dart'
-    if (dart.library.io) 'package:midnight_dancer/core/utils/video_temp_io.dart'
-    as video_temp;
+import 'package:midnight_dancer/core/utils/video_resolve_cache.dart';
 import 'package:midnight_dancer/data/models/move.dart';
 import 'package:midnight_dancer/providers/app_data_provider.dart';
 import 'package:midnight_dancer/providers/ui_language_provider.dart';
@@ -34,13 +32,17 @@ class MoveCard extends ConsumerStatefulWidget {
   ConsumerState<MoveCard> createState() => _MoveCardState();
 }
 
-class _MoveCardState extends ConsumerState<MoveCard> {
+class _MoveCardState extends ConsumerState<MoveCard>
+    with AutomaticKeepAliveClientMixin {
   String? _videoPathOrUri;
   Uint8List? _thumbnailBytes;
   bool _loading = true;
   bool _error = false;
 
   static const Color _neonOrange = Color(0xFFFF6B35);
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -69,23 +71,18 @@ class _MoveCardState extends ConsumerState<MoveCard> {
       }
       return;
     }
-    if (uri.startsWith('content:') || uri.startsWith('/')) {
-      _videoPathOrUri = uri;
-      final bytes = await ThumbnailCache.instance.get(uri);
-      if (!mounted) return;
-      if (mounted) {
-        setState(() {
-          _thumbnailBytes = bytes;
-          _loading = false;
-          _error = false;
-        });
-      }
-      return;
+
+    if (mounted) {
+      setState(() => _loading = true);
     }
+
     final notifier = ref.read(appDataNotifierProvider.notifier);
-    final bytes = await notifier.loadVideo(uri);
+    final path = await VideoResolveCache.instance.resolveForMoveVideo(
+      uri,
+      notifier.loadVideo,
+    );
     if (!mounted) return;
-    if (bytes == null || bytes.isEmpty) {
+    if (path == null || path.isEmpty) {
       if (mounted) {
         setState(() {
           _loading = false;
@@ -96,14 +93,13 @@ class _MoveCardState extends ConsumerState<MoveCard> {
       }
       return;
     }
-    final path = await video_temp.writeVideoTemp(bytes);
-    if (!mounted) return;
-    final thumb = await ThumbnailCache.instance.get(path ?? uri);
+
+    final bytes = await ThumbnailCache.instance.get(path);
     if (!mounted) return;
     if (mounted) {
       setState(() {
-        _videoPathOrUri = path ?? uri;
-        _thumbnailBytes = thumb;
+        _videoPathOrUri = path;
+        _thumbnailBytes = bytes;
         _loading = false;
         _error = false;
       });
@@ -162,6 +158,7 @@ class _MoveCardState extends ConsumerState<MoveCard> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final str = ref.watch(appStringsProvider);
     final hasVideo = _videoPathOrUri != null &&
         _videoPathOrUri!.isNotEmpty &&

@@ -13,6 +13,7 @@ import 'package:midnight_dancer/providers/ui_language_provider.dart';
 import 'package:midnight_dancer/core/utils/file_copy_platform.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/file_copy_platform_io.dart'
     as file_copy;
+import 'package:midnight_dancer/core/utils/video_resolve_cache.dart';
 import 'package:midnight_dancer/core/utils/video_temp.dart'
     if (dart.library.io) 'package:midnight_dancer/core/utils/video_temp_io.dart'
     as video_temp;
@@ -115,20 +116,21 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
     if (!mounted) return;
     setState(() => _resolvingPreview = true);
     final notifier = ref.read(appDataNotifierProvider.notifier);
-    final bytes = await notifier.loadVideo(path);
+    final resolved = await VideoResolveCache.instance.resolveForMoveVideo(
+      path,
+      notifier.loadVideo,
+    );
     if (!mounted) return;
-    if (bytes == null || bytes.isEmpty) {
+    if (resolved == null || resolved.isEmpty) {
       setState(() {
         _resolvingPreview = false;
         _previewVideoPath = null;
       });
       return;
     }
-    final tmp = await video_temp.writeVideoTemp(bytes);
-    if (!mounted) return;
     setState(() {
       _resolvingPreview = false;
-      _previewVideoPath = tmp ?? path;
+      _previewVideoPath = resolved;
     });
   }
 
@@ -201,159 +203,170 @@ class _MoveFormSheetState extends ConsumerState<_MoveFormSheet> {
         color: AppColors.card,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: ListView(
-        controller: widget.scrollController,
-        padding: const EdgeInsets.all(24),
+      child: Column(
         children: [
-          Text(
-            widget.isEdit ? str.editElement : str.addOrEditElement,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (widget.isEdit &&
-              widget.editStyleChoices != null &&
-              widget.editStyleChoices!.length > 1) ...[
-            DropdownButtonFormField<String>(
-              value: _persistStyleId,
-              decoration: InputDecoration(labelText: str.elementStyleLabel),
-              dropdownColor: AppColors.card,
-              isExpanded: true,
-              items: widget.editStyleChoices!
-                  .map(
-                    (s) => DropdownMenuItem(
-                      value: s.id,
-                      child: Text(
-                        str.displayDanceStyleName(s.name),
-                        style: const TextStyle(color: Colors.white),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) setState(() => _persistStyleId = v);
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: str.nameLabel,
-              hintText: str.elementNameHint,
-            ),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            value: _level,
-            decoration: InputDecoration(labelText: str.levelLabel),
-            dropdownColor: AppColors.card,
-            items: str.filterLevelOptions
-                .where((e) => e.$1 != 'All')
-                .map((e) => DropdownMenuItem(
-                      value: e.$1,
-                      child: Text(e.$2, style: const TextStyle(color: Colors.white)),
-                    ))
-                .toList(),
-            onChanged: (v) => setState(() => _level = v ?? 'Beginner'),
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: _pickVideo,
-            icon: const Icon(Icons.videocam),
-            label: Text(
-              _videoPath != null || _videoBytes != null ? str.videoSelected : str.pickVideo,
-            ),
-          ),
-          if (_resolvingPreview) ...[
-            const SizedBox(height: 16),
-            const SizedBox(
-              height: 180,
-              child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
-            ),
-          ] else if (_previewVideoPath != null && _previewVideoPath!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            VideoPreview(videoPath: _previewVideoPath!, initialSpeed: 1.0),
-          ],
-          const SizedBox(height: 20),
-          Text(
-            str.elementMasteryProgress,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 10,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
-                    activeTrackColor: AppColors.accent,
-                    inactiveTrackColor: Colors.white24,
-                    thumbColor: Colors.white,
-                    overlayColor: AppColors.accent.withOpacity(0.22),
+          Expanded(
+            child: ListView(
+              controller: widget.scrollController,
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+              children: [
+                Text(
+                  widget.isEdit ? str.editElement : str.addOrEditElement,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  child: Slider(
-                    value: _masterySlider.clamp(0, 100) / 100,
-                    onChanged: (v) => setState(() => _masterySlider = v * 100),
-                    onChangeEnd: (v) {
-                      final p = (v * 100).round().clamp(0, 100);
-                      widget.onMasteryPercentLive?.call(p);
+                ),
+                const SizedBox(height: 20),
+                if (widget.isEdit &&
+                    widget.editStyleChoices != null &&
+                    widget.editStyleChoices!.length > 1) ...[
+                  DropdownButtonFormField<String>(
+                    value: _persistStyleId,
+                    decoration: InputDecoration(labelText: str.elementStyleLabel),
+                    dropdownColor: AppColors.card,
+                    isExpanded: true,
+                    items: widget.editStyleChoices!
+                        .map(
+                          (s) => DropdownMenuItem(
+                            value: s.id,
+                            child: Text(
+                              str.displayDanceStyleName(s.name),
+                              style: const TextStyle(color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setState(() => _persistStyleId = v);
                     },
                   ),
-                ),
-              ),
-              SizedBox(
-                width: 52,
-                child: Text(
-                  '${_masterySlider.round().clamp(0, 100)}%',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
-                    color: AppColors.accent,
+                  const SizedBox(height: 16),
+                ],
+                TextField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: str.nameLabel,
+                    hintText: str.elementNameHint,
                   ),
-                  textAlign: TextAlign.end,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _descController,
-            decoration: InputDecoration(
-              labelText: str.descriptionLabel,
-              hintText: str.descriptionHint,
-              alignLabelWithHint: true,
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _level,
+                  decoration: InputDecoration(labelText: str.levelLabel),
+                  dropdownColor: AppColors.card,
+                  items: str.filterLevelOptions
+                      .where((e) => e.$1 != 'All')
+                      .map((e) => DropdownMenuItem(
+                            value: e.$1,
+                            child: Text(e.$2, style: const TextStyle(color: Colors.white)),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setState(() => _level = v ?? 'Beginner'),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: _pickVideo,
+                  icon: const Icon(Icons.videocam),
+                  label: Text(
+                    _videoPath != null || _videoBytes != null ? str.videoSelected : str.pickVideo,
+                  ),
+                ),
+                if (_resolvingPreview) ...[
+                  const SizedBox(height: 16),
+                  const SizedBox(
+                    height: 180,
+                    child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+                  ),
+                ] else if (_previewVideoPath != null && _previewVideoPath!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  VideoPreview(videoPath: _previewVideoPath!, initialSpeed: 1.0),
+                ],
+                const SizedBox(height: 20),
+                Text(
+                  str.elementMasteryProgress,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 10,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 14),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
+                          activeTrackColor: AppColors.accent,
+                          inactiveTrackColor: Colors.white24,
+                          thumbColor: Colors.white,
+                          overlayColor: AppColors.accent.withOpacity(0.22),
+                        ),
+                        child: Slider(
+                          value: _masterySlider.clamp(0, 100) / 100,
+                          onChanged: (v) => setState(() => _masterySlider = v * 100),
+                          onChangeEnd: (v) {
+                            final p = (v * 100).round().clamp(0, 100);
+                            widget.onMasteryPercentLive?.call(p);
+                          },
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        '${_masterySlider.round().clamp(0, 100)}%',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                          color: AppColors.accent,
+                        ),
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _descController,
+                  decoration: InputDecoration(
+                    labelText: str.descriptionLabel,
+                    hintText: str.descriptionHint,
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 3,
+                ),
+              ],
             ),
-            maxLines: 3,
           ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _nameController.text.trim().isEmpty ? null : _doSave,
-                  child: Text(str.save),
-                ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _nameController.text.trim().isEmpty ? null : _doSave,
+                      child: Text(str.save),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: widget.onCancel,
+                      child: Text(str.cancel),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: widget.onCancel,
-                  child: Text(str.cancel),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -752,8 +765,15 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
         mainAxisSpacing: 16,
       ),
       delegate: SliverChildBuilderDelegate(
-        (_, i) => _buildMoveCard(moves[i], style),
+        (context, i) => _buildMoveCard(moves[i], style),
         childCount: moves.length,
+        findChildIndexCallback: (Key key) {
+          if (key is ValueKey<String>) {
+            final idx = moves.indexWhere((m) => m.id == key.value);
+            return idx >= 0 ? idx : null;
+          }
+          return null;
+        },
       ),
     );
   }
@@ -761,6 +781,7 @@ class _ElementsScreenState extends ConsumerState<ElementsScreen> {
   Widget _buildMoveCard(Move move, DanceStyle style) {
     final isCurrent = style.currentMoveId == move.id;
     return MoveCard(
+      key: ValueKey(move.id),
       move: move,
       isCurrent: isCurrent,
       onEdit: () => _openEditMoveDialog(move, style.id),

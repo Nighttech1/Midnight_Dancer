@@ -101,6 +101,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+        }
         release {
             signingConfig useMidnightReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled true

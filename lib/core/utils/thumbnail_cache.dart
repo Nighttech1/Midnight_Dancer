@@ -54,9 +54,7 @@ class ThumbnailCache {
     _memory[key] = bytes;
   }
 
-  String _key(String uriOrPath) {
-    return uriOrPath.hashCode.abs().toString();
-  }
+  String _key(String uriOrPath) => uriOrPath;
 
   void clear() => _memory.clear();
 }

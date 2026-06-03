@@ -42,8 +42,10 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _init() async {
-    if (_controller != null || _initializing || widget.videoPathOrUri.isEmpty) return;
+  Future<void> _init({required bool autoplay}) async {
+    if (_controller != null || _initializing || widget.videoPathOrUri.isEmpty) {
+      return;
+    }
     _initializing = true;
     if (mounted) setState(() {});
     try {
@@ -57,7 +59,11 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
       await _controller!.initialize();
       await _controller!.setVolume(0);
       await _controller!.setLooping(false);
-      await _controller!.pause();
+      if (autoplay) {
+        await _controller!.play();
+      } else {
+        await _controller!.pause();
+      }
     } catch (e, _) {
       _initError = true;
       widget.onError?.call();
@@ -67,10 +73,16 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _onPreviewTap() async {
+    await _init(autoplay: true);
+  }
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+    if (widget.showVideoTimeline) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _init(autoplay: false));
+    }
   }
 
   @override
@@ -82,7 +94,9 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
       _controller = null;
       _initError = false;
       _initializing = false;
-      _init();
+      if (widget.showVideoTimeline) {
+        _init(autoplay: false);
+      }
     }
   }
 
@@ -111,7 +125,10 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
 
   Future<void> _togglePlay() async {
     final c = _controller;
-    if (c == null || !c.value.isInitialized) return;
+    if (c == null || !c.value.isInitialized) {
+      await _onPreviewTap();
+      return;
+    }
     if (c.value.isPlaying) {
       await c.pause();
     } else {
@@ -240,27 +257,52 @@ class _MoveCardVideoState extends State<MoveCardVideo> {
       );
     }
     if (_initializing || _controller == null || !_controller!.value.isInitialized) {
-      if (widget.thumbnailBytes != null && widget.thumbnailBytes!.isNotEmpty) {
-        return Image.memory(
-          widget.thumbnailBytes!,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          cacheWidth: 512,
-          cacheHeight: 512,
-        );
-      }
-      return ColoredBox(
-        color: AppColors.background,
-        child: const Center(
-          child: SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              color: AppColors.accent,
-              strokeWidth: 2,
-            ),
-          ),
+      return GestureDetector(
+        onTap: widget.showVideoTimeline ? null : _onPreviewTap,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (widget.thumbnailBytes != null && widget.thumbnailBytes!.isNotEmpty)
+              Image.memory(
+                widget.thumbnailBytes!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                cacheWidth: 512,
+                cacheHeight: 512,
+              )
+            else
+              ColoredBox(
+                color: AppColors.background,
+                child: Center(
+                  child: _initializing
+                      ? const SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(
+                            color: AppColors.accent,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(Icons.videocam, color: Colors.white24, size: 40),
+                ),
+              ),
+            if (!widget.showVideoTimeline && !_initializing)
+              Center(
+                child: Material(
+                  color: Colors.black45,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: _onPreviewTap,
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Icon(Icons.play_arrow, color: Colors.white, size: 36),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       );
     }
