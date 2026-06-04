@@ -10,6 +10,8 @@ void main() {
     final content = plist.readAsStringSync();
     const requiredKeys = <String>[
       'NSPhotoLibraryUsageDescription',
+      'NSCameraUsageDescription',
+      'NSLocationWhenInUseUsageDescription',
       'NSAppleMusicUsageDescription',
       'NSMicrophoneUsageDescription',
     ];

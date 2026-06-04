@@ -73,6 +73,10 @@
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Midnight Dancer uses your photo library only when you choose a photo or video from Photos—for example a profile image or a practice video for a dance element.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Midnight Dancer may access the camera only when you choose to record or capture a video for a dance element.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Midnight Dancer does not use your location for dance training. This notice is required because a linked system library references location APIs on some devices.</string>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Midnight Dancer needs access to your media library only when you choose music for dance practice from your device.</string>
 	<key>NSMicrophoneUsageDescription</key>
