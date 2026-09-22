@@ -1,0 +1,80 @@
+name: KMP iOS Stage 1 (unsigned IPA)
+
+# Produces MidnightDancer-stage1.ipa for Mobile Next Cloud re-sign + install.
+# Windows cannot build Kotlin/Native iOS — this job must run on macos-latest.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: "Target SDK (iphoneos = real/cloud iPhone; iphonesimulator = sim)"
+        required: true
+        default: iphoneos
+        type: choice
+        options:
+          - iphoneos
+          - iphonesimulator
+  push:
+    paths:
+      - "kmp/**"
+      - ".github/workflows/kmp-ios.yml"
+      - "scripts/build-kmp-ios-ipa.sh"
+
+concurrency:
+  group: kmp-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-unsigned-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Select Xcode
+        run: |
+          echo "Available Xcodes:"
+          ls /Applications | grep -i Xcode || true
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build unsigned IPA
+        env:
+          CONFIGURATION: Debug
+        run: |
+          chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
+          SDK="${{ github.event.inputs.sdk || 'iphoneos' }}"
+          ./scripts/build-kmp-ios-ipa.sh "${SDK}"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MidnightDancer-stage1-ipa
+          path: dist/MidnightDancer-stage1.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Shared.framework (debug aid)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-framework-debug
+          path: |
+            kmp/shared/build/bin/iosArm64/debugFramework
+            kmp/shared/build/bin/iosSimulatorArm64/debugFramework
+          if-no-files-found: ignore
+          retention-days: 7

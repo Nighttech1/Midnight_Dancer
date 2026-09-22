@@ -27,6 +27,19 @@ ios/.symlinks/
 ios/Flutter/Flutter.framework
 ios/Flutter/Flutter.podspec
 
+# KMP iOS (XcodeGen outputs / staged framework / IPA) — do not commit
+kmp/iosApp/*.xcodeproj/
+kmp/iosApp/*.xcworkspace/
+kmp/iosApp/Frameworks/
+kmp/iosApp/build/
+kmp/**/build/
+kmp/.gradle/
+kmp/local.properties
+
+# KMP unsigned IPA staging (scripts/build-kmp-ios-ipa.sh)
+dist/
+dist/ipa-staging/
+
 # Сгенерированные файлы
 *.g.dart
 *.freezed.dart
@@ -155,3 +168,16 @@ ios/Flutter/Flutter.podspec
 
 
 
+
+# Secrets
+.env
+.env.local
+
+
+# MCP secrets (API keys)
+.cursor/mcp.json
+
+kmp/*.log
+kmp/*.log.err
+kmp/build-*.txt
+kmp/emulator-start.*

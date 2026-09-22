@@ -1,0 +1,61 @@
+# Midnight Dancer iOS — XcodeGen project (C-07 / C-09)
+# scripts/build-kmp-ios-ipa.sh links :shared:linkDebugFrameworkIosArm64 and syncs
+# Shared.framework into shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)/
+# (also searchable under shared/build/bin/iosArm64/debugFramework).
+
+name: MidnightDancerIos
+options:
+  bundleIdPrefix: com.midnightdancer
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  SWIFT_VERSION: "5.0"
+  IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+  ENABLE_BITCODE: "NO"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+        excludes:
+          - "**/*.md"
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.midnightdancer.app
+      PRODUCT_NAME: MidnightDancer
+      INFOPLIST_FILE: iosApp/Info.plist
+      TARGETED_DEVICE_FAMILY: "1"
+      # Unsigned / cloud re-sign (Mobile Next). Local Mac can still override in Xcode.
+      CODE_SIGNING_ALLOWED: "NO"
+      CODE_SIGNING_REQUIRED: "NO"
+      CODE_SIGN_IDENTITY: ""
+      DEVELOPMENT_TEAM: ""
+      # Staged static Shared.framework + Gradle bin paths (device + simulator)
+      FRAMEWORK_SEARCH_PATHS:
+        - "$(inherited)"
+        - "$(SRCROOT)/Frameworks"
+        - "$(SRCROOT)/../shared/build/bin/iosArm64/debugFramework"
+        - "$(SRCROOT)/../shared/build/bin/iosArm64/releaseFramework"
+        - "$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/debugFramework"
+        - "$(SRCROOT)/../shared/build/bin/iosSimulatorArm64/releaseFramework"
+        - "$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+      OTHER_LDFLAGS: "$(inherited) -framework Shared"
+      LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+      VALIDATE_PRODUCT: "NO"
+    # Static KMP framework (isStatic=true): link only — do not embed.
+    dependencies: []
+    info:
+      path: iosApp/Info.plist
+      properties:
+        CFBundleDisplayName: Midnight Dancer
+        UILaunchScreen: {}
+schemes:
+  iosApp:
+    build:
+      targets:
+        iosApp: all
+    run:
+      config: Debug
+    archive:
+      config: Release
