@@ -199,6 +199,10 @@ workflows:
       - build/ios/ipa/*.ipa
 
   # ─── KMP (новый путь) — kmp/iosApp → ios-build/artifacts/current/ ───
+  # Вариант A (сейчас): UNSIGNED IPA для Mobile Next / cloud re-sign.
+  #   Без ios_signing / App Store Connect — иначе «No matching certificate…».
+  # Вариант B (релиз позже): вернуть ios_signing + app_store_connect + use-profiles
+  #   — см. ios-build/kmp/CODEMAGIC.md и tasks/ПЛАН_миграции_на_KMP.md (Stage 5 checklist).
   # Документация: ios-build/kmp/CODEMAGIC.md · карта: ios-build/README.md
   ios-ipa-kmp:
     name: Midnight Dancer KMP iOS IPA
@@ -206,17 +210,11 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       xcode: latest
-      cocoapods: default
       java: 17
       vars:
         IPA_NAME: MidnightDancer-stage4.ipa
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.midnightdancer.app
-    integrations:
-      app_store_connect: codemagic
     scripts:
-      - name: Build KMP IPA via script
+      - name: Build KMP unsigned IPA via script
         script: |
           set -e
           cd "$CM_BUILD_DIR"
@@ -225,10 +223,6 @@ workflows:
           mkdir -p ios-build/artifacts/current
           test -f "ios-build/artifacts/current/${IPA_NAME}"
           ls -lh "ios-build/artifacts/current/${IPA_NAME}"
-      - name: Codemagic profiles (optional)
-        script: |
-          set -e
-          cd "$CM_BUILD_DIR"
-          xcode-project use-profiles || echo "Profiles skipped — unsigned IPA OK for Mobile Next re-sign"
+          echo "UNSIGNED IPA ready — Mobile Next re-signs. Variant B (App Store signing) deferred to release."
     artifacts:
       - ios-build/artifacts/current/*.ipa

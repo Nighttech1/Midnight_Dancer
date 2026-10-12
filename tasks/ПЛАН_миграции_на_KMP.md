@@ -52,6 +52,8 @@
 | Инструкция | [`ios-build/kmp/CODEMAGIC.md`](../ios-build/kmp/CODEMAGIC.md) · карта [`ios-build/README.md`](../ios-build/README.md) |
 | Кто зовёт | **Деплоер / Platform Ops** в chain (C-35 / дальше Stage 5) |
 | Артефакт | скачать IPA из Codemagic → `ios-build/artifacts/current/MidnightDancer-stageN.ipa` (APK по-прежнему в `dist/`) |
+| **Сейчас (QA)** | **Вариант A:** workflow `ios-ipa-kmp` **без** App Store signing (unsigned → Mobile Next re-sign) |
+| **Перед релизом** | **Вариант B:** вернуть signing — Stage 5 §5.5 + `ios-build/RELEASE_CHECKLIST.md` |
 | Клиент | **Mobile Next allocate только после** готового Stage N IPA из Codemagic |
 
 **Правила:**
@@ -341,7 +343,20 @@
 - [ ] Удаление Flutter SDK / Dart из релизного контура (архив ветки ok)
 - [ ] README / BUILD.md переписаны под KMP
 
-### 5.5 Релиз
+### 5.5 Codemagic iOS: вернуть подпись (вариант B) — НЕ ЗАБЫТЬ
+
+Сейчас для QA / Mobile Next включён **вариант A** (unsigned `ios-ipa-kmp`, без сертификатов).  
+Перед TestFlight / App Store **обязательно** вернуться к **варианту B**:
+
+- [ ] ★ Вернуть в `codemagic.yaml` у KMP-workflow: `ios_signing` (app_store) + `integrations.app_store_connect` + `xcode-project use-profiles`
+- [ ] ★ Codemagic Teams → Integrations → App Store Connect: рабочий API Key / сертификаты
+- [ ] ★ Apple Developer: Bundle ID `com.midnightdancer.app` + matching profiles
+- [ ] Проверить IPA подписан (не unsigned) → TestFlight
+- [ ] Обновить статус в `ios-build/kmp/CODEMAGIC.md` и закрыть чеклист `ios-build/RELEASE_CHECKLIST.md`
+
+Подробности: `ios-build/kmp/CODEMAGIC.md` (A vs B), `ios-build/RELEASE_CHECKLIST.md`.
+
+### 5.6 Релиз
 
 - [ ] DEP: Play Internal + TestFlight
 - [ ] ★ CLIENT: приёмка internal/TF со скринами
@@ -380,7 +395,7 @@
 ## Что делать следующей сессией
 
 1. **Пользователь:** личный тест **`dist/MidnightDancer-stage4-debug.apk`** (версия `0.4.1-stage4-polish`, без dev-меток на экране).
-2. **Деплоер / Platform Ops:** Stage 4 IPA **через Codemagic** (`codemagic.yaml` / `CODEMAGIC_IOS.md` → артефакт в `dist/MidnightDancer-stage4.ipa`) → Client Mobile Next → дозакрыть C-36 iPhone.
-3. **Stage 5** по команде: аудит, Piper ONNX download UX, real `.riv`, prod stores только после «да».
+2. **Деплоер / Platform Ops:** IPA через Codemagic workflow **`ios-ipa-kmp` (вариант A, unsigned)** → `ios-build/artifacts/current/MidnightDancer-stage4.ipa` → Client Mobile Next.
+3. **Stage 5** по команде: аудит, Piper ONNX, real `.riv`; **перед TestFlight/prod — Codemagic вариант B (подпись)** §5.5; prod stores только после «да».
 
 Готов продолжить по команде пользователя.

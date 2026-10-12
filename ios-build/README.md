@@ -24,8 +24,8 @@ Android-файлы (`.apk`) **не** кладём сюда — они остаю
 
 ## Три способа получить IPA (KMP)
 
-1. **Codemagic (основной для магазина / подписи)** → читайте [`kmp/CODEMAGIC.md`](kmp/CODEMAGIC.md)  
-2. **GitHub Actions (unsigned, для облачного iPhone)** → [`kmp/GITHUB_ACTIONS.md`](kmp/GITHUB_ACTIONS.md)  
+1. **Codemagic `ios-ipa-kmp`** — сейчас **вариант A** (unsigned, для Mobile Next); перед релизом **вариант B** (подпись) — см. [`kmp/CODEMAGIC.md`](kmp/CODEMAGIC.md) и [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)  
+2. **GitHub Actions (unsigned)** → [`kmp/GITHUB_ACTIONS.md`](kmp/GITHUB_ACTIONS.md)  
 3. **Свой Mac** → [`kmp/MAC_LOCAL.md`](kmp/MAC_LOCAL.md)
 
 С Windows IPA **нельзя** собрать локально — только облако (Codemagic / GitHub Actions) или Mac.
