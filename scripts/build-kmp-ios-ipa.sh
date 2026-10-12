@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Build unsigned IPA for Midnight Dancer KMP iosApp (Stage 1 / C-09).
+# Build unsigned IPA for Midnight Dancer KMP iosApp (Stage 4 / C-35).
 # Requires: macOS, Xcode CLT, JDK 17+, Homebrew xcodegen.
-# Output: dist/MidnightDancer-stage1.ipa (Payload/*.app zip)
+# Output: ios-build/artifacts/current/MidnightDancer-stage4.ipa
+# Docs: ios-build/kmp/MAC_LOCAL.md
+# Override: IPA_NAME=MidnightDancer-custom.ipa ./scripts/build-kmp-ios-ipa.sh
 #
 # Usage:
 #   ./scripts/build-kmp-ios-ipa.sh
@@ -15,10 +17,10 @@ CONFIGURATION="${CONFIGURATION:-Debug}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KMP="${ROOT}/kmp"
 IOS_APP="${KMP}/iosApp"
-DIST="${ROOT}/dist"
+DIST="${ROOT}/ios-build/artifacts/current"
 DERIVED="${IOS_APP}/build/DerivedData"
-PAYLOAD_DIR="${DIST}/ipa-staging"
-IPA_NAME="MidnightDancer-stage1.ipa"
+PAYLOAD_DIR="${ROOT}/ios-build/artifacts/.staging"
+IPA_NAME="${IPA_NAME:-MidnightDancer-stage4.ipa}"
 
 echo "==> Repo: ${ROOT}"
 echo "==> SDK: ${SDK}  configuration: ${CONFIGURATION}"
@@ -76,14 +78,19 @@ if [[ ! -d "${FRAMEWORK_HINT}" ]]; then
 fi
 echo "==> Shared.framework OK: ${FRAMEWORK_HINT}"
 
-# Mirror into xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME) for project.yml fallback path
+# Stage for XcodeGen FRAMEWORK_SEARCH_PATHS:
+#   1) iosApp/Frameworks
+#   2) shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
 SDK_VERSION="$(xcrun --sdk "${XCODE_SDK}" --show-sdk-version)"
 XCODE_SDK_NAME="${XCODE_SDK}${SDK_VERSION}"
 SYNC_DIR="${KMP}/shared/build/xcode-frameworks/${CONFIGURATION}/${XCODE_SDK_NAME}"
-mkdir -p "${SYNC_DIR}"
-rm -rf "${SYNC_DIR}/Shared.framework"
+STAGE_DIR="${IOS_APP}/Frameworks"
+mkdir -p "${SYNC_DIR}" "${STAGE_DIR}"
+rm -rf "${SYNC_DIR}/Shared.framework" "${STAGE_DIR}/Shared.framework"
 cp -R "${FRAMEWORK_HINT}" "${SYNC_DIR}/Shared.framework"
+cp -R "${FRAMEWORK_HINT}" "${STAGE_DIR}/Shared.framework"
 echo "==> Synced framework → ${SYNC_DIR}/Shared.framework"
+echo "==> Staged framework  → ${STAGE_DIR}/Shared.framework"
 
 echo "==> XcodeGen"
 (

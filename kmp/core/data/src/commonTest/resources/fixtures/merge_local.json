@@ -1,0 +1,41 @@
+{
+  "danceStyles": [
+    {
+      "id": "st1",
+      "name": "Salsa",
+      "moves": [
+        {
+          "id": "m1",
+          "name": "Basic",
+          "level": "beginner",
+          "videoUri": "m1.mp4"
+        }
+      ]
+    }
+  ],
+  "songs": [
+    {
+      "id": "s1",
+      "title": "A",
+      "danceStyle": "Salsa",
+      "level": "b",
+      "fileName": "a.mp3",
+      "duration": 1.0,
+      "sizeBytes": 1
+    }
+  ],
+  "choreographies": [
+    {
+      "id": "c1",
+      "name": "R1",
+      "songId": "s1",
+      "styleId": "st1",
+      "timeline": {},
+      "startTime": 0.0,
+      "endTime": 10.0
+    }
+  ],
+  "settings": {
+    "ui_language": "ru"
+  }
+}

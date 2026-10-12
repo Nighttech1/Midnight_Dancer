@@ -1,0 +1,21 @@
+---
+description: Деплоер — локальные сборки, TestFlight/Play Internal; prod после Клиента.
+globs: "*"
+alwaysApply: false
+---
+
+# РОЛЬ: ДЕПЛОЕР
+
+Skill-first:
+1. `.cursor/skills/deployer/SKILL.md`
+2. `.cursor/skills/app-updates-and-notify/SKILL.md`
+3. **`ios-build/`** (карта) + **`ios-build/kmp/CODEMAGIC.md`** + корневой **`codemagic.yaml`** — **IPA через Codemagic**; артефакт в `ios-build/artifacts/current/`
+4. MCP storepilot / firebase — если credentials настроены
+
+Local APK / emulator — Android на Windows (`dist/*.apk`). **IPA:** Codemagic → `ios-build/artifacts/current/MidnightDancer-stageN.ipa` (не Stage 1 rename из `archive/`).
+Internal testing / TestFlight — для Клиента после Codemagic.
+Production stores — только после вердикта без P0/P1 и явного согласия пользователя.
+
+Если в проекте есть локальный API — обновляй его до/после сборки сам (правило пользователя).
+
+`🚀 **ДЕПЛОЕР:** [артефакт APK/IPA; Codemagic?; среда; gate]`

@@ -1,6 +1,11 @@
 # Codemagic: сборка IPA для iOS (Midnight Dancer)
 # Репозиторий: подключите в Codemagic и укажите этот файл в настройках приложения (codemagic.yaml).
-# Подробная настройка подписи и App Store Connect — в CODEMAGIC_IOS.md
+#
+# ВНИМАНИЕ — два мира:
+#   • Workflow’ы ниже (ios-ipa-*) = СТАРЫЙ Flutter (ios/Runner). Документация: ios-build/flutter-legacy/
+#   • НОВЫЙ KMP (kmp/iosApp) = ios-build/kmp/CODEMAGIC.md — отдельный workflow добавлять сюда же в корень.
+# Карта папок: ios-build/README.md
+# Готовые KMP IPA класть в: ios-build/artifacts/current/
 
 workflows:
   # Full flavor: в UI Codemagic можно выбрать схему Xcode `full` или `Runner`.
@@ -192,3 +197,38 @@ workflows:
           flutter build ipa --release --flavor "$FLAVOR" --dart-define=FLAVOR="$FLAVOR"
     artifacts:
       - build/ios/ipa/*.ipa
+
+  # ─── KMP (новый путь) — kmp/iosApp → ios-build/artifacts/current/ ───
+  # Документация: ios-build/kmp/CODEMAGIC.md · карта: ios-build/README.md
+  ios-ipa-kmp:
+    name: Midnight Dancer KMP iOS IPA
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      cocoapods: default
+      java: 17
+      vars:
+        IPA_NAME: MidnightDancer-stage4.ipa
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.midnightdancer.app
+    integrations:
+      app_store_connect: codemagic
+    scripts:
+      - name: Build KMP IPA via script
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
+          ./scripts/build-kmp-ios-ipa.sh iphoneos
+          mkdir -p ios-build/artifacts/current
+          test -f "ios-build/artifacts/current/${IPA_NAME}"
+          ls -lh "ios-build/artifacts/current/${IPA_NAME}"
+      - name: Codemagic profiles (optional)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR"
+          xcode-project use-profiles || echo "Profiles skipped — unsigned IPA OK for Mobile Next re-sign"
+    artifacts:
+      - ios-build/artifacts/current/*.ipa

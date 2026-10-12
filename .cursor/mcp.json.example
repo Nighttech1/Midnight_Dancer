@@ -1,0 +1,202 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated",
+        "--caps=vision",
+        "--viewport-size=1440x900"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "playwright-iphone": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated",
+        "--caps=vision",
+        "--device=iPhone 15"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "playwright-android": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated",
+        "--caps=vision",
+        "--device=Pixel 7"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "chrome-devtools": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "chrome-devtools-mcp@latest"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "image-compare": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "mcp-image-compare-server"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "a11y": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "a11y-mcp-server"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "lighthouse": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "@danielsogl/lighthouse-mcp@latest"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "firebase": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "firebase-tools@latest",
+        "mcp"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    },
+    "storepilot": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "storepilot"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows",
+        "MCP_TOOLSET": "readonly"
+      }
+    },
+    "mobile-mcp": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "@mobilenext/mobile-mcp@latest"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;D:\\Applications\\Android\\Sdk\\platform-tools;D:\\Applications\\Android\\Sdk\\emulator;C:\\Windows\\System32;C:\\Windows",
+        "ANDROID_HOME": "D:\\Applications\\Android\\Sdk",
+        "ANDROID_SDK_ROOT": "D:\\Applications\\Android\\Sdk",
+        "MOBILEMCP_DISABLE_TELEMETRY": "1"
+      }
+    },
+    "mcp-mobile-interaction": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "mcp-mobile-interaction"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;D:\\Applications\\Android\\Sdk\\platform-tools;D:\\Applications\\Android\\Sdk\\emulator;C:\\Windows\\System32;C:\\Windows",
+        "ANDROID_HOME": "D:\\Applications\\Android\\Sdk",
+        "ANDROID_SDK_ROOT": "D:\\Applications\\Android\\Sdk"
+      }
+    },
+    "appium-mcp": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "appium-mcp@latest"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;D:\\Applications\\Android\\Sdk\\platform-tools;D:\\Applications\\Android\\Sdk\\emulator;C:\\Windows\\System32;C:\\Windows",
+        "ANDROID_HOME": "D:\\Applications\\Android\\Sdk",
+        "ANDROID_SDK_ROOT": "D:\\Applications\\Android\\Sdk"
+      }
+    },
+    "maestro": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "D:\\Applications\\Tools\\maestro\\maestro\\bin\\maestro.bat",
+        "mcp"
+      ],
+      "env": {
+        "PATH": "D:\\Applications\\Tools\\maestro\\maestro\\bin;E:\\Applications\\Tools\\node;D:\\Applications\\Android\\Sdk\\platform-tools;D:\\Applications\\Android\\Sdk\\emulator;C:\\Windows\\System32;C:\\Windows",
+        "ANDROID_HOME": "D:\\Applications\\Android\\Sdk",
+        "ANDROID_SDK_ROOT": "D:\\Applications\\Android\\Sdk",
+        "JAVA_HOME": "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.17.10-hotspot",
+        "MAESTRO_CLI_NO_ANALYTICS": "1"
+      }
+    },
+    "mobilenext-cloud": {
+      "url": "https://app.mobilenext.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer mob_PASTE_YOUR_KEY_HERE"
+      }
+    },
+    "semgrep": {
+      "command": "C:\\Windows\\System32\\cmd.exe",
+      "args": [
+        "/c",
+        "E:\\Applications\\Tools\\node\\npx.cmd",
+        "-y",
+        "semgrep-mcp"
+      ],
+      "env": {
+        "PATH": "E:\\Applications\\Tools\\node;C:\\Windows\\System32;C:\\Windows"
+      }
+    }
+  }
+}

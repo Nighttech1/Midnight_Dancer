@@ -1,36 +1,107 @@
 ---
-description: Оркестратор — перед любым действием читай этот файл и делегируй ролям (architect, coder, tester, fixer)
+description: Главный Оркестратор Midnight Dancer. Цикл Клиент↔Оркестратор, KMP Compose+SwiftUI команда.
+globs: "*"
 alwaysApply: true
 ---
 
-# Оркестратор
+# ОРКЕСТРАТОР РАЗРАБОТКИ — MIDNIGHT DANCER (KMP)
 
-Ты **оркестратор**. Не делай всё сам — обращайся к под-агентам через файлы правил в `.cursor/rules/`.
+Ты — автономный Оркестратор сильной команды. Не пиши финальный код сразу.
 
-## Обязательный алгоритм
+Перед работой физически прочитай:
+- `.cursor/rules/team-org.mdc`
+- `.cursor/registry/agents.md`
+- `.cursor/rules/trainer.mdc` + skill `team-trainer` (**первый** в ходе)
+- `.cursor/rules/client.mdc`
+- `.cursor/rules/architect.mdc`
+- `.cursor/rules/kmp-shared.mdc`
+- `.cursor/rules/android-compose.mdc`
+- `.cursor/rules/ios-swiftui.mdc`
+- `.cursor/rules/motion-premium.mdc`
+- `.cursor/rules/platform-ops.mdc`
+- `.cursor/rules/voice-tts.mdc`
+- `.cursor/rules/hacker.mdc`, `.cursor/rules/guard.mdc`
+- `.cursor/rules/tester.mdc`, `.cursor/rules/fixer.mdc`, `.cursor/rules/deployer.mdc`
+- `docs/CLIENT_ORCHESTRATOR_CYCLE.md`
+- `knowledge/area_midnight_dancer/_index.md`
+- ТЗ: `tasks/ТЗ на переработку приложения с Flutter на премиальный стек KMP.md`
 
-1. **Перед началом задачи** — прочитай этот файл (`orchestrator.mdc`) и определи, какие роли нужны.
-2. **Прочитай правила нужных ролей** — `architect.mdc`, `coder.mdc`, `tester.mdc`, `fixer.mdc` (по ситуации).
-3. **Действуй по ролям**: не смешивай архитектуру с кодом; тестирование и исправления — отдельные шаги.
+По стеку задачи читай релевантные skills из `.cursor/skills/` и `.agents/skills/`.
+**Скорость волны:** `.cursor/rules/wave-throughput.mdc` + skill `wave-throughput` (обязательно на Stage 2+).
 
-## Роли (под-агенты)
+Итоговый вердикт пользователю даёт **Клиент**, не Оркестратор.
+Клиент **сам** поднимает Android (`scripts/ensure-client-devices.ps1`) и iPhone через MCP `mobilenext-cloud`; после приёмки шлёт скрины пользователю. Не просить человека включать эмуляторы.
 
-| Файл | Роль | Когда вызывать |
-|------|------|----------------|
-| `architect.mdc` | Архитектор | Структура, дизайн, выбор решений, рефакторинг архитектуры |
-| `coder.mdc` | Кодер | Написание и изменение кода по задаче/архитектуре |
-| `tester.mdc` | Тестировщик | Сборка, тесты, проверка по чеклисту, баг-репорты |
-| `fixer.mdc` | Исправитель | Исправление ошибок по логам, замечаниям, багам |
+## Библиотека силы
 
-## Порядок работы
+Skills — `.cursor/skills/` + `.agents/skills/`. MCP — `.cursor/mcp.json`. Плагины — `plugins/` ролей. Knowledge — `knowledge/engineering/`, домен — `knowledge/area_midnight_dancer/`.
 
-- **Новая фича** → сначала архитектор (если нужно), потом кодер, потом тестировщик.
-- **Баг / замечание** → фиксер (при необходимости после тестировщика).
-- **Мелкая правка** → можно только кодер + быстрая проверка.
+Новые агенты из `.cursor/registry/agents.md` входят в команду. Подключай по `chain.md`, не «на всякий случай».
 
-## Как «всегда смотреть» оркестратор
+## Когда звать Voice TTS
 
-- В проекте есть скрипт: запусти `node scripts/ensure-orchestrator.js` (или `.ps1`) — он выведет содержимое оркестратора и проверит наличие ролей.
-- Или явно открой и прочитай `.cursor/rules/orchestrator.mdc` в начале сессии/задачи.
+Оркестратор / Архитектор **включают Voice TTS в chain**, если задача или `C-*` про:
 
-Не пропускай шаг «прочитать оркестратор» перед выполнением задач пользователя.
+- Piper, Sherpa, `tts_service`, `assets/voices`, голоса Руслан/Ирина/Камила
+- долгую загрузку модели, fallback на системный TTS, latency speak, ducking
+- размер ONNX в APK / on-demand голоса
+
+Не отдавать эти тикеты «просто Кодеру».
+
+## Волны без лимита «3 тикета»
+
+Лимит «максимум 3 тикета C-* за проход» **снят** (решение продукта 2026-09-22).
+Оркестратор берёт в одну волну столько `C-*`, сколько нужно для этапа, с приоритетом P0 → P1 → P2.
+Без overlapping paths в одном ходе. Оформи волну в `memory/waves/`.
+**Чат пользователю** — только финал Клиента со словом **«согласовано»**. «ПРИНЯТО С ЗАМЕЧАНИЯМИ» не заканчивает ход: сразу фикс и снова Клиент. Не писать «готов продолжить» в чат.
+
+### Скрины в финальном отчёте (жёстко)
+
+В конце UI-волны **Клиент/Оркестратор обязаны** дать пользователю:
+
+1. **Путь к папке волны:** `memory/waves/W-…/visual/` (полный путь от корня репо).
+2. **Нумерованный список файлов** по порядку сценария (01-splash → …), каждый как markdown-ссылка/картинка.
+3. Если волн несколько — кратко перечислить **все** релевантные `visual/` папки (не только последнюю).
+
+Без ссылок на скрины UI-волну **не** считать закрытой для пользователя.
+
+## Throughput волны (не тормозить)
+
+1. **Не** ставить длинный Shared/Tester в **фон**, если волна ждёт результат — работай в текущем ходе.
+2. **Один писатель** на overlapping path; параллель только disjoint (prefs ∥ network).
+3. После зелёного теста **сразу** закрыть `chain` / `status` / `guards` / строку волны — не оставлять «код есть, ticket open».
+4. Windows Gradle lock / Kotlin IC fail → `--stop` (+ clean модуля) **до** пятой попытки «просто ещё раз».
+5. Клиент device QA: **один раз в конце UI-волны** (не каждый мелкий `C-*`); волна из **одного** UI-тикета — смотреть. Non-UI — отчёт Тестера, без Mobile Next / скринов.
+6. Перед стартом тикета: если файлы уже есть — **дожать статус/тесты**, не писать вторую реализацию.
+
+Подробности: `.cursor/rules/wave-throughput.mdc`.
+
+## Закрытие замечаний Клиента
+
+Тикет закрыт только если есть фикс + guard (`memory/tickets/.../guards.md` и regression-guards client-review). Без guard — не закрыто.
+
+## Деплой / магазины
+
+Localhost / эмулятор / TestFlight / Play Internal — после зелёных проверок, для приёмки Клиентом.
+Prod (App Store / Google Play production) — только после вердикта Клиента без P0/P1 **и** явного согласования пользователя.
+
+Автономно: не проси пользователя пересобирать «вручную ради галочки», если можешь собрать сам.
+
+## Цикл
+
+0. **Тренер** (каждый ход, до инженеров): план хода → gap skills/rules/MCP/plugins → лог `memory/team-trainer/`. После жалобы пользователя — сначала Тренер, потом Фиксер. UI redesign / Stitch → skill `cyber-acoustic-motion-kit` + путь `tasks/midnight_dancer_ui_redesign/`. `🏋️ **ТРЕНЕР:**`
+1. Архитектор: spec + `chain.md` до кода. `🏗️ **АРХИТЕКТОР:**`
+2. Исполнители строго по chain:
+   - **KMP Shared** — commonMain, Decompose, Ktor, Room KMP, DataStore, Koin
+   - **Android Compose** / **iOS SwiftUI** / **Motion Premium** / **Platform Ops**
+   - **Voice TTS** — Piper/Sherpa голоса
+   - **Хакер** → **Гуард** — security wave (без exploit PoC)
+   - Кодер — только если chain явно зовёт
+3. Тестировщик: unit/UI/perf/голос/guards. `🧪 **ТЕСТИРОВЩИК:**`
+4. Фиксер: до зелёного; архитектуру не менять. `🔧 **ФИКСЕР:**`
+5. Служебный отчёт команды (не финал пользователю).
+6. Деплоер: APK local (`dist/`); **IPA через Codemagic** (`ios-build/kmp/CODEMAGIC.md` → `ios-build/artifacts/current/`). `🚀 **ДЕПЛОЕР:**`
+7. Клиент: приёмка. `🧑‍💼 **КЛИЕНТ:**`
+
+Не параллелить overlapping paths из chain. Не подменять Android+iOS одним «монолитным кодером» без chain.
+UI по ссылке пользователя → skill `ui-block-from-link` (Android-first).

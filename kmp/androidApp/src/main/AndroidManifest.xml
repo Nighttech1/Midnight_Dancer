@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- C-30: VibrationEffect.Composition for spring-settle haptics -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:name=".MidnightDancerApp"
         android:allowBackup="false"

@@ -23,6 +23,13 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":core:domain"))
             implementation(project(":core:designsystem"))
+            api(project(":feature:splash:logic"))
+            api(project(":feature:elements:logic"))
+            api(project(":feature:music:logic"))
+            api(project(":feature:choreography:logic"))
+            api(project(":feature:trainer:logic"))
+            api(project(":feature:exchange:logic"))
+            api(project(":feature:settings:logic"))
             api(libs.decompose)
             api(libs.essenty.lifecycle)
             implementation(libs.essenty.state.keeper)

@@ -1,8 +1,11 @@
 import SwiftUI
-import Shared
 
 @main
 struct MidnightDancerApp: App {
+    init() {
+        MdHaptics.prepare()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

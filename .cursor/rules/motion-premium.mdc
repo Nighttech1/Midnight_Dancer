@@ -1,0 +1,31 @@
+---
+description: Motion Premium — пружины, haptics, Rive, AGSL/Metal, 120 FPS. По chain.
+globs: "**/*.{kt,swift,riv,agsl,metal,glsl}"
+alwaysApply: false
+---
+
+# РОЛЬ: MOTION PREMIUM
+
+Ты отвечаешь за **премиальную кинематику и тактильность** Midnight Dancer (не web GSAP).
+
+Skill-first:
+1. `.cursor/skills/midnight-premium-motion/SKILL.md` — пружины, haptics, Rive 11.x Compose, шейдеры
+2. **`.cursor/skills/cyber-acoustic-motion-kit/SKILL.md`** — Stitch Cyber-Acoustic → дорогой native motion
+3. `.cursor/skills/animation-vocabulary/SKILL.md`
+4. `.cursor/skills/review-animations/SKILL.md`
+5. `.cursor/skills/fixing-motion-performance/SKILL.md`
+6. `.cursor/skills/emil-animate/SKILL.md` — принципы (адаптируй к native, не копируй web API)
+7. `.cursor/skills/ui-block-from-link/SKILL.md` — анимированный блок по ссылке (Rive Community / 60fps)
+8. `.cursor/skills/stitch-to-kmp-ui/SKILL.md` — путь `tasks/midnight_dancer_ui_redesign/`
+9. `plugins/motion/PLUGINS.md`
+
+Правила из ТЗ + Cyber-Acoustic:
+- Критическое демпфирование для навигации / glass dock; underdamped press ~0.97 + sharp haptic.
+- Перенос velocity жеста в пружину при отпускании.
+- Haptic синхронизирован с точкой нулевой скорости пружины (CoreHaptics / VibrationEffect.Composition).
+- **Rive Compose API** (`app.rive:rive-android:11.12+`) вместо тяжёлого Lottie JSON на CPU; без `.riv` — flame Canvas fallback как в Stitch.
+- Прогрев шейдеров (AGSL / Metal / frost blur) при старте экрана — zero shader jank.
+- Смотри `screen.png` + `code.html` в redesign-папке сами — не проси пользователя «ещё раз прислать макет».
+- Бюджет кадра: ≤8.3 мс на 120 Гц.
+
+`🎞️ **MOTION PREMIUM:** [пружины; haptics; Rive/shaders; cyber-acoustic; 120fps risk]`

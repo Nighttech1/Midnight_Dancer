@@ -1,44 +1,33 @@
-# Правила и под-агенты (оркестратор)
+# Правила и под-агенты — Midnight Dancer
 
-## Жёсткий алгоритм: «всегда смотреть оркестратор»
+## Алгоритм
 
-Перед выполнением задачи делай **строго по шагам**:
+1. Прочитать `.cursor/rules/orchestrator.mdc` или `node scripts/ensure-orchestrator.js`
+2. Прочитать `.cursor/rules/team-org.mdc` и `.cursor/registry/agents.md`
+3. Определить роли по задаче
+4. Прочитать `.mdc` выбранных ролей + их skills
+5. Действовать по `chain.md` (Архитектор пишет chain до кода)
 
-1. **Прочитать оркестратор**  
-   Открыть и прочитать файл `.cursor/rules/orchestrator.mdc`.  
-   Либо запустить скрипт (выведет содержимое и проверит роли):
-   - `node scripts/ensure-orchestrator.js`
-   - или `.\scripts\ensure-orchestrator.ps1` (PowerShell из корня воркспейса).
+## Роли
 
-2. **Определить роли**  
-   По задаче решить, какие роли нужны: architect, coder, tester, fixer (см. таблицу в orchestrator.mdc).
+| Файл | Роль |
+|------|------|
+| `orchestrator.mdc` | Оркестратор (always) |
+| `team-org.mdc` | Организация команды (always) |
+| `client.mdc` | Клиент / приёмка (always) |
+| `architect.mdc` | Архитектор |
+| `kmp-shared.mdc` | Общее ядро KMP |
+| `android-compose.mdc` | Android UI |
+| `ios-swiftui.mdc` | iOS UI |
+| `motion-premium.mdc` | Пружины / haptics / Rive / шейдеры |
+| **`voice-tts.mdc`** | **Piper / Sherpa голоса** |
+| `platform-ops.mdc` | Обновления / пуши / сторы |
+| `hacker.mdc` | Security audit (свой код) |
+| `guard.mdc` | Hardening после Хакера |
+| `coder.mdc` | Мелкие правки |
+| `tester.mdc` | Тесты |
+| `fixer.mdc` | Фиксы |
+| `deployer.mdc` | Сборки / релиз |
+| `livekit-token-in-chat.mdc` | Legacy LiveKit helper (если ещё нужен) |
 
-3. **Прочитать правила выбранных ролей**  
-   Открыть соответствующие `.mdc` в `.cursor/rules/`:  
-   `architect.mdc`, `coder.mdc`, `tester.mdc`, `fixer.mdc`.
-
-4. **Действовать по ролям**  
-   Не смешивать: сначала архитектура (если нужна), потом код, потом проверка, исправления — через fixer.
-
-5. **Не пропускать шаг 1**  
-   Даже при «мелкой» задаче сначала прочитать оркестратор (или вывод скрипта).
-
-## Скрипт ensure-orchestrator
-
-| Команда | Действие |
-|--------|----------|
-| `node scripts/ensure-orchestrator.js` | Вывести оркестратор + проверить наличие всех ролей |
-| `node scripts/ensure-orchestrator.js --print-only` | Только вывести содержимое orchestrator.mdc |
-| `node scripts/ensure-orchestrator.js --check-only` | Только проверить, что все файлы ролей на месте |
-
-Запуск из любой подпапки воркспейса: скрипт ищет корень по наличию `.cursor/rules`.
-
-## Файлы в этой папке
-
-| Файл | Назначение |
-|------|------------|
-| `orchestrator.mdc` | Главное правило (alwaysApply). Читать первым. |
-| `architect.mdc` | Роль: архитектура, дизайн, план для кодера |
-| `coder.mdc` | Роль: написание и правка кода |
-| `tester.mdc` | Роль: сборка, чеклисты, баг-репорты |
-| `fixer.mdc` | Роль: исправление багов по отчётам |
+Цикл: `docs/CLIENT_ORCHESTRATOR_CYCLE.md` (там же — когда звать Voice TTS). Старт: файл `promts`.

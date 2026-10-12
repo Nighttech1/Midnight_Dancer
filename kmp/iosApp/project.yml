@@ -1,7 +1,8 @@
-# Midnight Dancer iOS — XcodeGen project (C-07 / C-09)
+# Midnight Dancer iOS — XcodeGen project (C-07 / C-09 / C-23 / C-29 Stage 4 shells)
 # scripts/build-kmp-ios-ipa.sh links :shared:linkDebugFrameworkIosArm64 and syncs
 # Shared.framework into shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)/
 # (also searchable under shared/build/bin/iosArm64/debugFramework).
+# Sources under iosApp/ include Bridge/ (Shared import) + Features/ (+ Components/, pure SwiftUI).
 
 name: MidnightDancerIos
 options:

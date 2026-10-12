@@ -1,0 +1,63 @@
+{
+  "danceStyles": [
+    {
+      "id": "style-salsa",
+      "name": "Salsa",
+      "currentMoveId": "move-basic",
+      "moves": [
+        {
+          "id": "move-basic",
+          "name": "Basic",
+          "level": "beginner",
+          "description": "step",
+          "videoUri": "basic.mp4",
+          "masteryPercent": 40
+        },
+        {
+          "id": "move-turn",
+          "name": "Turn",
+          "level": "intermediate",
+          "description": null,
+          "videoUri": "turn.mp4",
+          "masteryPercent": 10
+        }
+      ]
+    }
+  ],
+  "songs": [
+    {
+      "id": "song-1",
+      "title": "Midnight Track",
+      "danceStyle": "Salsa",
+      "level": "beginner",
+      "fileName": "midnight.mp3",
+      "duration": 180.5,
+      "sizeBytes": 2048,
+      "playbackSpeed": 1.0
+    }
+  ],
+  "choreographies": [
+    {
+      "id": "ch-1",
+      "name": "Routine A",
+      "songId": "song-1",
+      "styleId": "style-salsa",
+      "timeline": {
+        "0.0": "style-salsa::move-basic",
+        "1.5": "move-turn"
+      },
+      "startTime": 0.0,
+      "endTime": 60.0
+    }
+  ],
+  "settings": {
+    "ui_language": "ru",
+    "legalTermsAccepted": true,
+    "last_import_manifest": {
+      "wholeStyleIds": [],
+      "moveIds": ["move-basic"],
+      "songIds": ["song-1"],
+      "choreographyIds": ["ch-1"]
+    }
+  }
+}

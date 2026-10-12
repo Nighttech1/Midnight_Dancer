@@ -1,6 +1,6 @@
-name: KMP iOS Stage 1 (unsigned IPA)
+name: KMP iOS Stage 4 (unsigned IPA)
 
-# Produces MidnightDancer-stage1.ipa for Mobile Next Cloud re-sign + install.
+# Produces MidnightDancer-stage4.ipa for Mobile Next Cloud re-sign + install.
 # Windows cannot build Kotlin/Native iOS — this job must run on macos-latest.
 
 on:
@@ -19,6 +19,7 @@ on:
       - "kmp/**"
       - ".github/workflows/kmp-ios.yml"
       - "scripts/build-kmp-ios-ipa.sh"
+      - "ios-build/**"
 
 concurrency:
   group: kmp-ios-${{ github.ref }}
@@ -63,8 +64,8 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MidnightDancer-stage1-ipa
-          path: dist/MidnightDancer-stage1.ipa
+          name: MidnightDancer-stage4-ipa
+          path: ios-build/artifacts/current/MidnightDancer-stage4.ipa
           if-no-files-found: error
           retention-days: 14
 

@@ -1,0 +1,51 @@
+---
+description: Организация команды Midnight Dancer — KMP + нативный UI + цикл Клиент↔Оркестратор.
+globs: "*"
+alwaysApply: true
+---
+
+# Организация команды
+
+Карта: `docs/TEAM_ARCHITECTURE.md`.
+Реестр: `.cursor/registry/agents.md`.
+Цикл: `docs/CLIENT_ORCHESTRATOR_CYCLE.md` + `.cursor/prompts/start-client-orchestrator-cycle.md`.
+Промты запуска: файл `promts`.
+Скорость волн: `.cursor/rules/wave-throughput.mdc` + `.cursor/skills/wave-throughput/SKILL.md`.
+База знаний: `knowledge/` (универсальная инженерия + `area_midnight_dancer`).
+
+## Два контура
+
+1. Инженерный: Оркестратор → **Тренер** → Архитектор → специалисты → Тестировщик → Фиксер → Деплоер
+2. Приёмка: Клиент (снаружи команды, финальный вердикт пользователю)
+
+## Базовая команда Оркестратора
+
+Клиент, Оркестратор, **Тренер**, Архитектор, KMP Shared, Android Compose, iOS SwiftUI, Motion Premium, Voice TTS, Platform Ops, Хакер, Гуард, Кодер, Тестировщик, Фиксер, Деплоер.
+
+**Тренер** — каждый ход: смотрит план → грейдит skills/rules/MCP/plugins → только потом инженеры. После жалобы пользователя — сначала закрывает gap знаний, потом правка.
+
+Профиль по умолчанию: **Midnight Dancer Re-Architecture** — KMP Core + Jetpack Compose + SwiftUI + SKIE + Decompose (см. ТЗ).
+
+## Skill-first
+
+Каждая роль читает:
+1. своё `.cursor/rules/<role>.mdc`
+2. `SKILL.md` из `.cursor/skills/` / `.agents/skills/`
+3. плагины `plugins/<role>/` если есть
+4. оболочку `knowledge/engineering/roles/<role>.md` при наличии
+5. `knowledge/area_midnight_dancer/`
+6. толстые references внешних skills — только если скилла мало
+
+Не открывать все PDF/sources «на всякий случай».
+
+## Расширяемость
+
+Чеклист нового агента:
+1. `.cursor/rules/<role>.mdc`
+2. `.cursor/skills/<name>/SKILL.md` (или запись в registry на внешний skill)
+3. запись в `.cursor/registry/agents.md`
+4. оболочка `knowledge/engineering/roles/<role>.md` при необходимости
+
+## Журнал memory/
+
+Шаблоны: `memory/_templates/`. Инженеров звать только при `chain.md`. Закрытие `C-*` только с guard. Папки тикетов после done не удалять.

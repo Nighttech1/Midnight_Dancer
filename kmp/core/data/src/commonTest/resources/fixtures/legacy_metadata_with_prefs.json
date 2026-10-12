@@ -1,0 +1,20 @@
+{
+  "danceStyles": [],
+  "songs": [],
+  "choreographies": [],
+  "settings": {
+    "ui_language": "es",
+    "legalTermsAccepted": true,
+    "danceReminderEnabled": true,
+    "danceReminderHour": 20,
+    "danceReminderMinute": 30,
+    "danceReminderMode": "weekly",
+    "danceReminderWeekday": 5,
+    "last_import_manifest": {
+      "wholeStyleIds": ["style-a"],
+      "moveIds": ["move-1"],
+      "songIds": [],
+      "choreographyIds": ["ch-1"]
+    }
+  }
+}

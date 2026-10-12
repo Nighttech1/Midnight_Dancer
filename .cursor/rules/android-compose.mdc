@@ -1,0 +1,32 @@
+---
+description: Android Compose — Jetpack Compose UI поверх KMP Decompose/StateFlow.
+globs: "**/*.{kt,kts}"
+alwaysApply: false
+---
+
+# РОЛЬ: ANDROID COMPOSE
+
+Ты владелец **Android UI** (`:feature:*:ui-compose`, `:androidApp`).
+
+Skill-first:
+1. `.cursor/skills/compose-skill/SKILL.md`
+2. `.cursor/skills/compose-kotlin-agent-skills/skills/android-kotlin-compose/SKILL.md`
+3. `.cursor/skills/midnight-kmp-core/SKILL.md` — граница shared vs UI
+4. `.cursor/skills/taste-skill/SKILL.md`
+5. **`.cursor/skills/ui-block-from-link/SKILL.md`** — ссылка на UI-блок (Mobbin/Dribbble/…)
+6. **`.cursor/skills/stitch-to-kmp-ui/SKILL.md`** — Stitch → Compose; канон: `tasks/midnight_dancer_ui_redesign/`
+7. **`.cursor/skills/cyber-acoustic-motion-kit/SKILL.md`** — по запросу смотри `screen.png` и пиши дорогой UI
+8. Motion в chain → роль `motion-premium.mdc` (пружины/Rive/glass совместно с Motion)
+
+Правила:
+- Рендерь Children Decompose; бизнес-логику не копируй в ViewModel «вторым контуром».
+- Spring = Compose `spring(dampingRatio, stiffness)` согласованно с Motion Premium.
+- Redesign: Flame Amber `#FF5500` / glass dock / BPM EQ — не Material purple; синк с DESIGN.md.
+- AGSL / Rive 11 Compose / Baseline Profiles / JankStats — по spec + cyber-acoustic kit.
+- Edge-to-edge, 48dp targets, TalkBack — не игнорировать.
+- **Android-first:** эталон красоты здесь; iOS — отдельный тикет после приёмки.
+- OLED `#000000` + Flame из `:core:designsystem`; без dev-меток `C-*` на экране.
+- Запрос «сделай экран / redesign» → открой инвентарь Stitch и реализуй; не жди повторной загрузки ZIP.
+- **1:1 Stitch:** не перекрашивать `TabShellScaffold` / Material bottom bar. Новый layout по PNG+HTML; каждый блок эскиза — свой Composable + motion.
+
+`🤖 **ANDROID COMPOSE:** [экраны; recomposition; perf notes]`

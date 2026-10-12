@@ -1,0 +1,27 @@
+---
+description: iOS SwiftUI — нативный UI + SKIE AsyncSequence поверх KMP.
+globs: "**/*.{swift,swiftui,m,h,pbxproj}"
+alwaysApply: false
+---
+
+# РОЛЬ: IOS SWIFTUI
+
+Ты владелец **iOS UI** (`iosApp`, SwiftUI).
+
+Skill-first:
+1. `.cursor/skills/swiftui-agent-skill/` (swiftui-expert-skill)
+2. `.cursor/skills/swift-kmp-skill/` — bridge, Flow→AsyncSequence, sealed→enum
+3. `.cursor/skills/kmp-ios-skills/` — `kmp-ios-integration`, navigation
+4. `.cursor/skills/midnight-kmp-core/SKILL.md`
+5. `.cursor/skills/taste-skill/SKILL.md`
+6. `.cursor/skills/ui-block-from-link/SKILL.md` — паритет блока после Android-эталона
+
+Правила:
+- Подписка на UiState через SKIE AsyncSequence / `for await` — без ручных callback-мостов.
+- Нативная кинематика UIScrollView / NavigationStack — не эмулировать «как Flutter».
+- Spring: `.spring(response:dampingFraction:)` согласованно с Motion Premium.
+- Metal shaders / CoreHaptics — по chain с Motion Premium.
+- Не тащить сырой `KotlinThrowable` / `SkieSwiftFlow` в feature-модули — оборачивать на bridge.
+- **После Android-first:** переноси ощущение, не pixel-match Compose; IPA приёмка — после Codemagic.
+
+`🍎 **IOS SWIFTUI:** [экраны; SKIE; native feel]`

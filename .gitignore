@@ -34,11 +34,20 @@ kmp/iosApp/Frameworks/
 kmp/iosApp/build/
 kmp/**/build/
 kmp/.gradle/
+kmp/.gradle-home/
+kmp/.kotlin/
 kmp/local.properties
+kmp-build.log
+kmp/**/*-test-out.txt
+.cursor/debug-*.log
 
-# KMP unsigned IPA staging (scripts/build-kmp-ios-ipa.sh)
+# Android APK drop + legacy staging
 dist/
 dist/ipa-staging/
+
+# iOS IPA home (scripts/build-kmp-ios-ipa.sh → ios-build/artifacts/current/)
+ios-build/artifacts/current/*.ipa
+ios-build/artifacts/.staging/
 
 # Сгенерированные файлы
 *.g.dart

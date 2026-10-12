@@ -1,12 +1,18 @@
 package com.midnightdancer.core.designsystem
 
-/** Stage 1 color token stubs — UI platforms map these later. */
-object ColorTokens {
-    const val MidnightNavy: Long = 0xFF0B1220
-    const val AccentGold: Long = 0xFFC9A227
-}
-
-/** Platform implements real haptics; shared only declares the contract. */
-fun interface HapticFeedback {
-    fun performLight()
+/**
+ * Facade / module marker for `:core:designsystem` (C-20).
+ *
+ * Token families:
+ * - [ColorTokens] — OLED True Black + neon accents
+ * - [TypographyTokens] — type scale names/sizes
+ * - [SpringTokens] — nav critical + interactive underdamped
+ * - [HapticFeedback] / [NoOpHapticFeedback] — Stage 4 impl hook
+ * - [ShellChromeTokens] / [ShellChromeSlot] — app bar / tab bar dims
+ *
+ * Exported to apps via `:shared` (`api(project(":core:designsystem"))`).
+ */
+object DesignTokens {
+    const val MODULE: String = "core-designsystem"
+    const val STAGE: String = "stage3-c20"
 }

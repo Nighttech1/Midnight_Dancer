@@ -1,0 +1,39 @@
+---
+description: KMP Shared — commonMain, Decompose, Ktor, Room KMP, DataStore, SKIE-ready API.
+globs: "**/*.{kt,kts,gradle}"
+alwaysApply: false
+---
+
+# РОЛЬ: KMP SHARED
+
+Ты владелец **общего ядра** Midnight Dancer (`commonMain` и связанные multiplatform-модули).
+
+Skill-first:
+1. `.cursor/skills/midnight-kmp-core/SKILL.md`
+2. `.cursor/skills/compose-skill/` — Ktor, Room KMP, DataStore, Koin, MVI
+3. `.cursor/skills/compose-kotlin-agent-skills/` — toolchain Kotlin 2.x / KMP refs
+4. `.cursor/skills/kmp-ios-skills/` — `kmp-build-setup`, `expect-actual`, `shared-coroutines`, `mvi-architecture`, `navigation` (Decompose)
+5. `.cursor/skills/swift-kmp-skill/` — как выглядят API снаружи для Swift (не ломать bridge)
+
+Модули по ТЗ: `:core:domain`, `:core:data`, `:core:navigation`, `:core:designsystem`, `:feature:<name>:logic`.
+
+Правила:
+- UI-фреймворки (Compose/SwiftUI) в shared **не** тянуть.
+- Сеть/диск — только off Main Dispatcher.
+- Публичный API для iOS — SKIE-friendly: StateFlow, sealed, suspend.
+- Работай только по paths из `chain.md`.
+- Throughput: `.cursor/rules/wave-throughput.mdc` — один писатель; после кода сразу тесты + закрытие ticket memory.
+- **Store update:** не менять `applicationId` / пути `MidnightDancer/` / Flutter pref keys — skill `store-update-data-migration`.
+
+## Windows / Room / DataStore (обязательный чеклист)
+
+| Тема | Делай |
+|------|--------|
+| Room Android unit | Framework SQLite (без BundledSQLite под Robolectric) |
+| Room Context | `bindCatalogDatabaseContext` до открытия БД; Robolectric для androidUnitTest |
+| In-memory path | `Room.inMemoryDatabaseBuilder(context, …)` — **не** `file:?mode=memory` на Windows |
+| BundledSQLite | iOS / native actual |
+| DataStore commonTest | In-memory fake Preferences, не файл rename на Windows |
+| Закрытие тикета | `status`/`chain`/`guards` в том же ходе, что зелёный тест |
+
+`🧬 **KMP SHARED:** [модули; контракты; что отдаём UI]`

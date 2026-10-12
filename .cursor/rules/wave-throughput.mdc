@@ -1,0 +1,46 @@
+---
+description: Ускорение волн — без фоновых блокировок, один писатель, закрытие тикета в одном ходе.
+globs: "*"
+alwaysApply: true
+---
+
+# WAVE THROUGHPUT — ускорение волн (2026-09-24)
+
+Цель: закрывать `C-*` за минуты, не часы. Уроки Stage 2 (фоновые субагенты, file lock Gradle, Room+Robolectric).
+
+## Оркестратор — жёстко
+
+1. **Не запускай длинный Shared/Tester/Fixer в фоне**, если следующий шаг волны от него зависит. Фон только для независимой разведки (readme/поиск). Иначе — тот же ход / foreground Task.
+2. **Один писатель на path.** Пока `C-*` в `in_progress` на `kmp/core/data/**` (или любой path из chain) — **запрещено** второму агенту писать туда же. Параллель только при **disjoint paths** (как C-11 prefs ∥ C-12 network).
+3. **Закрытие в одном ходе после зелёного теста:** код → `gradle`/smoke → `chain.md` `[x]` → `status.md` → `guards.md` → строка в `memory/waves/W-*.md`. Не оставлять «код есть, status=open».
+4. **Не дублируй реализацию**, если файлы тикета уже появились — сначала read/merge, потом допиши статус и тесты.
+5. **Скрины Клиента:** один раз **в конце UI-волны**, не на каждый мелкий `C-*`. Исключение: волна из **одного** тикета с UI — смотреть на нём. Non-UI (data/domain) — без скринов, отчёт Тестера + guards. Mobile Next / эмулятор — только конец UI-волны или Deployer отдал билд на device QA.
+6. Пиши в чат **какая роль сейчас**. **Запрещено** писать пользователю «готов продолжить» / промежуточный Клиент, пока нет **«согласовано»**. Замечания Клиента = сразу следующая волна в этом же ходе.
+
+## Windows + Gradle hygiene
+
+При ошибках вида *cannot access / delete …jar*, *Storage … already registered*, *IC_FAILED*:
+
+1. `.\gradlew.bat --stop`
+2. При необходимости удалить `модуль/build` (не весь `~/.gradle` без нужды)
+3. Повтор с `--no-daemon` только если daemon снова ломает IC
+4. **Не** крутить один и тот же `:test` 5 раз «как есть»
+
+Команды из `kmp/`:
+
+```powershell
+.\gradlew.bat --stop
+.\gradlew.bat :core:data:testDebugUnitTest --tests "…"
+```
+
+## Room / DataStore на Windows (кратко)
+
+- Android unit-тесты Room: **framework SQLite** (не BundledSQLite под Robolectric — UnsatisfiedLinkError).
+- Перед Room на Android: `bindCatalogDatabaseContext` / Application / Robolectric.
+- In-memory: `Room.inMemoryDatabaseBuilder(context, …)` — **не** `file:…?mode=memory` (ломает Windows Path).
+- BundledSQLite — iOS / native targets.
+- DataStore commonTest: предпочитать in-memory fake, не файл на Windows rename flakes.
+
+## Что не ускоряет волну
+
+Новые MCP / Hugging Face skills «для скорости», лишние сканеры, allocate iPhone до IPA — **не** ставить ради throughput.

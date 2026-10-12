@@ -1,30 +1,34 @@
-# Midnight Dancer iOS (KMP Stage 1)
+# Midnight Dancer iOS (KMP) — feature screens
 
-## Prefer CI / script
+SwiftUI tabs bind to shared `RootComponent` / feature components via SKIE + Decompose.  
+**No Compose Multiplatform.** Bridge-only Shared import (`RootBridge`, helpers).
 
-Unsigned IPA for Mobile Next Cloud:
+## Screens (W-2026-10-12)
+
+| Tab | SwiftUI |
+|-----|---------|
+| Splash | `SplashShellView` + Continue when bootReady |
+| Elements | `ElementsAtelierView` — style split, LazyVGrid |
+| Music | `MotionDeckView` + `MusicPulseVisualizer` |
+| Choreography | `KineticVaultView` → open editor |
+| Trainer | `TrainerHubView` + speak + Dance |
+| Exchange | `SyncDeckView` — 500 МБ, ▼ half-width |
+| Settings | `SettingsScreenView` — style delete warn |
+| Dock | `CyberAcousticDockView` |
+
+## Build IPA
+
+См. **`ios-build/`** (карта в `ios-build/README.md`):
+
+- Codemagic workflow **`ios-ipa-kmp`**
+- GHA `.github/workflows/kmp-ios.yml`
+- Mac: `./scripts/build-kmp-ios-ipa.sh iphoneos` → `ios-build/artifacts/current/`
+
+Windows: исходники только; Xcode/link iOS framework — на Mac/CI.
+
+## Compile on Mac
 
 ```bash
-# From repo root on a Mac (or via GitHub Actions macos-latest):
-./scripts/build-kmp-ios-ipa.sh iphoneos
-# → dist/MidnightDancer-stage1.ipa
+cd kmp && ./gradlew :shared:linkDebugFrameworkIosArm64
+cd iosApp && xcodegen generate && open MidnightDancerIos.xcodeproj
 ```
-
-Workflow: `.github/workflows/kmp-ios.yml`  
-Runbook: `docs/KMP_IOS_CLOUD_RUNBOOK.md`
-
-## Manual (Xcode)
-
-```bash
-cd kmp
-./gradlew :shared:linkDebugFrameworkIosArm64   # device
-# or: :shared:linkDebugFrameworkIosSimulatorArm64
-
-cd iosApp
-brew install xcodegen   # once
-xcodegen generate
-open MidnightDancerIos.xcodeproj
-```
-
-`FRAMEWORK_SEARCH_PATHS` points at `../shared/build/bin/iosArm64/debugFramework` (and simulator/release variants).  
-Shared is a **static** Kotlin/Native framework (`baseName = Shared`) — linked via `-framework Shared`, not embedded as a separate dynamic binary.
