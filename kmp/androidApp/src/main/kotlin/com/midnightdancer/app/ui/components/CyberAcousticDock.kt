@@ -100,7 +100,7 @@ private fun NavTab.dockLabel(): String =
         NavTab.MUSIC -> "Музыка"
         NavTab.CHOREOGRAPHY -> "Связки"
         NavTab.TRAINER -> "Тренинг"
-        NavTab.EXCHANGE -> "Обмен"
+        NavTab.EXCHANGE -> "Сеты"
     }
 
 private fun NavTab.dockIcon(): ImageVector =

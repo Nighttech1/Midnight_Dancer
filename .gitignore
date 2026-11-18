@@ -190,3 +190,12 @@ kmp/*.log
 kmp/*.log.err
 kmp/build-*.txt
 kmp/emulator-start.*
+
+# Private local QA evidence and credentials: never publish
+**/device-private/
+*.p12
+*.pfx
+*.mobileprovision
+**/*password*BACKUP*
+**/*password*backup*
+**/AuthKey_*

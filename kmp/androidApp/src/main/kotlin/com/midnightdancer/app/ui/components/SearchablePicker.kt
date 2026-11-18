@@ -45,10 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnightdancer.app.ui.elements.AtelierColors
 import com.midnightdancer.app.ui.motion.interactiveSpringPress
-import com.midnightdancer.app.ui.motion.rememberMdHaptics
 import com.midnightdancer.app.ui.motion.rememberSoftGridFlingBehavior
 import com.midnightdancer.app.ui.theme.MdFonts
 import com.midnightdancer.core.designsystem.HapticEvent
+import com.midnightdancer.core.designsystem.NoOpHapticFeedback
 
 private val PanelShape = RoundedCornerShape(12.dp)
 private val Hairline = Color.White.copy(alpha = 0.12f)
@@ -67,17 +67,22 @@ fun SearchablePicker(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     panelMaxHeight: Dp = 200.dp,
+    searchHint: String = "Поиск…",
+    /** C-258: sticky row above search (e.g. «Создать новый стиль из сета»). */
+    pinnedAboveSearch: String? = null,
 ) {
-    val haptics = rememberMdHaptics()
+    // C-266: dropdown open/select must never vibrate (global).
+    val haptics = NoOpHapticFeedback
     val softFling = rememberSoftGridFlingBehavior(frictionMultiplier = 0.32f)
     var query by remember(expanded) { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
-    val filtered = remember(options, query) {
+    val filtered = remember(options, query, pinnedAboveSearch) {
         val q = query.trim()
+        val base = options.filter { it != pinnedAboveSearch }
         if (q.isEmpty()) {
-            options
+            base
         } else {
-            options.filter { it.contains(q, ignoreCase = true) }
+            base.filter { it.contains(q, ignoreCase = true) }
         }
     }
 
@@ -149,6 +154,32 @@ fun SearchablePicker(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (!pinnedAboveSearch.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(AtelierColors.Flame.copy(alpha = 0.14f))
+                            .interactiveSpringPress(
+                                pressedScale = 0.98f,
+                                hapticEvent = HapticEvent.Selection,
+                                haptics = haptics,
+                                onClick = {
+                                    onSelect(pinnedAboveSearch)
+                                    onExpandedChange(false)
+                                },
+                            )
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            text = pinnedAboveSearch,
+                            color = AtelierColors.Flame,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = MdFonts.Display,
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -161,7 +192,7 @@ fun SearchablePicker(
                 ) {
                     if (query.isEmpty()) {
                         Text(
-                            text = "Поиск по буквам…",
+                            text = searchHint,
                             color = Color.White.copy(alpha = 0.35f),
                             fontSize = 13.sp,
                             fontFamily = MdFonts.Display,

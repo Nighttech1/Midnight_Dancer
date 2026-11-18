@@ -40,7 +40,7 @@ data class SecureZipWhitelist(
         /** Full backup archives from this app. */
         val MidnightDancerFullBackup: SecureZipWhitelist =
             SecureZipWhitelist(
-                allowedExtensionsLowercase = setOf("mp4", "mov", "jpg", "mp3", "m4a", "wav"),
+                allowedExtensionsLowercase = setOf("mp4", "mov", "jpg", "mp3", "m4a", "wav", "aac", "ogg", "flac"),
                 exactFileNamesLowercase = setOf("metadata.json", "manifest.json"),
             )
     }

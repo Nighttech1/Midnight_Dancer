@@ -38,11 +38,13 @@ fun ElementsTabScreen(
 fun MusicTabScreen(
     component: MusicComponent,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
     val state by component.uiState.collectAsStateWithLifecycle()
     MotionDeckScreen(
         state = state,
         onIntent = component::onIntent,
+        onOpenSettings = onOpenSettings,
         modifier = modifier.fillMaxSize(),
     )
 }
@@ -51,15 +53,22 @@ fun MusicTabScreen(
 fun ChoreographyTabScreen(
     component: ChoreographyComponent,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
     val stack by component.stack.subscribeAsState()
 
     when (val child = stack.active.instance) {
         is ChoreographyComponent.Child.Hub -> {
             val hubState by child.component.uiState.collectAsStateWithLifecycle()
+            if (hubState.creationBlockedMessage != null) {
+                com.midnightdancer.app.access.ProOfferDialog {
+                    child.component.onIntent(com.midnightdancer.feature.choreography.logic.ChoreographyIntent.DismissAccessMessage)
+                }
+            }
             KineticVaultScreen(
                 state = hubState,
                 onIntent = child.component::onIntent,
+                onOpenSettings = onOpenSettings,
                 modifier = modifier.fillMaxSize(),
             )
         }
@@ -79,15 +88,21 @@ fun ChoreographyTabScreen(
 fun TrainerTabScreen(
     component: TrainerComponent,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
+    /** Ordinary Live retains its policy; inline part rehearsal receives tab visibility. */
+    isTabSelected: Boolean = true,
 ) {
     val stack by component.stack.subscribeAsState()
+    // C-243: do not pause/pop on tab leave or app background — Finish CTA only.
 
     when (val child = stack.active.instance) {
         is TrainerComponent.Child.Hub -> {
             val hubState by child.component.uiState.collectAsStateWithLifecycle()
             StorylineScreen(
                 state = hubState,
+                isTabSelected = isTabSelected,
                 onIntent = child.component::onIntent,
+                onOpenSettings = onOpenSettings,
                 modifier = modifier.fillMaxSize(),
             )
         }
@@ -107,11 +122,13 @@ fun TrainerTabScreen(
 fun ExchangeTabScreen(
     component: ExchangeComponent,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
     val state by component.uiState.collectAsStateWithLifecycle()
     KineticSyncDeckScreen(
         state = state,
         onIntent = component::onIntent,
+        onOpenSettings = onOpenSettings,
         modifier = modifier.fillMaxSize(),
     )
 }

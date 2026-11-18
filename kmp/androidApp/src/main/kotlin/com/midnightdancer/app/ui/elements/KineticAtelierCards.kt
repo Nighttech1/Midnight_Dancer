@@ -1,15 +1,22 @@
 package com.midnightdancer.app.ui.elements
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,23 +38,29 @@ import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import com.midnightdancer.app.ui.theme.MdFonts
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +73,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Size
 import com.midnightdancer.app.R
+import com.midnightdancer.app.ui.motion.FlameGoldWhiteShimmer
 import com.midnightdancer.app.ui.motion.interactiveSpringPress
 import com.midnightdancer.app.ui.motion.rememberMdHaptics
 import com.midnightdancer.core.designsystem.HapticEvent
@@ -69,66 +83,87 @@ import com.midnightdancer.feature.elements.logic.ElementCardKind
 private val FooterShape = RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp)
 private const val KenBurnsMs = 14_000
 private const val RadialSpinMs = 6_000
-private const val BeatPeriodMs = 468
-
 @Composable
 fun KineticElementCard(
     card: ElementCard,
     imageLoader: ImageLoader,
     bpmLabel: String,
-    isPlaying: Boolean,
-    player: androidx.media3.exoplayer.ExoPlayer,
     onPlay: () -> Unit,
     onOpen: () -> Unit,
+    onTogglePin: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = rememberMdHaptics()
+    // Pinned → Flame orange rim that springs in (slight overshoot) instead of fading linearly.
+    val borderWidth by animateDpAsState(
+        targetValue = if (card.pinned) 2.5.dp else 1.dp,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium),
+        label = "pinBorderWidth",
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (card.pinned) AtelierColors.Flame else Color.White.copy(alpha = 0.08f),
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "pinBorderColor",
+    )
 
     Box(
         modifier = modifier
             .background(AtelierColors.Glass)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(22.dp))
-            .interactiveSpringPress(
-                pressedScale = 0.97f,
-                hapticEvent = HapticEvent.LightImpact,
-                haptics = haptics,
-                onClick = onOpen,
-            ),
+            .border(borderWidth.coerceAtLeast(0.dp), borderColor, RoundedCornerShape(22.dp)),
     ) {
-        if (isPlaying) {
-            ElementInlineVideo(player = player, modifier = Modifier.fillMaxSize())
-        } else {
-            when (card.kind) {
-                ElementCardKind.VideoCover -> VideoCoverLayer(
-                    coverUrl = card.coverUrl,
-                    imageLoader = imageLoader,
-                    title = card.title,
-                )
-                ElementCardKind.Waveform -> WaveformLayer()
-                ElementCardKind.CueOverlay -> CueOverlayLayer(
-                    coverUrl = card.coverUrl,
-                    imageLoader = imageLoader,
-                    title = card.title,
-                    kenBurnsPhase = if (card.id.contains("madrid")) 0.35f else 0f,
-                )
-            }
+        when (card.kind) {
+            ElementCardKind.VideoCover -> VideoCoverLayer(
+                coverUrl = card.coverUrl,
+                imageLoader = imageLoader,
+                title = card.title,
+            )
+            ElementCardKind.Waveform -> WaveformLayer()
+            ElementCardKind.CueOverlay -> CueOverlayLayer(
+                coverUrl = card.coverUrl,
+                imageLoader = imageLoader,
+                title = card.title,
+                kenBurnsPhase = if (card.id.contains("madrid")) 0.35f else 0f,
+            )
         }
 
+        // C-200/C-211: pin must not open editor — HUD above clickable zones + consuming pin click.
         Column(modifier = Modifier.fillMaxSize()) {
             CardHud(
-                tags = card.tags.ifEmpty { listOf(card.levelLabel) },
-                kind = card.kind,
+                tag = card.tags.firstOrNull()?.takeIf { it.isNotBlank() },
                 bpmLabel = bpmLabel,
+                pinned = card.pinned,
+                onTogglePin = onTogglePin,
+                modifier = Modifier.zIndex(2f),
             )
-            Spacer(modifier = Modifier.weight(1f))
-            CenterPlay(
-                kind = card.kind,
-                title = card.title,
-                isPlaying = isPlaying,
-                onPlay = onPlay,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            CardFooter(card = card)
+            // Cover / play zone opens editor; pin stays outside this clickable.
+            // C-221: no Material ripple — white flash over video covers.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpen,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                CenterPlay(
+                    kind = card.kind,
+                    title = card.title,
+                    onPlay = onPlay,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpen,
+                    ),
+            ) {
+                CardFooter(card = card)
+            }
         }
     }
 }
@@ -141,7 +176,7 @@ private fun VideoCoverLayer(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         KenBurnsCover(coverUrl = coverUrl, imageLoader = imageLoader, title = title)
-        MotionVectorOverlay(modifier = Modifier.fillMaxSize())
+        // C-179: no animated dashed MotionVectorOverlay on element cards.
         CoverScrim()
     }
 }
@@ -211,6 +246,17 @@ private fun KenBurnsCover(
         return
     }
 
+    if (looksLikeVideoUri(coverUrl)) {
+        VideoFrameThumb(
+            uri = coverUrl,
+            title = title,
+            scale = scale,
+            tx = tx,
+            ty = ty,
+        )
+        return
+    }
+
     // Decode only card-sized cover — never full 120 MB video frames into RAM (C-122).
     AsyncImage(
         model = ImageRequest.Builder(context)
@@ -235,6 +281,52 @@ private fun KenBurnsCover(
 private fun Float.modOne(): Float {
     val m = this % 1f
     return if (m < 0f) m + 1f else m
+}
+
+private fun looksLikeVideoUri(uri: String): Boolean {
+    val lower = uri.lowercase()
+    return lower.startsWith("content:") ||
+        lower.startsWith("file:") ||
+        lower.endsWith(".mp4") ||
+        lower.endsWith(".mov") ||
+        lower.endsWith(".webm") ||
+        lower.endsWith(".mkv")
+}
+
+@Composable
+private fun VideoFrameThumb(
+    uri: String,
+    title: String,
+    scale: Float,
+    tx: Float,
+    ty: Float,
+) {
+    val context = LocalContext.current
+    // C-183: hit process cache first — remounting Elements must not re-decode.
+    val frame by produceState<Bitmap?>(initialValue = ElementThumbCache.get(uri), uri) {
+        value = ElementThumbCache.loadOrFetch(context, uri)
+    }
+    if (frame == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0C0D12)),
+        )
+        return
+    }
+    androidx.compose.foundation.Image(
+        bitmap = frame!!.asImageBitmap(),
+        contentDescription = title,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = size.width * tx
+                translationY = size.height * ty
+            },
+    )
 }
 
 @Composable
@@ -400,32 +492,25 @@ private fun CueDot(
 
 @Composable
 private fun CardHud(
-    tags: List<String>,
-    kind: ElementCardKind,
-    bpmLabel: String,
+    tag: String?,
+    @Suppress("UNUSED_PARAMETER") bpmLabel: String,
+    pinned: Boolean,
+    onTogglePin: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val beat = rememberInfiniteTransition(label = "hudBeat")
-    val pulse by beat.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(tween(BeatPeriodMs), RepeatMode.Reverse),
-        label = "hudPulse",
-    )
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // Top-left chip: only when a tag is set — empty tag shows nothing.
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.CenterStart,
         ) {
-            tags.take(1).forEach { tag ->
+            if (tag != null) {
                 val flameTag = tag.contains("Средн", ignoreCase = true)
                 Box(
                     modifier = Modifier
@@ -445,7 +530,7 @@ private fun CardHud(
                     Text(
                         text = tag.uppercase(),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MdFonts.Display,
                             fontSize = 8.sp,
                             fontWeight = FontWeight.SemiBold,
                             letterSpacing = 0.4.sp,
@@ -458,40 +543,60 @@ private fun CardHud(
                 }
             }
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        PinFlag(
+            pinned = pinned,
+            onClick = onTogglePin,
+        )
+    }
+}
+
+/** Flag / bookmark — tap pins the card to the top of the list. */
+@Composable
+private fun PinFlag(
+    pinned: Boolean,
+    onClick: () -> Unit,
+) {
+    val cd = stringResource(if (pinned) R.string.elements_unpin_cd else R.string.elements_pin_cd)
+    val pop by animateFloatAsState(
+        targetValue = if (pinned) 1.18f else 1f,
+        animationSpec = spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium),
+        label = "pinPop",
+    )
+    val fill by animateColorAsState(
+        targetValue = if (pinned) AtelierColors.Flame else Color.Black.copy(alpha = 0.50f),
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "pinFill",
+    )
+    // C-211: plain clickable consumes the tap so parent/cover never opens editor.
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = cd },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .graphicsLayer {
+                    scaleX = pop
+                    scaleY = pop
+                }
+                .clip(CircleShape)
+                .background(fill),
+            contentAlignment = Alignment.Center,
         ) {
-            if (kind is ElementCardKind.VideoCover || kind is ElementCardKind.Waveform) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .graphicsLayer {
-                            scaleX = pulse
-                            scaleY = pulse
-                        }
-                        .clip(CircleShape)
-                        .background(AtelierColors.Flame),
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.50f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Bookmark,
-                    contentDescription = null,
-                    tint = if (kind is ElementCardKind.CueOverlay) {
-                        AtelierColors.Gold
-                    } else {
-                        Color.White.copy(alpha = 0.80f)
-                    },
-                    modifier = Modifier.size(12.dp),
-                )
-            }
+            Icon(
+                imageVector = Icons.Filled.Bookmark,
+                contentDescription = null,
+                // C-161: no yellow/gold “favorite” pin — white for all kinds.
+                tint = if (pinned) Color.White else Color.White.copy(alpha = 0.80f),
+                modifier = Modifier.size(12.dp),
+            )
         }
     }
 }
@@ -500,7 +605,6 @@ private fun CardHud(
 private fun CenterPlay(
     kind: ElementCardKind,
     title: String,
-    isPlaying: Boolean,
     onPlay: () -> Unit,
 ) {
     val playCd = stringResource(R.string.elements_play)
@@ -516,16 +620,8 @@ private fun CenterPlay(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (isPlaying) {
-            GlassPlayButton(paused = true)
-        } else {
-            when (kind) {
-                ElementCardKind.VideoCover ->
-                    RadialPlaySpinner(contentDescription = "$playCd $title")
-                ElementCardKind.Waveform -> WaveformVisualizer()
-                ElementCardKind.CueOverlay -> GlassPlayButton(paused = false)
-            }
-        }
+        // C-150: one play affordance for every card kind (VideoCover / Waveform / CueOverlay).
+        GlassPlayButton(contentDescription = "$playCd $title")
     }
 }
 
@@ -588,7 +684,10 @@ private fun RadialPlaySpinner(contentDescription: String) {
 }
 
 @Composable
-private fun GlassPlayButton(paused: Boolean = false) {
+private fun GlassPlayButton(
+    paused: Boolean = false,
+    contentDescription: String = stringResource(R.string.elements_play),
+) {
     Box(
         modifier = Modifier
             .size(44.dp)
@@ -599,7 +698,7 @@ private fun GlassPlayButton(paused: Boolean = false) {
     ) {
         Icon(
             imageVector = if (paused) Icons.Filled.PlayArrow else Icons.Filled.PlayArrow,
-            contentDescription = stringResource(R.string.elements_play),
+            contentDescription = contentDescription,
             tint = Color.White,
             modifier = Modifier.size(20.dp),
         )
@@ -684,7 +783,7 @@ private fun WaveformVisualizer() {
         Text(
             text = stringResource(R.string.elements_kinetic_rhythm),
             style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = FontFamily.Monospace,
+                fontFamily = MdFonts.Display,
                 fontSize = 9.sp,
                 letterSpacing = 1.4.sp,
             ),
@@ -696,8 +795,9 @@ private fun WaveformVisualizer() {
 @Composable
 private fun CardFooter(card: ElementCard) {
     val mastered = card.masteryPercent >= 100
-    val waiting = card.masteryPercent <= 0
     val inProgress = card.masteryPercent in 1..99
+    val showProgress = card.masteryPercent > 0
+    val durationText = card.durationLabel.takeIf { it.isNotBlank() && it != "—" }.orEmpty()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -718,6 +818,7 @@ private fun CardFooter(card: ElementCard) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f, fill = false),
             ) {
                 if (mastered) {
                     Icon(
@@ -727,40 +828,37 @@ private fun CardFooter(card: ElementCard) {
                         modifier = Modifier.size(12.dp),
                     )
                 }
+                // C-193: no «ОЖИДАНИЕ ЗАПИСИ» — hide progress line until mastery > 0.
+                if (showProgress) {
+                    Text(
+                        text = stringResource(R.string.elements_mastered, card.masteryPercent),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = MdFonts.Display,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        color = when {
+                            mastered -> AtelierColors.Flame
+                            inProgress -> AtelierColors.Gold
+                            else -> Color.White.copy(alpha = 0.40f)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (durationText.isNotEmpty()) {
                 Text(
-                    text = when {
-                        mastered -> stringResource(R.string.elements_mastered, card.masteryPercent)
-                        inProgress -> stringResource(R.string.elements_in_progress, card.masteryPercent)
-                        else -> stringResource(R.string.elements_mastered, card.masteryPercent)
-                    },
+                    text = durationText,
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = MdFonts.Display,
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
                     ),
-                    color = when {
-                        mastered -> AtelierColors.Flame
-                        inProgress -> AtelierColors.Gold
-                        else -> Color.White.copy(alpha = 0.40f)
-                    },
+                    color = Color.White.copy(alpha = 0.40f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = if (waiting && card.durationLabel == "—") {
-                    stringResource(R.string.elements_awaiting_recording)
-                } else {
-                    card.durationLabel
-                },
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                ),
-                color = if (waiting && card.durationLabel == "—") {
-                    AtelierColors.Gold
-                } else {
-                    Color.White.copy(alpha = 0.40f)
-                },
-            )
         }
         Text(
             text = card.title,
@@ -779,16 +877,8 @@ private fun CardFooter(card: ElementCard) {
 
 @Composable
 private fun MasteryBar(percent: Int) {
-    val shimmer = rememberInfiniteTransition(label = "shimmer")
-    val shift by shimmer.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "sh",
-    )
+    // C-222: cyclic Flame→Gold→White morph (Reverse, ~4.5s) — no Restart snap.
+    val shift by FlameGoldWhiteShimmer.rememberShift(label = "mastery-shimmer")
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -802,17 +892,7 @@ private fun MasteryBar(percent: Int) {
                     .fillMaxWidth(percent / 100f)
                     .height(6.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                AtelierColors.Flame,
-                                AtelierColors.Gold,
-                                AtelierColors.Flame,
-                            ),
-                            startX = -200f + 400f * shift,
-                            endX = 200f + 400f * shift,
-                        ),
-                    ),
+                    .background(FlameGoldWhiteShimmer.horizontalFillBrush(shift)),
             )
         }
     }

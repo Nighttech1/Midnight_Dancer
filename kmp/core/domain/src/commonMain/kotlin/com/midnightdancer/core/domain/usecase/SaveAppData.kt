@@ -17,4 +17,18 @@ interface SaveAppData {
     suspend fun upsertStyle(style: DanceStyle)
 
     suspend fun upsertChoreography(choreography: Choreography)
+
+    /**
+     * Ensures a `dance_styles` row exists for FK when upserting moves.
+     * Does **not** delete existing moves (unlike [upsertStyle]).
+     */
+    suspend fun ensureDanceStyle(
+        id: String,
+        name: String,
+        currentMoveId: String? = null,
+    )
+
+    suspend fun deleteMove(id: String)
+
+    suspend fun deleteSong(id: String)
 }

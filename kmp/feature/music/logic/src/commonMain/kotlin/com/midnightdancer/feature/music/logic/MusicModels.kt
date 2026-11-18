@@ -25,6 +25,8 @@ data class MusicTrack(
     val positionLabel: String = "00:00",
     /** Base listening speed 0.4–2.0 — persists with the track everywhere. */
     val basePlaybackSpeed: Double = 1.0,
+    /** Content URI of picked audio file (Android SAF). */
+    val mediaUri: String? = null,
 )
 
 enum class MusicSortMode {
@@ -33,18 +35,24 @@ enum class MusicSortMode {
 }
 
 data class MusicUiState(
+    val saving: Boolean = false,
+    val operationError: String? = null,
     val title: String = "Музыка",
     val subtitle: String = "",
     val tracks: List<MusicTrack> = DEFAULT_TRACKS,
     val selectedStyle: String = "Все стили",
-    val selectedLevel: String = "Все теги",
+    val selectedLevel: String = "Все",
     val activeChip: String? = null,
     val searchQuery: String = "",
     val sortMode: MusicSortMode = MusicSortMode.ByTag,
     val editingTrackId: String? = null,
+    /** C-152: stays set after Stop so glow + scrubber remain until another track / delete. */
+    val selectedTrackId: String? = null,
     val tagCatalog: List<String> = ElementCategoryConfig.DEFAULT_NAMES,
     val styleCatalog: List<String> = MOCK_STYLE_CATALOG,
+    val styleNamesById: Map<String, String> = emptyMap(),
 ) {
+    fun displayStyle(value: String): String = styleNamesById[value] ?: value
     /** Legacy alias for smoke tests / shell lists. */
     val placeholderTracks: List<String>
         get() = tracks.map { it.title }
@@ -54,6 +62,9 @@ data class MusicUiState(
 
     val libraryCount: Int
         get() = tracks.size
+
+    val selectedTrack: MusicTrack?
+        get() = tracks.firstOrNull { it.id == selectedTrackId }
 
     val editingTrack: MusicTrack?
         get() = tracks.firstOrNull { it.id == editingTrackId }
@@ -72,6 +83,8 @@ sealed interface MusicIntent {
     data object RefreshPlaceholders : MusicIntent
     data class SelectTrack(val id: String) : MusicIntent
     data class StopTrack(val id: String) : MusicIntent
+    /** Playback position 0..1 from the player ticker / scrubber (C-132). */
+    data class SeekTrack(val id: String, val progress: Float) : MusicIntent
     data class SetStyleFilter(val style: String) : MusicIntent
     data class SetLevelFilter(val level: String) : MusicIntent
     data class SetChip(val chip: String?) : MusicIntent
@@ -79,11 +92,17 @@ sealed interface MusicIntent {
     data class EditTrack(val id: String) : MusicIntent
     /** Creates a draft track and opens TrackEditDialog (replaces «Стиль и тег»). */
     data object BeginUpload : MusicIntent
+    /** Android file picker result: draft track named from the file; style/tags stay blank. */
+    data class AddPickedTrack(val title: String, val mediaUri: String) : MusicIntent
+    /** Real duration from ExoPlayer after metadata is known. */
+    data class UpdateTrackDuration(val id: String, val durationMs: Long) : MusicIntent
     data object CloseEdit : MusicIntent
     data class SetSearchQuery(val query: String) : MusicIntent
     data class SetSortMode(val mode: MusicSortMode) : MusicIntent
     data class SaveTrackEdit(
         val id: String,
+        /** Display name — editable in TrackEditDialog (C-180). */
+        val title: String,
         val style: String,
         val tags: List<String>,
         val basePlaybackSpeed: Double,
@@ -102,7 +121,8 @@ internal fun visibleMusicTracks(
         val styleOk =
             selectedStyle == "Все стили" || track.style.equals(selectedStyle, ignoreCase = true)
         val tagOk =
-            selectedTag == "Все теги" ||
+            selectedTag.equals("Все", ignoreCase = true) ||
+                selectedTag.equals("Все теги", ignoreCase = true) ||
                 track.tags.any { it.equals(selectedTag, ignoreCase = true) } ||
                 track.level.equals(selectedTag, ignoreCase = true)
         val searchOk =
@@ -195,25 +215,4 @@ fun buildEdgeStressTracks(count: Int): List<MusicTrack> {
     }
 }
 
-internal val DEFAULT_TRACKS: List<MusicTrack> = listOf(
-    track(
-        id = "t1",
-        title = "Charles Luis - Ocasión",
-        style = "Бачата",
-        tag = "Начинающий",
-        bpm = 124,
-        duration = "03:08",
-        weight = "7.2 MB",
-        playing = true,
-        progress = 0.55f,
-        position = "01:42",
-        speed = 1.0,
-    ),
-    track("t2", "Jensen - Carita", "Бачата", "Начинающий", 118, "02:59", "6.8 MB"),
-    track("t3", "Romeo Santos - Propuesta", "Бачата", "Средний", 126, "03:44", "8.1 MB"),
-    track("t4", "Marc Anthony - Vivir Mi Vida", "Сальса", "Средний", 132, "04:12", "9.4 MB"),
-    track("t5", "Prince Royce - Darte un Beso", "Бачата", "Базовый", 120, "03:21", "7.0 MB"),
-    track("t6", "Aventura - Obsesión", "Бачата", "Про", 128, "04:05", "8.9 MB"),
-    track("t7", "Celia Cruz - La Vida Es Un Carnaval", "Сальса", "Средний", 130, "04:38", "10.2 MB"),
-    track("t8", "Grupo Niche - Cali Pachanguero", "Сальса", "Про", 134, "05:02", "11.0 MB"),
-)
+internal val DEFAULT_TRACKS: List<MusicTrack> = emptyList()

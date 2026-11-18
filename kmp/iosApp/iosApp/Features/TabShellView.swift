@@ -29,13 +29,21 @@ struct TabShellView: View {
                 onDelete: actions.musicDelete
             )
         case .choreography(let snap):
-            KineticVaultView(
-                snapshot: snap,
-                onSearch: actions.vaultSearch,
-                onCreate: actions.vaultCreate,
-                onOpen: actions.vaultOpen,
-                onDelete: actions.vaultDelete
-            )
+            if let editor = snap.editor {
+                ProEditorShellView(
+                    snapshot: editor,
+                    onBack: actions.vaultEditorBack,
+                    onTogglePlay: actions.vaultEditorTogglePlay
+                )
+            } else {
+                KineticVaultView(
+                    snapshot: snap,
+                    onSearch: actions.vaultSearch,
+                    onCreate: actions.vaultCreate,
+                    onOpen: actions.vaultOpen,
+                    onDelete: actions.vaultDelete
+                )
+            }
         case .trainer(let snap):
             TrainerHubView(
                 snapshot: snap,
@@ -85,6 +93,8 @@ struct TabFeatureActions {
     var vaultCreate: () -> Void = {}
     var vaultOpen: (String) -> Void = { _ in }
     var vaultDelete: (String) -> Void = { _ in }
+    var vaultEditorBack: () -> Void = {}
+    var vaultEditorTogglePlay: () -> Void = {}
 
     var trainerSelectVoice: (Int) -> Void = { _ in }
     var trainerSpeak: () -> Void = {}

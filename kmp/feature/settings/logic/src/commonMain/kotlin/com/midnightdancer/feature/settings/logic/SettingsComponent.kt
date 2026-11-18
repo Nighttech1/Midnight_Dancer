@@ -1,5 +1,8 @@
 package com.midnightdancer.feature.settings.logic
 
+import com.midnightdancer.core.domain.styles.*
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.collect
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.doOnDestroy
 import com.midnightdancer.core.domain.settings.DanceStyleConfig
@@ -40,6 +43,7 @@ interface SettingsComponent {
 class DefaultSettingsComponent(
     componentContext: ComponentContext,
     private val userPrefs: ReadWriteUserPrefs? = null,
+    private val danceStyles: ManageDanceStyles? = null,
 ) : SettingsComponent, ComponentContext by componentContext {
 
     // Default (not Main): unit tests / commonTest have no Android Main dispatcher.
@@ -50,6 +54,13 @@ class DefaultSettingsComponent(
 
     init {
         lifecycle.doOnDestroy { scope.cancel() }
+        danceStyles?.let { manager ->
+            _uiState.update { it.copy(stylesLoading = true) }
+            scope.launch { manager.state.filterNotNull().collect { snapshot ->
+                _uiState.update { it.copy(danceStyles = snapshot.entries.map { row -> row.name },
+                    styleEntries = snapshot.entries, stylesLoading = false) }
+            } }
+        }
         if (userPrefs != null) {
             loadPrefs()
         } else {
@@ -69,9 +80,18 @@ class DefaultSettingsComponent(
                     it.copy(newStyleDraft = intent.text.take(DanceStyleConfig.MAX_NAME_LENGTH))
                 }
             SettingsIntent.AddStyle -> performAddStyle()
-            is SettingsIntent.RemoveStyle ->
-                persistStyles(_uiState.value.danceStyles.filterNot { it == intent.name })
+            is SettingsIntent.RemoveStyleById -> mutateStyle { danceStyles?.remove(intent.id) ?: error("Каталог стилей недоступен.") }
+            is SettingsIntent.RenameStyleById -> mutateStyle { danceStyles?.rename(intent.id, intent.newName) ?: error("Каталог стилей недоступен.") }
+            is SettingsIntent.RemoveStyle -> if (danceStyles != null) mutateStyle {
+                val id = danceStyles.state.value?.choiceId(intent.name) ?: error("Каталог стилей загружается.")
+                danceStyles.remove(id)
+            } else persistStyles(_uiState.value.danceStyles.filterNot { it == intent.name })
             is SettingsIntent.RenameStyle -> {
+                if (danceStyles != null) {
+                    mutateStyle { danceStyles.rename(danceStyles.state.value?.choiceId(intent.oldName)
+                        ?: error("Каталог стилей загружается."), intent.newName) }
+                    return
+                }
                 val next = _uiState.value.danceStyles.map {
                     if (it == intent.oldName) {
                         DanceStyleConfig.sanitizeName(intent.newName)
@@ -107,7 +127,23 @@ class DefaultSettingsComponent(
         }
     }
 
+    private fun mutateStyle(action: suspend () -> Unit) {
+        if (_uiState.value.stylesBusy) return
+        _uiState.update { it.copy(stylesBusy = true, stylesError = null) }
+        scope.launch {
+            try { action() } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
+            } catch (error: Exception) { _uiState.update { it.copy(stylesError = error.message ?: "Не удалось изменить стиль.") }
+            } finally { _uiState.update { it.copy(stylesBusy = false) } }
+        }
+    }
+
     private fun performAddStyle() {
+        if (danceStyles != null) {
+            val name = DanceStyleConfig.sanitizeName(_uiState.value.newStyleDraft)
+                .ifBlank { uniqueNewName(_uiState.value.danceStyles, DEFAULT_NEW_STYLE_NAME) }
+            mutateStyle { danceStyles.add(name); _uiState.update { it.copy(newStyleDraft = "") } }
+            return
+        }
         val draft = DanceStyleConfig.sanitizeName(_uiState.value.newStyleDraft)
         val existing = _uiState.value.danceStyles
         val name = draft.ifEmpty { uniqueNewName(existing, DEFAULT_NEW_STYLE_NAME) }
@@ -219,7 +255,11 @@ class DefaultSettingsComponent(
                         lowDiskWarnEnabled = warnEnabled,
                     )
                 }
-            _uiState.value = snap
+            _uiState.update { current -> snap.copy(
+                danceStyles = if (danceStyles == null) snap.danceStyles else current.danceStyles,
+                styleEntries = current.styleEntries, stylesLoading = current.stylesLoading,
+                stylesBusy = current.stylesBusy, stylesError = current.stylesError,
+            ) }
         }
     }
 }

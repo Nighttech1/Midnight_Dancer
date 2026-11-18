@@ -54,6 +54,9 @@ interface MoveDao {
     @Query("DELETE FROM moves WHERE style_id = :styleId")
     suspend fun deleteByStyle(styleId: String)
 
+    @Query("DELETE FROM moves WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Query("DELETE FROM moves")
     suspend fun deleteAll()
 }
@@ -71,6 +74,9 @@ interface SongDao {
 
     @Upsert
     suspend fun upsertAll(songs: List<SongEntity>)
+
+    @Query("DELETE FROM songs WHERE id = :id")
+    suspend fun deleteById(id: String)
 
     @Query("DELETE FROM songs")
     suspend fun deleteAll()

@@ -44,6 +44,8 @@ struct ContentView: View {
             vaultCreate: { bridge.vaultCreate() },
             vaultOpen: { bridge.vaultOpen($0) },
             vaultDelete: { bridge.vaultDelete($0) },
+            vaultEditorBack: { bridge.vaultEditorBack() },
+            vaultEditorTogglePlay: { bridge.vaultEditorTogglePlay() },
             trainerSelectVoice: { bridge.trainerSelectVoice(index: $0) },
             trainerSpeak: { bridge.trainerSpeak() },
             trainerStartDance: { bridge.trainerStartDance() },

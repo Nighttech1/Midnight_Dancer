@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,13 +28,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.midnightdancer.app.ui.components.MdFieldLabel
+import com.midnightdancer.app.ui.components.SearchablePicker
 import com.midnightdancer.app.ui.theme.MdFonts
 import com.midnightdancer.app.ui.theme.toComposeColor
 import com.midnightdancer.core.designsystem.ColorTokens
 import com.midnightdancer.core.domain.exchange.StyleRef
 
+private const val CREATE_FROM_SET = "Создать новый стиль из сета"
+
 /**
- * «Параметры импорта» — один целевой стиль (C-117 / C-120).
+ * «Параметры импорта» — C-258: Стиль сета above Наш стиль; SearchablePicker full width;
+ * create-from-set option above search; dialog height ×1.5; no standalone Create button.
  */
 @Composable
 fun ImportParamsDialog(
@@ -43,6 +47,7 @@ fun ImportParamsDialog(
     packageStyles: List<StyleRef>,
     targetStyleId: String,
     onTargetStyleChange: (String) -> Unit,
+    onCreateNewStyle: () -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -52,16 +57,20 @@ fun ImportParamsDialog(
     val selectedName = selected?.name ?: "Выберите стиль"
     var expanded by remember { mutableStateOf(false) }
     val screenH = LocalConfiguration.current.screenHeightDp.dp
-    val menuMaxHeight = (screenH * 0.55f).coerceAtLeast(220.dp).coerceAtMost(480.dp)
+    // C-258: ~1.5× taller dialog content area (even top/bottom padding + body).
+    val dialogPadV = 27.dp
+    val packageNames = packageStyles.map { it.name }.ifEmpty { listOf("—") }
+    val pickerOptions = remember(localStyles) { localStyles.map { it.name } }
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = (screenH * 0.42f).coerceAtMost(520.dp))
                 .clip(shape)
                 .background(Color(0xFF0A0B10))
                 .border(1.dp, flame.copy(alpha = 0.45f), shape)
-                .padding(18.dp),
+                .padding(horizontal = 18.dp, vertical = dialogPadV),
         ) {
             Text(
                 text = "Параметры импорта",
@@ -70,99 +79,64 @@ fun ImportParamsDialog(
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "Укажите, в какой стиль добавить импортируемые элементы",
                 color = Color.White.copy(alpha = 0.85f),
                 fontSize = 14.sp,
                 lineHeight = 19.sp,
             )
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // C-258: Стиль сета above Наш стиль (not side-by-side).
+            MdFieldLabel(text = "Стиль сета")
+            Spacer(modifier = Modifier.height(6.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 120.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xE6121319))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                packageNames.forEach { name ->
+                    Text(text = name, color = Color.White, fontSize = 14.sp, fontFamily = MdFonts.Display)
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    text = "В приложении",
-                    color = flame,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "Из пакета",
-                    color = flame,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    FlameStyleDropdownField(
-                        displayName = selectedName,
-                        styles = localStyles,
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it },
-                        onSelect = { onTargetStyleChange(it.id) },
-                        flame = flame,
-                        widthFraction = 1f,
-                        menuMaxHeight = menuMaxHeight,
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Создать новый",
-                        color = flame,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    FlameBlackLabelButton(
-                        label = selectedName,
-                        onClick = { /* visual parity — already selected */ },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(max = 200.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (packageStyles.isEmpty()) {
-                        Text(
-                            text = "—",
-                            color = Color.White.copy(alpha = 0.45f),
-                            fontSize = 13.sp,
-                        )
+            SearchablePicker(
+                label = "Наш стиль",
+                value = selectedName,
+                options = pickerOptions,
+                expanded = expanded,
+                onExpandedChange = { expanded = it },
+                onSelect = { name ->
+                    if (name == CREATE_FROM_SET) {
+                        onCreateNewStyle()
                     } else {
-                        packageStyles.forEach { ps ->
-                            Text(
-                                text = ps.name,
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(vertical = 6.dp),
-                            )
-                        }
+                        localStyles.firstOrNull { it.name == name }?.let { onTargetStyleChange(it.id) }
                     }
-                }
-            }
+                    expanded = false
+                },
+                panelMaxHeight = 260.dp,
+                pinnedAboveSearch = CREATE_FROM_SET,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(22.dp))
             FlameWhiteLabelButton(label = "Импортировать", onClick = onConfirm)
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                Text("Отмена", color = Color.White.copy(alpha = 0.7f))
+                Text(
+                    "Отмена",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 15.sp,
+                )
             }
         }
     }

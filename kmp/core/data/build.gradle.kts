@@ -47,6 +47,8 @@ kotlin {
             implementation(libs.koin.test)
         }
         androidMain.dependencies {
+            // Bounded v1 AES-GCM container I/O; Android's JCA AEAD buffers the whole archive.
+            implementation("org.bouncycastle:bcprov-jdk15to18:1.87")
             implementation(libs.ktor.client.okhttp)
             // C-18 Coil 3 ImageLoader factory (DiskCache + MemoryCache); no Compose AsyncImage
             implementation(libs.coil.core)

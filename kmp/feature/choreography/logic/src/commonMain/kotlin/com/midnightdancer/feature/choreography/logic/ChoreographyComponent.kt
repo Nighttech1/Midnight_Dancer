@@ -1,5 +1,8 @@
 package com.midnightdancer.feature.choreography.logic
 
+import com.midnightdancer.core.domain.styles.*
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.collect
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.router.stack.StackNavigation
@@ -7,7 +10,15 @@ import com.arkivanov.decompose.router.stack.childStack
 import com.arkivanov.decompose.router.stack.pop
 import com.arkivanov.decompose.router.stack.pushNew
 import com.arkivanov.decompose.value.Value
+import com.arkivanov.essenty.lifecycle.doOnDestroy
+import com.midnightdancer.core.domain.settings.ElementCategoryConfig
+import com.midnightdancer.core.domain.usecase.LoadLibrary
 import com.midnightdancer.core.domain.validation.DomainValidators
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,16 +28,33 @@ import kotlinx.serialization.Serializable
 interface SequenceEditorStubComponent {
     val uiState: StateFlow<SequenceEditorUiState>
     fun onIntent(intent: SequenceEditorIntent)
+
+    /** SKIE-friendly helpers for iOS bridge (C-300). */
+    fun togglePlay() = onIntent(SequenceEditorIntent.TogglePlay)
+    fun seekToFraction(fraction: Float) = onIntent(SequenceEditorIntent.SeekTo(fraction))
+    fun seekStart() = onIntent(SequenceEditorIntent.SeekStart)
+    fun seekEnd() = onIntent(SequenceEditorIntent.SeekEnd)
 }
 
 class DefaultSequenceEditorStubComponent(
     componentContext: ComponentContext,
     initialTitle: String = "Pro Editor",
     initialSongPlaybackSpeed: Double = 1.0,
+    initialStyle: String = ChoreoCatalog.styles.first(),
+    initialSnapshot: ChoreographySnapshot? = null,
+    initialItemId: String? = null,
+    initialTag: String = "",
+    initialTagCatalog: List<String> = ElementCategoryConfig.DEFAULT_NAMES,
+    /** Persists editor state into the hub list; returns the vault item id. */
+    private val onSave: (itemId: String?, snapshot: ChoreographySnapshot) -> String = { id, _ -> id.orEmpty() },
+    /** C-272: reload elements/tracks from Room before picker opens. */
+    private val onRefreshCatalog: suspend () -> Unit = {},
+    private val danceStyles: ManageDanceStyles? = null,
 ) : SequenceEditorStubComponent, ComponentContext by componentContext {
+    private val editorScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private data class EditorSnapshot(
-        val addedElementLabels: List<String>,
-        val addedMusicLabels: List<String>,
+        val elementClips: List<EditorClip>,
+        val musicClips: List<EditorClip>,
         val selectedElementIndex: Int,
         val selectedMusicIndex: Int,
         val musicVolume: Float,
@@ -41,21 +69,61 @@ class DefaultSequenceEditorStubComponent(
 
     private val undoStack = ArrayDeque<EditorSnapshot>()
     private val redoStack = ArrayDeque<EditorSnapshot>()
+    private var currentItemId: String? = initialItemId
 
     private val _uiState = MutableStateFlow(
-        SequenceEditorUiState(
-            title = initialTitle,
-            songPlaybackSpeed = initialSongPlaybackSpeed.coerceIn(
-                DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
-                DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
+        recompute(
+            previousDurationMs = 0L,
+            state = SequenceEditorUiState(
+                title = initialSnapshot?.title ?: initialTitle,
+                style = initialSnapshot?.style ?: initialStyle,
+                tag = initialSnapshot?.tag?.ifBlank { null } ?: initialTag,
+                tagCatalog = initialTagCatalog.ifEmpty { ElementCategoryConfig.DEFAULT_NAMES },
+                elementClips = initialSnapshot?.elementClips.orEmpty(),
+                musicClips = initialSnapshot?.musicClips.orEmpty(),
+                musicVolume = initialSnapshot?.musicVolume ?: 1f,
+                previewElementLabel = initialSnapshot?.elementClips?.lastOrNull()?.label,
+                songPlaybackSpeed = (initialSnapshot?.songPlaybackSpeed ?: initialSongPlaybackSpeed).coerceIn(
+                    DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
+                    DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
+                ),
             ),
         ),
     )
     override val uiState: StateFlow<SequenceEditorUiState> = _uiState.asStateFlow()
 
+    init {
+        danceStyles?.let { manager -> editorScope.launch { manager.state.filterNotNull().collect { snapshot ->
+            _uiState.update { it.copy(style = snapshot.canonicalId(it.style),
+                availableStyles = snapshot.entries.map { row -> row.name },
+                styleNamesById = snapshot.entries.associate { row -> row.id to row.name },
+                catalogRevision = it.catalogRevision + 1) }
+        } } }
+        // C-213: leaving without tapping Save still persists the current editor snapshot.
+        lifecycle.doOnDestroy {
+            flushAutosave()
+            editorScope.cancel()
+        }
+    }
+
+    /** Persist current editor state into the vault (no saveCount flash). */
+    fun flushAutosave() {
+        val s = _uiState.value
+        val snapshot = ChoreographySnapshot(
+            title = s.title,
+            style = s.style,
+            elementClips = s.elementClips,
+            musicClips = s.musicClips,
+            songPlaybackSpeed = s.songPlaybackSpeed,
+            musicVolume = s.musicVolume,
+            tag = s.tag,
+        )
+        currentItemId = onSave(currentItemId, snapshot).ifBlank { currentItemId }
+    }
+
     private fun SequenceEditorUiState.toSnapshot() = EditorSnapshot(
-        addedElementLabels = addedElementLabels,
-        addedMusicLabels = addedMusicLabels,
+        elementClips = elementClips,
+        musicClips = musicClips,
         selectedElementIndex = selectedElementIndex,
         selectedMusicIndex = selectedMusicIndex,
         musicVolume = musicVolume,
@@ -70,8 +138,8 @@ class DefaultSequenceEditorStubComponent(
 
     private fun EditorSnapshot.applyTo(base: SequenceEditorUiState): SequenceEditorUiState =
         base.copy(
-            addedElementLabels = addedElementLabels,
-            addedMusicLabels = addedMusicLabels,
+            elementClips = elementClips,
+            musicClips = musicClips,
             selectedElementIndex = selectedElementIndex,
             selectedMusicIndex = selectedMusicIndex,
             musicVolume = musicVolume,
@@ -91,19 +159,10 @@ class DefaultSequenceEditorStubComponent(
         redoStack.clear()
     }
 
-    private fun withDurationFields(durationMs: Long): Pair<String, String> {
-        val label = EditorTrackDurations.formatMmSs((durationMs / 1000L).toInt().coerceAtLeast(0))
-        val timecode = EditorTrackDurations.formatTimecode(durationMs)
-        return label to timecode
-    }
-
-    private fun musicDurationMs(labels: List<String>): Long =
-        labels.maxOfOrNull { EditorTrackDurations.secondsFor(it) * 1000L } ?: 0L
-
     private fun mutateTimeline(block: (SequenceEditorUiState) -> SequenceEditorUiState) {
         _uiState.update { current ->
             pushUndoSnapshot(current)
-            val next = block(current)
+            val next = recompute(current.durationMs, block(current))
             next.copy(
                 canUndo = undoStack.isNotEmpty(),
                 canRedo = redoStack.isNotEmpty(),
@@ -111,18 +170,45 @@ class DefaultSequenceEditorStubComponent(
         }
     }
 
+    /**
+     * Moves the playhead; updates [SequenceEditorUiState.previewElementLabel] to the clip under it
+     * (4.3.3) and stops playback when the end is reached.
+     */
+    private fun seek(fraction: Float) {
+        _uiState.update { current ->
+            val f = fraction.coerceIn(0f, 1f)
+            val moved = recompute(current.durationMs, current.copy(playheadFraction = f))
+            val atEnd = moved.durationMs > 0L && f >= 1f
+            // C-231: past last element → empty preview (do NOT fall back to last label / loop).
+            val pastElements = moved.elementClips.isNotEmpty() &&
+                moved.playheadMs >= moved.elementsDurationMs
+            val clipLabel = if (pastElements) {
+                null
+            } else {
+                moved.elementClips.getOrNull(moved.playheadElementIndex)?.label
+            }
+            moved.copy(
+                isPlaying = if (atEnd) false else moved.isPlaying,
+                previewElementLabel = clipLabel,
+            )
+        }
+    }
+
     override fun onIntent(intent: SequenceEditorIntent) {
         when (intent) {
-            SequenceEditorIntent.TogglePlay ->
+            SequenceEditorIntent.TogglePlay -> {
+                val cur = _uiState.value
+                if (!cur.isPlaying && cur.durationMs <= 0L) return
+                if (!cur.isPlaying && cur.playheadFraction >= 1f) seek(0f)
                 _uiState.update { it.copy(isPlaying = !it.isPlaying) }
+            }
             SequenceEditorIntent.NudgeFrameBack ->
-                _uiState.update {
-                    it.copy(playheadFraction = (it.playheadFraction - 0.02f).coerceIn(0f, 1f))
-                }
+                seek(_uiState.value.playheadFraction - 0.02f)
             SequenceEditorIntent.NudgeFrameForward ->
-                _uiState.update {
-                    it.copy(playheadFraction = (it.playheadFraction + 0.02f).coerceIn(0f, 1f))
-                }
+                seek(_uiState.value.playheadFraction + 0.02f)
+            SequenceEditorIntent.SeekStart -> seek(0f)
+            SequenceEditorIntent.SeekEnd -> seek(1f)
+            is SequenceEditorIntent.SeekTo -> seek(intent.fraction)
             SequenceEditorIntent.ToggleSnap ->
                 _uiState.update { it.copy(snapToBpm = !it.snapToBpm) }
             SequenceEditorIntent.Undo -> {
@@ -142,43 +228,11 @@ class DefaultSequenceEditorStubComponent(
                 }
             }
             is SequenceEditorIntent.AddElements ->
-                mutateTimeline { it ->
-                    val before = it.addedElementLabels.size
-                    val next = (it.addedElementLabels + intent.labels).distinct()
-                    val newCount = (next.size - before).coerceAtLeast(0)
-                    val musicFloor = musicDurationMs(it.addedMusicLabels)
-                    var durationMs = it.durationMs
-                    if (newCount > 0) {
-                        val extended = it.durationMs + EditorTrackDurations.elementPadMs() * newCount
-                        durationMs = maxOf(extended, musicFloor)
-                    } else if (durationMs < musicFloor) {
-                        durationMs = musicFloor
-                    }
-                    val (durationLabel, timecode) = withDurationFields(durationMs)
-                    it.copy(
-                        addedElementLabels = next,
-                        selectedElementIndex = next.lastIndex.coerceAtLeast(0),
-                        previewElementLabel = next.lastOrNull(),
-                        durationMs = durationMs,
-                        durationLabel = durationLabel,
-                        timecode = timecode,
-                    )
-                }
+                addElementClips(intent.labels.map { EditorClip(it, ChoreoCatalog.elementDurationMs(it)) })
+            is SequenceEditorIntent.AddElementClips -> addElementClips(intent.clips)
             is SequenceEditorIntent.AddMusicTracks ->
-                mutateTimeline { it ->
-                    val next = (it.addedMusicLabels + intent.labels).distinct()
-                    val trackMaxMs = musicDurationMs(next)
-                    val durationMs = maxOf(it.durationMs, trackMaxMs)
-                    val (durationLabel, timecode) = withDurationFields(durationMs)
-                    it.copy(
-                        addedMusicLabels = next,
-                        selectedMusicIndex = next.lastIndex.coerceAtLeast(0),
-                        selectedElementIndex = -1,
-                        durationMs = durationMs,
-                        durationLabel = durationLabel,
-                        timecode = timecode,
-                    )
-                }
+                addMusicClips(intent.labels.map { EditorClip(it, ChoreoCatalog.trackDurationMs(it)) })
+            is SequenceEditorIntent.AddMusicClips -> addMusicClips(intent.clips)
             is SequenceEditorIntent.SetSongPlaybackSpeed -> {
                 val next = intent.speed.coerceIn(
                     DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
@@ -192,7 +246,8 @@ class DefaultSequenceEditorStubComponent(
                     it.copy(
                         selectedElementIndex = intent.index,
                         selectedMusicIndex = -1,
-                        previewElementLabel = it.addedElementLabels.getOrNull(intent.index),
+                        previewElementLabel = it.elementClips.getOrNull(intent.index)?.label
+                            ?: it.previewElementLabel,
                     )
                 }
             is SequenceEditorIntent.SelectMusic ->
@@ -201,56 +256,114 @@ class DefaultSequenceEditorStubComponent(
                 }
             is SequenceEditorIntent.ReorderElements ->
                 mutateTimeline { state ->
-                    val list = state.addedElementLabels.toMutableList()
+                    val list = state.elementClips.toMutableList()
                     if (intent.from in list.indices && intent.to in list.indices) {
                         val item = list.removeAt(intent.from)
                         list.add(intent.to, item)
                     }
                     state.copy(
-                        addedElementLabels = list,
+                        elementClips = list,
                         selectedElementIndex = intent.to,
-                        previewElementLabel = list.getOrNull(intent.to),
+                        previewElementLabel = list.getOrNull(intent.to)?.label,
                     )
                 }
             is SequenceEditorIntent.ReorderMusic ->
                 mutateTimeline { state ->
-                    val list = state.addedMusicLabels.toMutableList()
+                    val list = state.musicClips.toMutableList()
                     if (intent.from in list.indices && intent.to in list.indices) {
                         val item = list.removeAt(intent.from)
                         list.add(intent.to, item)
                     }
-                    state.copy(addedMusicLabels = list, selectedMusicIndex = intent.to)
+                    state.copy(musicClips = list, selectedMusicIndex = intent.to)
                 }
             SequenceEditorIntent.SplitSelected -> {
-                val idx = _uiState.value.selectedElementIndex
-                if (idx !in _uiState.value.addedElementLabels.indices) return
-                mutateTimeline { state ->
-                    val list = state.addedElementLabels.toMutableList()
-                    val base = list[idx]
-                    list.add(idx + 1, "$base · b")
-                    state.copy(addedElementLabels = list, selectedElementIndex = idx + 1)
+                // C-215 / C-224: cut selected lane at playhead; same label on both halves.
+                // Prefer element when selected; else music when selectedMusicIndex >= 0.
+                val cur = _uiState.value
+                val elemIdx = cur.selectedElementIndex
+                val musicIdx = cur.selectedMusicIndex
+                when {
+                    elemIdx in cur.elementClips.indices -> {
+                        val local = EditorTrackDurations.clipLocalMs(
+                            cur.elementTimelineClips,
+                            cur.playheadMs,
+                        ) ?: return
+                        if (local.first != elemIdx) return
+                        val base = cur.elementClips[elemIdx]
+                        val safeSpeed = if (base.speed > 0.0) base.speed else 1.0
+                        val sourceCutMs = (local.second * safeSpeed).toLong()
+                        if (sourceCutMs < 1L || sourceCutMs >= base.durationMs) return
+                        mutateTimeline { state ->
+                            val list = state.elementClips.toMutableList()
+                            val clip = list[elemIdx]
+                            val first = sourceCutMs
+                            val second = clip.durationMs - first
+                            val baseStart = clip.sourceStartMs.coerceAtLeast(0L)
+                            list[elemIdx] = clip.copy(durationMs = first, sourceStartMs = baseStart)
+                            list.add(
+                                elemIdx + 1,
+                                clip.copy(
+                                    label = clip.label,
+                                    durationMs = second,
+                                    // C-242: second half continues from cut in source media.
+                                    sourceStartMs = baseStart + first,
+                                ),
+                            )
+                            state.copy(elementClips = list, selectedElementIndex = elemIdx + 1)
+                        }
+                    }
+                    musicIdx in cur.musicClips.indices -> {
+                        val local = EditorTrackDurations.clipLocalMs(
+                            cur.musicTimelineClips,
+                            cur.playheadMs,
+                        ) ?: return
+                        if (local.first != musicIdx) return
+                        val base = cur.musicClips[musicIdx]
+                        val safeSpeed =
+                            if (cur.songPlaybackSpeed > 0.0) cur.songPlaybackSpeed else 1.0
+                        val sourceCutMs = (local.second * safeSpeed).toLong()
+                        if (sourceCutMs < 1L || sourceCutMs >= base.durationMs) return
+                        mutateTimeline { state ->
+                            val list = state.musicClips.toMutableList()
+                            val clip = list[musicIdx]
+                            val first = sourceCutMs
+                            val second = clip.durationMs - first
+                            val baseStart = clip.sourceStartMs.coerceAtLeast(0L)
+                            list[musicIdx] = clip.copy(durationMs = first, sourceStartMs = baseStart)
+                            list.add(
+                                musicIdx + 1,
+                                clip.copy(
+                                    label = clip.label,
+                                    durationMs = second,
+                                    sourceStartMs = baseStart + first,
+                                ),
+                            )
+                            state.copy(musicClips = list, selectedMusicIndex = musicIdx + 1)
+                        }
+                    }
+                    else -> return
                 }
             }
             SequenceEditorIntent.DeleteSelected -> {
                 val cur = _uiState.value
-                val canDeleteElement = cur.selectedElementIndex in cur.addedElementLabels.indices
-                val canDeleteMusic = cur.selectedMusicIndex in cur.addedMusicLabels.indices
+                val canDeleteElement = cur.selectedElementIndex in cur.elementClips.indices
+                val canDeleteMusic = cur.selectedMusicIndex in cur.musicClips.indices
                 if (!canDeleteElement && !canDeleteMusic) return
                 mutateTimeline { state ->
                     when {
-                        state.selectedElementIndex in state.addedElementLabels.indices -> {
-                            val list = state.addedElementLabels.toMutableList()
+                        state.selectedElementIndex in state.elementClips.indices -> {
+                            val list = state.elementClips.toMutableList()
                             list.removeAt(state.selectedElementIndex)
                             state.copy(
-                                addedElementLabels = list,
+                                elementClips = list,
                                 selectedElementIndex = -1,
-                                previewElementLabel = list.lastOrNull(),
+                                previewElementLabel = list.lastOrNull()?.label,
                             )
                         }
-                        state.selectedMusicIndex in state.addedMusicLabels.indices -> {
-                            val list = state.addedMusicLabels.toMutableList()
+                        state.selectedMusicIndex in state.musicClips.indices -> {
+                            val list = state.musicClips.toMutableList()
                             list.removeAt(state.selectedMusicIndex)
-                            state.copy(addedMusicLabels = list, selectedMusicIndex = -1)
+                            state.copy(musicClips = list, selectedMusicIndex = -1)
                         }
                         else -> state
                     }
@@ -260,15 +373,104 @@ class DefaultSequenceEditorStubComponent(
                 mutateTimeline {
                     it.copy(musicVolume = intent.volume.coerceIn(0f, 1f))
                 }
-            is SequenceEditorIntent.SetClipSpeed ->
-                mutateTimeline {
+            is SequenceEditorIntent.SetClipSpeed -> {
+                // C-216: store speed on the selected element clip so timeline width ∝ duration/speed.
+                val speed = intent.speed.coerceIn(
+                    DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
+                    DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
+                )
+                val idx = _uiState.value.selectedElementIndex
+                if (idx !in _uiState.value.elementClips.indices) {
+                    mutateTimeline { it.copy(clipSpeed = speed) }
+                    return
+                }
+                mutateTimeline { state ->
+                    val list = state.elementClips.toMutableList()
+                    list[idx] = list[idx].copy(speed = speed)
+                    state.copy(elementClips = list, clipSpeed = speed)
+                }
+            }
+            is SequenceEditorIntent.SetTimelineZoom ->
+                _uiState.update { it.copy(timelineZoom = snapTimelineZoom(intent.zoom)) }
+            SequenceEditorIntent.RefreshCatalog ->
+                editorScope.launch {
+                    onRefreshCatalog()
+                    _uiState.update { it.copy(catalogRevision = it.catalogRevision + 1) }
+                }
+            is SequenceEditorIntent.SetTitleAndStyle -> {
+                val title = intent.title.trim()
+                if (title.isEmpty()) return
+                _uiState.update {
                     it.copy(
-                        clipSpeed = intent.speed.coerceIn(
-                            DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
-                            DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
-                        ),
+                        title = title,
+                        style = danceStyles?.state?.value?.choiceId(intent.style) ?: intent.style,
+                        tag = intent.tag.trim(),
                     )
                 }
+            }
+            SequenceEditorIntent.Save -> {
+                val s = _uiState.value
+                val snapshot = ChoreographySnapshot(
+                    title = s.title,
+                    style = s.style,
+                    elementClips = s.elementClips,
+                    musicClips = s.musicClips,
+                    songPlaybackSpeed = s.songPlaybackSpeed,
+                    musicVolume = s.musicVolume,
+                    tag = s.tag,
+                )
+                currentItemId = onSave(currentItemId, snapshot).ifBlank { currentItemId }
+                _uiState.update { it.copy(saveCount = it.saveCount + 1) }
+            }
+        }
+    }
+
+    private fun addElementClips(clips: List<EditorClip>) {
+        if (clips.isEmpty()) return
+        mutateTimeline {
+            val next = it.elementClips + clips
+            it.copy(
+                elementClips = next,
+                selectedElementIndex = next.lastIndex,
+                selectedMusicIndex = -1,
+                previewElementLabel = next.lastOrNull()?.label,
+            )
+        }
+    }
+
+    private fun addMusicClips(clips: List<EditorClip>) {
+        if (clips.isEmpty()) return
+        mutateTimeline {
+            val next = it.musicClips + clips
+            it.copy(
+                musicClips = next,
+                selectedMusicIndex = next.lastIndex,
+                selectedElementIndex = -1,
+            )
+        }
+    }
+
+    private companion object {
+        /**
+         * Timeline total = max(elements, music) (3.7). Keeps the playhead at the same
+         * absolute time when the total changes, and refreshes timecode / duration labels.
+         */
+        fun recompute(previousDurationMs: Long, state: SequenceEditorUiState): SequenceEditorUiState {
+            val total = maxOf(state.elementsDurationMs, state.musicDurationMs)
+            val posMs = (previousDurationMs * state.playheadFraction).toLong()
+            val fraction = when {
+                total <= 0L -> 0f
+                previousDurationMs <= 0L -> state.playheadFraction.coerceIn(0f, 1f)
+                previousDurationMs == total -> state.playheadFraction.coerceIn(0f, 1f)
+                else -> (posMs.toFloat() / total).coerceIn(0f, 1f)
+            }
+            val shownMs = (total * fraction).toLong()
+            return state.copy(
+                durationMs = total,
+                durationLabel = EditorTrackDurations.formatMmSs((total / 1000L).toInt().coerceAtLeast(0)),
+                playheadFraction = fraction,
+                timecode = EditorTrackDurations.formatTimecode(shownMs),
+            )
         }
     }
 }
@@ -278,52 +480,124 @@ interface ChoreographyHubComponent {
     fun onIntent(intent: ChoreographyIntent)
 }
 
+private fun nextItemId(items: List<ChoreographyVaultItem>): String {
+    val ids = items.map { it.id }.toSet()
+    var n = items.size + 1
+    while ("c$n" in ids) n++
+    return "c$n"
+}
+
+/** Pure hub-list reducer shared by hub child + nested root (single source of truth). */
+internal fun reduceHubState(state: ChoreographyUiState, intent: ChoreographyIntent, canCreate: Boolean = true): ChoreographyUiState =
+    when (intent) {
+        ChoreographyIntent.DismissAccessMessage -> state.copy(creationBlockedMessage = null)
+        ChoreographyIntent.RefreshPlaceholders -> state.copy(items = DEFAULT_VAULT_ITEMS)
+        is ChoreographyIntent.SetSearchQuery -> state.copy(searchQuery = intent.query)
+        is ChoreographyIntent.SetStyleFilter -> state.copy(selectedStyle = intent.style)
+        is ChoreographyIntent.SetTagFilter -> state.copy(selectedTag = intent.tag)
+        is ChoreographyIntent.SetSortMode -> state.copy(sortMode = intent.mode, sortLabel = intent.mode.name)
+        is ChoreographyIntent.DeleteItem -> state.copy(items = state.items.filterNot { it.id == intent.id })
+        is ChoreographyIntent.SetItemSongPlaybackSpeed -> {
+            val speed = intent.speed.coerceIn(
+                DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
+                DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
+            )
+            state.copy(
+                items = state.items.map { item ->
+                    if (item.id == intent.id) item.copy(songPlaybackSpeed = speed) else item
+                },
+            )
+        }
+        is ChoreographyIntent.CopyItem -> {
+            val source = state.items.firstOrNull { it.id == intent.id }
+            if (!canCreate && source != null) {
+                state.copy(creationBlockedMessage = FREE_CREATION_MESSAGE)
+            } else if (source == null) {
+                state
+            } else {
+                val title = ChoreographyCopyNaming.nextCopyTitle(source.title, state.items.map { it.title })
+                val id = nextItemId(state.items)
+                val copy = source.copy(
+                    id = id,
+                    title = title,
+                    chrId = "CHR-" + (100 + state.items.size + 1).toString().padStart(3, '0'),
+                    snapshot = source.snapshot?.copy(title = title),
+                )
+                val at = state.items.indexOfFirst { it.id == source.id } + 1
+                state.copy(items = state.items.toMutableList().apply { add(at, copy) })
+            }
+        }
+        ChoreographyIntent.OpenSequenceEditorStub,
+        ChoreographyIntent.CreateChoreography,
+        is ChoreographyIntent.CreateNamed,
+        is ChoreographyIntent.OpenEditor,
+        is ChoreographyIntent.EditItem,
+        -> state
+    }
+
+/** Insert or replace the vault item for a saved editor snapshot. */
+internal fun upsertSnapshot(
+    state: ChoreographyUiState,
+    itemId: String?,
+    snapshot: ChoreographySnapshot,
+): Pair<ChoreographyUiState, String> {
+    val existing = itemId?.let { id -> state.items.firstOrNull { it.id == id } }
+    val id = existing?.id ?: nextItemId(state.items)
+    val totalMs = maxOf(
+        snapshot.elementClips.sumOf {
+            EditorTrackDurations.effectiveMs(it.durationMs, it.speed)
+        },
+        snapshot.musicClips.sumOf {
+            EditorTrackDurations.effectiveMs(it.durationMs, snapshot.songPlaybackSpeed)
+        },
+    )
+    val hasContent = snapshot.elementClips.isNotEmpty() || snapshot.musicClips.isNotEmpty()
+    val item = ChoreographyVaultItem(
+        id = id,
+        title = snapshot.title,
+        // C-213: empty → Draft; any clips → Ready.
+        status = if (hasContent) VaultStatus.Ready else VaultStatus.Draft,
+        style = snapshot.style,
+        // Tag chosen in the create dialog (optional); blank = none. Seeded fallback only for legacy items.
+        tags = existing?.tags
+            ?: ElementCategoryConfig.sanitizeTagsForItem(listOf(snapshot.tag)),
+        bpm = existing?.bpm ?: 120,
+        durationLabel = EditorTrackDurations.formatMmSs((totalMs / 1000L).toInt()),
+        trackName = snapshot.musicClips.firstOrNull()?.label ?: "—",
+        chrId = existing?.chrId ?: ("CHR-" + (100 + state.items.size + 1).toString().padStart(3, '0')),
+        songPlaybackSpeed = snapshot.songPlaybackSpeed,
+        snapshot = snapshot,
+    )
+    val items = if (existing != null) {
+        state.items.map { if (it.id == id) item else it }
+    } else {
+        listOf(item) + state.items
+    }
+    return state.copy(items = items) to id
+}
+
 class DefaultChoreographyHubComponent(
     componentContext: ComponentContext,
     private val onOpenEditor: (String?) -> Unit,
+    private val onCreateNamed: (name: String, style: String, tag: String) -> Unit = { _, _, _ -> },
+    private val state: MutableStateFlow<ChoreographyUiState> = MutableStateFlow(ChoreographyUiState()),
+    private val creationAccess: com.midnightdancer.core.domain.settings.CreationAccessPolicy? = null,
+    private val onReduce: ((ChoreographyIntent) -> Unit)? = null,
 ) : ChoreographyHubComponent, ComponentContext by componentContext {
 
-    private val _uiState = MutableStateFlow(ChoreographyUiState())
-    override val uiState: StateFlow<ChoreographyUiState> = _uiState.asStateFlow()
+    override val uiState: StateFlow<ChoreographyUiState> = state.asStateFlow()
 
     override fun onIntent(intent: ChoreographyIntent) {
         when (intent) {
             ChoreographyIntent.OpenSequenceEditorStub,
             ChoreographyIntent.CreateChoreography,
             -> onOpenEditor(null)
+            is ChoreographyIntent.CreateNamed -> onCreateNamed(intent.name, intent.style, intent.tag)
             is ChoreographyIntent.OpenEditor -> onOpenEditor(intent.id)
-            ChoreographyIntent.RefreshPlaceholders ->
-                _uiState.update { it.copy(items = DEFAULT_VAULT_ITEMS) }
-            is ChoreographyIntent.SetSearchQuery ->
-                _uiState.update { it.copy(searchQuery = intent.query) }
-            is ChoreographyIntent.SetStyleFilter ->
-                _uiState.update { it.copy(selectedStyle = intent.style) }
-            is ChoreographyIntent.SetTagFilter ->
-                _uiState.update { it.copy(selectedTag = intent.tag) }
-            is ChoreographyIntent.SetSortMode ->
-                _uiState.update {
-                    it.copy(
-                        sortMode = intent.mode,
-                        sortLabel = intent.mode.name,
-                    )
-                }
-            is ChoreographyIntent.DeleteItem ->
-                _uiState.update { state ->
-                    state.copy(items = state.items.filterNot { it.id == intent.id })
-                }
             is ChoreographyIntent.EditItem -> onOpenEditor(intent.id)
-            is ChoreographyIntent.SetItemSongPlaybackSpeed ->
-                _uiState.update { state ->
-                    val speed = intent.speed.coerceIn(
-                        DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
-                        DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
-                    )
-                    state.copy(
-                        items = state.items.map { item ->
-                            if (item.id == intent.id) item.copy(songPlaybackSpeed = speed) else item
-                        },
-                    )
-                }
+            else -> if (onReduce != null) onReduce.invoke(intent) else state.update {
+                reduceHubState(it, intent, creationAccess?.canCreate(ownChoreographyCount(it.items)) != false)
+            }
         }
     }
 }
@@ -334,13 +608,19 @@ interface ChoreographyComponent {
     val uiState: StateFlow<ChoreographyUiState>
     fun onIntent(intent: ChoreographyIntent)
     fun openSequenceEditor(itemId: String? = null)
+    fun openNewSequenceEditor(title: String, style: String, tag: String = "")
     fun onBack(): Boolean
 
     /** SKIE-friendly aliases for SwiftUI bridge (C-124 / C-126). */
     fun setSearchQuery(query: String) = onIntent(ChoreographyIntent.SetSearchQuery(query))
     fun createChoreography() = onIntent(ChoreographyIntent.CreateChoreography)
+    fun createChoreography(name: String, style: String) =
+        onIntent(ChoreographyIntent.CreateNamed(name, style))
+    fun createChoreography(name: String, style: String, tag: String) =
+        onIntent(ChoreographyIntent.CreateNamed(name, style, tag))
     fun openEditor(id: String) = onIntent(ChoreographyIntent.OpenEditor(id))
     fun deleteItem(id: String) = onIntent(ChoreographyIntent.DeleteItem(id))
+    fun copyItem(id: String) = onIntent(ChoreographyIntent.CopyItem(id))
 
     sealed class Child {
         class Hub(val component: ChoreographyHubComponent) : Child()
@@ -350,12 +630,66 @@ interface ChoreographyComponent {
 
 class DefaultChoreographyComponent(
     componentContext: ComponentContext,
+    private val loadLibrary: LoadLibrary? = null,
+    private val vaultPersister: ChoreographyVaultPersister? = null,
+    private val creationAccess: com.midnightdancer.core.domain.settings.CreationAccessPolicy? = null,
+    private val deletedObserver: com.midnightdancer.core.domain.settings.ChoreographyDeletedObserver? = null,
+    private val danceStyles: ManageDanceStyles? = null,
 ) : ChoreographyComponent, ComponentContext by componentContext {
 
     private val navigation = StackNavigation<Config>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val _uiState = MutableStateFlow(ChoreographyUiState())
+    /** Single hub list shared with the Hub child and updated by editor Save. */
+    private val _uiState = MutableStateFlow(
+        ChoreographyUiState(
+            items = vaultPersister?.readRaw()?.let { raw ->
+                runCatching { decodeVaultItems(raw) }.getOrNull()
+            } ?: if (creationAccess == null) DEFAULT_VAULT_ITEMS else emptyList(),
+        ),
+    )
     override val uiState: StateFlow<ChoreographyUiState> = _uiState.asStateFlow()
+
+    init {
+        lifecycle.doOnDestroy { scope.cancel() }
+        ChoreographyVaultStore.replaceAll(_uiState.value.items)
+        danceStyles?.let { manager -> scope.launch { manager.state.filterNotNull().collect { snapshot ->
+            ChoreoCatalog.replaceStyleCatalog(snapshot)
+            val items = normalizeVaultStyles(_uiState.value.items, snapshot)
+            _uiState.update { it.copy(items = items, styleNamesById = snapshot.entries.associate { row -> row.id to row.name },
+                availableStyles = snapshot.entries.map { row -> row.name },
+                selectedStyle = if (it.selectedStyle == "Все стили") it.selectedStyle else snapshot.canonicalId(it.selectedStyle)) }
+            ChoreographyVaultStore.replaceAll(items)
+            runCatching { vaultPersister?.refreshStyles() }.onFailure {
+                _uiState.update { it.copy(creationBlockedMessage = "Не удалось обновить файл хореографий. Стили сохранены; повторное открытие применит их к материалам.") }
+            }
+        } } }
+        scope.launch {
+            ChoreographyVaultStore.items.collect { imported ->
+                if (imported != _uiState.value.items) _uiState.update { it.copy(items = imported) }
+            }
+        }
+        // C-185/C-272: hydrate picker catalog from Room; keep observing for new elements.
+        val load = loadLibrary
+        if (load != null) {
+            scope.launch {
+                runCatching {
+                    ChoreoCatalog.replaceFromAppData(load.load())
+                }
+                load.observe().collect { data ->
+                    ChoreoCatalog.replaceFromAppData(data)
+                }
+            }
+        }
+    }
+
+    private fun persistVault(items: List<ChoreographyVaultItem>) {
+        val items = danceStyles?.state?.value?.let { normalizeVaultStyles(items, it) } ?: items
+        _uiState.update { it.copy(items = items) }
+        ChoreographyVaultStore.replaceAll(items)
+        val persister = vaultPersister ?: return
+        runCatching { persister.writeRaw(encodeVaultItems(items)) }
+    }
 
     override val stack: Value<ChildStack<*, ChoreographyComponent.Child>> = childStack(
         source = navigation,
@@ -366,73 +700,110 @@ class DefaultChoreographyComponent(
     )
 
     override fun onIntent(intent: ChoreographyIntent) {
+        val intent = if (intent is ChoreographyIntent.SetStyleFilter && intent.style != "Все стили") {
+            intent.copy(style = danceStyles?.state?.value?.choiceId(intent.style) ?: intent.style)
+        } else intent
         when (intent) {
             ChoreographyIntent.OpenSequenceEditorStub,
             ChoreographyIntent.CreateChoreography,
             -> openSequenceEditor(null)
+            is ChoreographyIntent.CreateNamed -> openNewSequenceEditor(intent.name, intent.style, intent.tag)
             is ChoreographyIntent.OpenEditor -> openSequenceEditor(intent.id)
-            ChoreographyIntent.RefreshPlaceholders,
-            is ChoreographyIntent.SetSearchQuery,
-            is ChoreographyIntent.SetStyleFilter,
-            is ChoreographyIntent.SetTagFilter,
-            is ChoreographyIntent.SetSortMode,
-            is ChoreographyIntent.DeleteItem,
-            is ChoreographyIntent.EditItem,
-            is ChoreographyIntent.SetItemSongPlaybackSpeed,
-            -> {
+            is ChoreographyIntent.EditItem -> openSequenceEditor(intent.id)
+            else -> {
                 _uiState.update { state ->
-                    when (intent) {
-                        ChoreographyIntent.RefreshPlaceholders ->
-                            state.copy(items = DEFAULT_VAULT_ITEMS)
-                        is ChoreographyIntent.SetSearchQuery ->
-                            state.copy(searchQuery = intent.query)
-                        is ChoreographyIntent.SetStyleFilter ->
-                            state.copy(selectedStyle = intent.style)
-                        is ChoreographyIntent.SetTagFilter ->
-                            state.copy(selectedTag = intent.tag)
-                        is ChoreographyIntent.SetSortMode ->
-                            state.copy(sortMode = intent.mode, sortLabel = intent.mode.name)
-                        is ChoreographyIntent.DeleteItem ->
-                            state.copy(items = state.items.filterNot { it.id == intent.id })
-                        is ChoreographyIntent.SetItemSongPlaybackSpeed -> {
-                            val speed = intent.speed.coerceIn(
-                                DomainValidators.CHOREO_PLAYBACK_SPEED_MIN,
-                                DomainValidators.CHOREO_PLAYBACK_SPEED_MAX,
-                            )
-                            state.copy(
-                                items = state.items.map { item ->
-                                    if (item.id == intent.id) {
-                                        item.copy(songPlaybackSpeed = speed)
-                                    } else {
-                                        item
-                                    }
-                                },
-                            )
-                        }
-                        else -> state
-                    }
+                    reduceHubState(state, intent, creationAccess?.canCreate(ownChoreographyCount(state.items)) != false)
                 }
-                val hub = stack.value.active.instance as? ChoreographyComponent.Child.Hub
-                hub?.component?.onIntent(intent)
+                persistVault(_uiState.value.items)
+                if (intent is ChoreographyIntent.DeleteItem) deletedObserver?.onDeleted(intent.id)
             }
         }
     }
 
+    private fun refreshPickerCatalog() {
+        val load = loadLibrary ?: return
+        scope.launch {
+            runCatching { ChoreoCatalog.replaceFromAppData(load.load()) }
+        }
+    }
+
+    private suspend fun refreshPickerCatalogSuspend() {
+        val load = loadLibrary ?: return
+        runCatching { ChoreoCatalog.replaceFromAppData(load.load()) }
+    }
+
     override fun openSequenceEditor(itemId: String?) {
-        val item = itemId?.let { id -> _uiState.value.items.firstOrNull { it.id == id } }
-        val title = item?.title ?: "Новая хореография"
+        refreshPickerCatalog()
+        if (itemId == null) {
+            // C-213: blank create also upserts a Draft before opening the editor.
+            openNewSequenceEditor("Новая хореография", ChoreoCatalog.styles.first(), "")
+            return
+        }
+        val item = _uiState.value.items.firstOrNull { it.id == itemId }
+        if (item != null && item.snapshot == null && DEFAULT_VAULT_ITEMS.any { it.id == item.id } &&
+            creationAccess?.canCreate(ownChoreographyCount(_uiState.value.items)) == false) {
+            _uiState.update { it.copy(creationBlockedMessage = FREE_CREATION_MESSAGE) }
+            return
+        }
         navigation.pushNew(
             Config.SequenceEditor(
-                title = title,
+                itemId = item?.id ?: itemId,
+                title = item?.title ?: "Новая хореография",
+                style = item?.style ?: ChoreoCatalog.styles.first(),
                 songPlaybackSpeed = item?.songPlaybackSpeed ?: 1.0,
+                tag = item?.snapshot?.tag.orEmpty(),
+            ),
+        )
+    }
+
+    override fun openNewSequenceEditor(title: String, style: String, tag: String) {
+        val style = danceStyles?.state?.value?.choiceId(style) ?: style
+        if (creationAccess?.canCreate(ownChoreographyCount(_uiState.value.items)) == false) {
+            _uiState.update { it.copy(creationBlockedMessage = FREE_CREATION_MESSAGE) }
+            return
+        }
+        refreshPickerCatalog()
+        val trimmed = title.trim().ifEmpty { "Новая хореография" }
+        // C-213: upsert Draft vault item immediately (empty clips OK) before opening editor.
+        val draftId = saveFromEditor(
+            null,
+            ChoreographySnapshot(title = trimmed, style = style, tag = tag),
+        )
+        navigation.pushNew(
+            Config.SequenceEditor(
+                itemId = draftId,
+                title = trimmed,
+                style = style,
+                tag = tag,
             ),
         )
     }
 
     override fun onBack(): Boolean {
+        // C-213: autosave active editor snapshot before pop (also covered by doOnDestroy).
+        val active = stack.value.active.instance
+        if (active is ChoreographyComponent.Child.SequenceEditor) {
+            val editor = active.component
+            if (editor is DefaultSequenceEditorStubComponent) {
+                editor.flushAutosave()
+            }
+        }
         var handled = false
         navigation.pop { didPop -> handled = didPop }
         return handled
+    }
+
+    private fun saveFromEditor(itemId: String?, snapshot: ChoreographySnapshot): String {
+        val snapshot = danceStyles?.state?.value?.let { snapshot.copy(style = it.canonicalId(snapshot.style)) } ?: snapshot
+        var savedId = itemId.orEmpty()
+        _uiState.update { state ->
+            val (next, id) = upsertSnapshot(state, itemId, snapshot)
+            savedId = id
+            next
+        }
+        // C-273 + C-301: process store + disk so force-stop keeps STRESS/user clips (D1.3).
+        persistVault(_uiState.value.items)
+        return savedId
     }
 
     private fun child(
@@ -445,6 +816,10 @@ class DefaultChoreographyComponent(
                     DefaultChoreographyHubComponent(
                         componentContext = context,
                         onOpenEditor = ::openSequenceEditor,
+                        onCreateNamed = ::openNewSequenceEditor,
+                        state = _uiState,
+                        creationAccess = creationAccess,
+                        onReduce = ::onIntent,
                     ),
                 )
             is Config.SequenceEditor ->
@@ -453,6 +828,16 @@ class DefaultChoreographyComponent(
                         context,
                         initialTitle = config.title,
                         initialSongPlaybackSpeed = config.songPlaybackSpeed,
+                        initialStyle = config.style,
+                        danceStyles = danceStyles,
+                        initialTag = config.tag,
+                        initialTagCatalog = _uiState.value.tagCatalog,
+                        initialSnapshot = config.itemId?.let { id ->
+                            _uiState.value.items.firstOrNull { it.id == id }?.snapshot
+                        },
+                        initialItemId = config.itemId,
+                        onSave = ::saveFromEditor,
+                        onRefreshCatalog = ::refreshPickerCatalogSuspend,
                     ),
                 )
         }
@@ -464,8 +849,11 @@ class DefaultChoreographyComponent(
 
         @Serializable
         data class SequenceEditor(
+            val itemId: String? = null,
             val title: String,
+            val style: String = "Sensual",
             val songPlaybackSpeed: Double = 1.0,
+            val tag: String = "",
         ) : Config
     }
 }

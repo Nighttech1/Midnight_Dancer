@@ -18,7 +18,11 @@ object MdMotion {
     val interactiveUnderdamped: SpringSpec<Float> =
         SpringTokens.InteractiveUnderdamped.toComposeSpring()
 
-    /** Pager / [AnimatedContent] fade specs share the same physics (C-24 — do not soften). */
+    /** ChildPages horizontal settle — soft glide (C-133). */
+    val pagerSwipe: SpringSpec<Float> =
+        SpringTokens.PagerSwipe.toComposeSpring()
+
+    /** Title fade in chrome — keep critical. */
     fun <T> navigationCriticalSpec(): FiniteAnimationSpec<T> =
         spring(
             dampingRatio = SpringTokens.NavigationCritical.dampingRatio,

@@ -14,6 +14,7 @@ data class DanceStyleConfig(
         const val VISIBLE_STYLES_IN_SETTINGS: Int = 5
 
         val DEFAULT_NAMES: List<String> = listOf(
+            com.midnightdancer.core.domain.styles.ReservedDanceStyle.NAME,
             "Sensual",
             "Bachata",
             "Kizomba",
@@ -30,7 +31,7 @@ data class DanceStyleConfig(
             raw.trim().take(MAX_NAME_LENGTH)
 
         fun sanitizeList(raw: List<String>): List<String> =
-            raw.map(::sanitizeName)
+            (listOf(com.midnightdancer.core.domain.styles.ReservedDanceStyle.NAME) + raw.map(::sanitizeName))
                 .filter { it.isNotEmpty() }
                 .distinct()
                 .take(MAX_STYLES)

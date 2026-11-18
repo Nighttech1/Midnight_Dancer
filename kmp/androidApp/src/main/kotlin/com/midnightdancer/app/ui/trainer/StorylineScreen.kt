@@ -13,7 +13,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +27,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -44,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
@@ -58,15 +60,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midnightdancer.app.ui.components.MdFieldLabel
 import com.midnightdancer.app.ui.components.MdPageTitle
+import com.midnightdancer.app.ui.components.MdSettingsGear
 import com.midnightdancer.app.ui.components.SearchablePicker
 import com.midnightdancer.app.ui.elements.AtelierColors
 import com.midnightdancer.app.ui.motion.interactiveSpringPress
 import com.midnightdancer.app.ui.motion.rememberMdHaptics
 import com.midnightdancer.app.ui.motion.rememberSoftGridFlingBehavior
+import com.midnightdancer.app.ui.theme.MdFonts
 import com.midnightdancer.app.ui.theme.toComposeColor
 import com.midnightdancer.core.designsystem.ColorTokens
 import com.midnightdancer.core.designsystem.HapticEvent
 import com.midnightdancer.core.designsystem.HapticFeedback
+import com.midnightdancer.core.designsystem.NoOpHapticFeedback
 import com.midnightdancer.core.tts.TrainerVoice
 import com.midnightdancer.feature.trainer.logic.StorylineStep
 import com.midnightdancer.feature.trainer.logic.TrainerIntent
@@ -80,45 +85,18 @@ private val GreyDance = Color.White.copy(alpha = 0.18f)
 private val DanceCtaClearance = 12.dp
 private val DanceCtaHeightPad = 92.dp
 
-private val MockStyles = listOf(
-    "Бачата Sensual",
-    "Salsa",
-    "Kizomba",
-    "Dominican",
-    "Modern",
-    "Zouk",
-    "Танго",
-    "Cha-cha",
-)
-private val MockTracks = listOf(
-    "Zacarias F. — Asesina",
-    "Romeo Santos — Propuesta",
-    "Gente de Zona — La Gozadera",
-    "Charles Luis — Ocasión",
-    "Jensen — Carita",
-    "Prince Royce — Darte un Beso",
-    "Marc Anthony — Vivir Mi Vida",
-    "Aventura — Obsesión",
-)
-private val MockTags = listOf(
-    "Все уровни",
-    "Новичок",
-    "Средний",
-    "Про",
-    "Соло",
-    "В паре",
-    "Фигура",
-    "Волна",
-)
 /**
- * Stitch storyline — OLED accordion deck (C-94).
+ * Stitch storyline — OLED accordion deck (C-94 / C-192).
  * Filled steps: bright Flame perimeter glow; Dance CTA flush above dock.
+ * Pickers use real Room catalogs from [TrainerUiState] — no mock lists.
  */
 @Composable
 fun StorylineScreen(
     state: TrainerUiState,
     onIntent: (TrainerIntent) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
+    isTabSelected: Boolean = true,
 ) {
     val haptics = rememberMdHaptics()
     val oled = ColorTokens.OledTrueBlack.toComposeColor()
@@ -141,32 +119,50 @@ fun StorylineScreen(
                 ),
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 10.dp,
-                bottom = DanceCtaHeightPad,
-            ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            flingBehavior = softFling,
-        ) {
-            item(key = "sl-header") {
-                MdPageTitle(text = state.title)
-            }
-            items(
-                items = state.storylineSteps,
-                key = { it.index },
-            ) { step ->
-                AccordionCard(
-                    step = step,
-                    expanded = state.expandedStep == step.index,
-                    state = state,
-                    onExpand = { onIntent(TrainerIntent.SetExpandedStep(step.index)) },
-                    onIntent = onIntent,
+        // C-229: sticky title + gear (parity with Elements/Music); accordion scrolls under.
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MdPageTitle(
+                    text = state.title,
+                    modifier = Modifier.weight(1f),
+                )
+                MdSettingsGear(
+                    onClick = onOpenSettings,
                     haptics = haptics,
                 )
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 4.dp,
+                    bottom = DanceCtaHeightPad,
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                flingBehavior = softFling,
+            ) {
+                items(
+                    items = state.storylineSteps,
+                    key = { it.index },
+                ) { step ->
+                    AccordionCard(
+                        step = step,
+                        isTabSelected = isTabSelected,
+                        expanded = state.expandedStep == step.index,
+                        state = state,
+                        onExpand = { onIntent(TrainerIntent.SetExpandedStep(step.index)) },
+                        onIntent = onIntent,
+                        haptics = haptics,
+                    )
+                }
             }
         }
 
@@ -188,11 +184,12 @@ private fun ModeToggle(
     onMode: (TrainerMode) -> Unit,
     haptics: HapticFeedback,
 ) {
+    // C-265: restore dual Freestyle/Choreography chips (not SearchablePicker).
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xE6090B10))
+            .background(Color(0xE6121319))
             .border(1.dp, Hairline, RoundedCornerShape(16.dp))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -238,25 +235,28 @@ private fun ModeChip(
             )
             .interactiveSpringPress(
                 hapticEvent = HapticEvent.Selection,
-                haptics = haptics,
+                haptics = NoOpHapticFeedback,
                 onClick = onClick,
             )
-            .padding(vertical = 10.dp),
+            .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.5.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = MdFonts.Display,
+            fontSize = 14.sp,
         )
     }
+    @Suppress("UNUSED_PARAMETER")
+    val unused = haptics
 }
 
 @Composable
 private fun AccordionCard(
     step: StorylineStep,
+    isTabSelected: Boolean,
     expanded: Boolean,
     state: TrainerUiState,
     onExpand: () -> Unit,
@@ -264,11 +264,17 @@ private fun AccordionCard(
     haptics: HapticFeedback,
 ) {
     val isChoreo = state.mode == TrainerMode.Choreography
-    val voiceStepIndex = if (isChoreo) 2 else 4
+    // C-273: choreography mode = 01 mode · 02 tag+choreo · 03 voice
+    val voiceStepIndex = if (isChoreo) 3 else 4
 
     val summary = when {
         step.index == 1 ->
             if (state.mode == TrainerMode.Freestyle) "«Фристайл»" else "«Хореография»"
+        isChoreo && step.index == 2 ->
+            listOf(state.choreographyTag, state.selectedChoreographyTitle)
+                .filter { it.isNotBlank() }
+                .joinToString(" · ")
+                .ifBlank { step.subtitle }
         !isChoreo && step.index == 2 ->
             listOf(state.styleName, state.trackTitle)
                 .filter { it.isNotBlank() }
@@ -293,6 +299,8 @@ private fun AccordionCard(
 
     val filled = when {
         step.index == 1 -> true
+        isChoreo && step.index == 2 ->
+            state.selectedChoreographyId.isNotBlank()
         !isChoreo && step.index == 2 ->
             state.styleName.isNotBlank() && state.trackTitle.isNotBlank()
         !isChoreo && step.index == 3 ->
@@ -319,7 +327,8 @@ private fun AccordionCard(
                 },
             )
             .clip(CardShape)
-            .background(Color.White.copy(alpha = 0.04f))
+            // C-253: same plate as SearchablePicker (0xE6121319) — not near-OLED 4% white slab.
+            .background(Color(0xE6121319))
             .border(
                 width = if (filled) 2.dp else 1.dp,
                 color = if (filled) AtelierColors.Flame else Hairline,
@@ -331,7 +340,8 @@ private fun AccordionCard(
                 .fillMaxWidth()
                 .interactiveSpringPress(
                     hapticEvent = HapticEvent.LightImpact,
-                    haptics = haptics,
+                    // Accordion header: silent (no LightImpact buzz on expand/collapse).
+                    haptics = NoOpHapticFeedback,
                     onClick = onExpand,
                 )
                 .padding(14.dp),
@@ -347,7 +357,7 @@ private fun AccordionCard(
                     color = Color.White,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = MdFonts.Display,
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(
@@ -367,7 +377,7 @@ private fun AccordionCard(
                         text = summary,
                         color = Color.White.copy(alpha = 0.50f),
                         fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = MdFonts.Display,
                     )
                 }
             }
@@ -404,6 +414,11 @@ private fun AccordionCard(
                         onMode = { onIntent(TrainerIntent.SetMode(it)) },
                         haptics = haptics,
                     )
+                    isChoreo && step.index == 2 -> ChoreographyPickSection(
+                        state = state,
+                        isTabSelected = isTabSelected,
+                        onIntent = onIntent,
+                    )
                     !isChoreo && step.index == 2 -> StyleTrackSection(
                         state = state,
                         onIntent = onIntent,
@@ -417,14 +432,57 @@ private fun AccordionCard(
                     step.index == voiceStepIndex -> VoiceSection(
                         voiceName = state.voiceName,
                         selectedIndex = state.selectedVoiceIndex,
-                        speakLabel = state.speakLabel,
                         onVoice = { onIntent(TrainerIntent.SelectVoice(it)) },
-                        onSpeak = { onIntent(TrainerIntent.RequestSpeak()) },
                         haptics = haptics,
                     )
                 }
             }
         }
+    }
+}
+
+/** C-273: choreography mode step 2 — tag then choreography SearchablePickers. */
+@Composable
+private fun ChoreographyPickSection(
+    state: TrainerUiState,
+    isTabSelected: Boolean,
+    onIntent: (TrainerIntent) -> Unit,
+) {
+    var openPicker by remember { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SearchablePicker(
+            label = "Тег",
+            value = state.choreographyTag.ifBlank { "Все теги" },
+            options = state.tagOptions.ifEmpty {
+                listOf(com.midnightdancer.feature.trainer.logic.TrainerSessionFactory.TAG_ALL)
+            },
+            expanded = openPicker == "tag",
+            onExpandedChange = { open ->
+                openPicker = if (open) "tag" else null
+            },
+            onSelect = {
+                onIntent(TrainerIntent.SetChoreographyTag(it))
+                openPicker = null
+            },
+            panelMaxHeight = 200.dp,
+        )
+        SearchablePicker(
+            label = "Хореография",
+            value = state.selectedChoreographyTitle,
+            options = state.choreographyOptions,
+            expanded = openPicker == "choreo",
+            onExpandedChange = { open ->
+                // Refresh titles from vault when opening.
+                if (open) onIntent(TrainerIntent.SetChoreographyTag(state.choreographyTag.ifBlank { "Все теги" }))
+                openPicker = if (open) "choreo" else null
+            },
+            onSelect = {
+                onIntent(TrainerIntent.SetSelectedChoreography(it))
+                openPicker = null
+            },
+            panelMaxHeight = 240.dp,
+        )
+        RehearsalEntry(state, isTabSelected)
     }
 }
 
@@ -439,7 +497,7 @@ private fun StyleTrackSection(
         SearchablePicker(
             label = "Стиль",
             value = state.styleName,
-            options = MockStyles,
+            options = state.styleOptions,
             expanded = openPicker == "style",
             onExpandedChange = { open ->
                 openPicker = if (open) "style" else null
@@ -450,7 +508,7 @@ private fun StyleTrackSection(
         SearchablePicker(
             label = "Трек",
             value = state.trackTitle,
-            options = MockTracks,
+            options = state.trackOptions,
             expanded = openPicker == "track",
             onExpandedChange = { open ->
                 openPicker = if (open) "track" else null
@@ -459,6 +517,8 @@ private fun StyleTrackSection(
             panelMaxHeight = 220.dp,
         )
     }
+    @Suppress("UNUSED_PARAMETER")
+    val unusedHaptics = haptics
 }
 
 @Composable
@@ -469,17 +529,50 @@ private fun ElementsIntervalSection(
 ) {
     var tagsExpanded by remember { mutableStateOf(false) }
     val interval = state.intervalSec.coerceIn(2f, 15f).let { if (it <= 0f) 8f else it }
+    val useTiming = state.useElementTiming
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SearchablePicker(
-            label = "Элементы",
-            value = state.elementTagLabel,
-            options = MockTags,
+            label = "Тег",
+            value = state.elementTagLabel.ifBlank { "Выбрать…" },
+            options = state.tagOptions.ifEmpty {
+                listOf(com.midnightdancer.feature.trainer.logic.TrainerSessionFactory.TAG_ALL)
+            },
             expanded = tagsExpanded,
             onExpandedChange = { tagsExpanded = it },
             onSelect = { onIntent(TrainerIntent.SetElementTag(it)) },
             panelMaxHeight = 200.dp,
         )
-        MdFieldLabel(text = "Интервал")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    haptics.perform(HapticEvent.Selection)
+                    onIntent(TrainerIntent.SetUseElementTiming(!useTiming))
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // Single toggle path — Checkbox must not also fire (double-toggle).
+            Checkbox(
+                checked = useTiming,
+                onCheckedChange = null,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = AtelierColors.Flame,
+                    uncheckedColor = Color.White.copy(alpha = 0.35f),
+                    checkmarkColor = Color.Black,
+                ),
+            )
+            Text(
+                text = "Учесть продолжительность элементов",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        // C-229: interval always editable — fallback duration for elements without video
+        // (and sole spacing when checkbox is OFF).
+        MdFieldLabel(text = "Интервал между элементами")
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -490,6 +583,7 @@ private fun ElementsIntervalSection(
                 onValueChange = {
                     onIntent(TrainerIntent.SetInterval(it.toInt().coerceIn(2, 15).toFloat()))
                 },
+                enabled = true,
                 valueRange = 2f..15f,
                 steps = 12,
                 modifier = Modifier.weight(1f),
@@ -507,61 +601,12 @@ private fun ElementsIntervalSection(
                 modifier = Modifier.width(48.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun ChipRow(
-    options: List<String>,
-    selected: String,
-    haptics: HapticFeedback,
-    onPick: (String) -> Unit,
-) {
-    Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        options.forEach { option ->
-            PickChip(
-                label = option,
-                active = option == selected,
-                haptics = haptics,
-                onClick = { onPick(option) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun PickChip(
-    label: String,
-    active: Boolean,
-    haptics: HapticFeedback,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(
-                if (active) AtelierColors.Flame.copy(alpha = 0.20f)
-                else Color.White.copy(alpha = 0.06f),
-            )
-            .border(
-                1.dp,
-                if (active) AtelierColors.Flame.copy(alpha = 0.45f) else Hairline,
-                RoundedCornerShape(50),
-            )
-            .interactiveSpringPress(
-                hapticEvent = HapticEvent.Selection,
-                haptics = haptics,
-                onClick = onClick,
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
         Text(
-            text = label,
-            color = if (active) Color.White else Color.White.copy(alpha = 0.60f),
-            fontSize = 12.sp,
+            text = "Если в карточке элемента нет видео, его продолжительность принимается по интервалу между элементами",
+            color = Color.White.copy(alpha = 0.45f),
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            fontFamily = MdFonts.Display,
         )
     }
 }
@@ -570,53 +615,62 @@ private fun PickChip(
 private fun VoiceSection(
     voiceName: String,
     selectedIndex: Int,
-    speakLabel: String,
     onVoice: (TrainerVoice) -> Unit,
-    onSpeak: () -> Unit,
     haptics: HapticFeedback,
 ) {
+    val voices = TrainerVoice.fullSet
+    // C-265: restore multi voice chips (Руслан / Ирина / Камила).
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         MdFieldLabel(text = "Голос")
-        Text(
-            text = voiceName,
-            color = Color.White.copy(alpha = 0.70f),
-            fontSize = 13.sp,
-        )
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            TrainerVoice.fullSet.forEachIndexed { index, voice ->
+            voices.forEachIndexed { index, voice ->
                 val active = index == selectedIndex
-                PickChip(
-                    label = voice.displayNameRu,
-                    active = active,
-                    haptics = haptics,
-                    onClick = { onVoice(voice) },
-                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (active) {
+                                Brush.horizontalGradient(
+                                    listOf(AtelierColors.Flame, AtelierColors.Glow),
+                                )
+                            } else {
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xE6121319), Color(0xE6121319)),
+                                )
+                            },
+                        )
+                        .border(
+                            1.dp,
+                            if (active) AtelierColors.Flame.copy(alpha = 0.55f) else Hairline,
+                            RoundedCornerShape(12.dp),
+                        )
+                        .interactiveSpringPress(
+                            hapticEvent = HapticEvent.Selection,
+                            haptics = NoOpHapticFeedback,
+                            onClick = { onVoice(voice) },
+                        )
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = voice.displayNameRu,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = MdFonts.Display,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                    )
+                }
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(AtelierColors.Flame.copy(alpha = 0.15f))
-                .border(1.dp, AtelierColors.Flame.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                .interactiveSpringPress(
-                    hapticEvent = HapticEvent.MediumImpact,
-                    haptics = haptics,
-                    onClick = onSpeak,
-                )
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = speakLabel,
-                color = AtelierColors.Flame,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
+        @Suppress("UNUSED_PARAMETER")
+        val unusedName = voiceName
+        @Suppress("UNUSED_PARAMETER")
+        val unusedHaptics = haptics
     }
 }
 

@@ -12,8 +12,9 @@ android {
         applicationId = "com.midnightdancer.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.4.1-stage4-polish"
+        versionCode = 3
+        versionName = "0.5.0-rehearsal-preview"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -45,7 +46,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
-
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
@@ -69,4 +69,14 @@ dependencies {
     // Boot splash looping video (Media3 ExoPlayer)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
+
+    // C-324: matrix group E — connected playback smoke test (decoder-counter telemetry on a device).
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.kotlinx.serialization.json)
+    androidTestImplementation(libs.androidx.room.runtime)
+    androidTestImplementation(libs.androidx.media3.exoplayer)
 }

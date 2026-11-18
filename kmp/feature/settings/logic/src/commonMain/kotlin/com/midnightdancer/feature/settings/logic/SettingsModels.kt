@@ -15,6 +15,10 @@ data class SettingsUiState(
     val reminderMinute: Int = 0,
     val prefsLoaded: Boolean = false,
     val danceStyles: List<String> = DanceStyleConfig.DEFAULT_NAMES,
+    val styleEntries: List<com.midnightdancer.core.domain.styles.DanceStyleEntry> = emptyList(),
+    val stylesLoading: Boolean = false,
+    val stylesBusy: Boolean = false,
+    val stylesError: String? = null,
     val newStyleDraft: String = "",
     val styleNameMaxLength: Int = DanceStyleConfig.MAX_NAME_LENGTH,
     val elementCategories: List<String> = ElementCategoryConfig.DEFAULT_NAMES,
@@ -35,6 +39,8 @@ sealed interface SettingsIntent {
     data object AddStyle : SettingsIntent
     data class RemoveStyle(val name: String) : SettingsIntent
     data class RenameStyle(val oldName: String, val newName: String) : SettingsIntent
+    data class RemoveStyleById(val id: String) : SettingsIntent
+    data class RenameStyleById(val id: String, val newName: String) : SettingsIntent
     data class SetCategoryDraft(val text: String) : SettingsIntent
     data object AddCategory : SettingsIntent
     data class RemoveCategory(val name: String) : SettingsIntent

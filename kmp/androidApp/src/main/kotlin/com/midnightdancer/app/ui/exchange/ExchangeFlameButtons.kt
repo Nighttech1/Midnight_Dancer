@@ -55,34 +55,43 @@ fun FlameBlackLabelButton(
     }
 }
 
-/** Оранжевая кнопка, белый текст — «Создать пакет» / «Импортировать» / «Выбрать X/N». */
+/** Оранжевая кнопка, белый текст — «Создать сет» / «Импортировать» / «Выбрано N». */
 @Composable
 fun FlameWhiteLabelButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     fullWidth: Boolean = true,
+    enabled: Boolean = true,
 ) {
     val flame = ColorTokens.NeonOrange.toComposeColor()
     val haptics = rememberMdHaptics()
+    val bg = if (enabled) flame else Color(0xFF5A5A5A)
+    val labelColor = if (enabled) Color.White else Color.White.copy(alpha = 0.45f)
     Box(
         modifier = modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .heightIn(min = 48.dp)
             .clip(ButtonShape)
-            .background(flame)
-            .interactiveSpringPress(
-                pressedScale = 0.96f,
-                hapticEvent = HapticEvent.MediumImpact,
-                haptics = haptics,
-                onClick = onClick,
+            .background(bg)
+            .then(
+                if (enabled) {
+                    Modifier.interactiveSpringPress(
+                        pressedScale = 0.96f,
+                        hapticEvent = HapticEvent.MediumImpact,
+                        haptics = haptics,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = Color.White,
+            color = labelColor,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,
         )

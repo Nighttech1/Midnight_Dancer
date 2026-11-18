@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -40,12 +41,11 @@ import com.midnightdancer.core.designsystem.ColorTokens
 import com.midnightdancer.core.designsystem.HapticEvent
 import com.midnightdancer.core.domain.exchange.CatalogPickItem
 import com.midnightdancer.core.domain.exchange.ExportPickKind
-import com.midnightdancer.core.domain.exchange.PackageExportLimits
 
 private enum class PickSort { NameAsc, NameDesc }
 
 /**
- * Режим выбора в разделе для экспорта (C-118): toolbar + soft scroll.
+ * Режим выбора раздела для экспорта / редактирования сета (C-219 / C-220).
  */
 @Composable
 fun ExportSectionPickerScreen(
@@ -57,16 +57,16 @@ fun ExportSectionPickerScreen(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Edit mode: Flame 2.dp rim on selected rows. */
+    highlightSelected: Boolean = false,
+    /** Live set weight while picking (edit mode). */
+    weightMb: Float? = null,
+    overweight: Boolean = false,
+    readOnly: Boolean = false,
 ) {
     val flame = ColorTokens.NeonOrange.toComposeColor()
     val haptics = rememberMdHaptics()
     val softFling = rememberSoftGridFlingBehavior(frictionMultiplier = 0.32f)
-    val max =
-        when (kind) {
-            ExportPickKind.Elements -> PackageExportLimits.MAX_ELEMENTS
-            ExportPickKind.Songs -> PackageExportLimits.MAX_SONGS
-            ExportPickKind.Choreographies -> PackageExportLimits.MAX_CHOREOGRAPHIES
-        }
     val title =
         when (kind) {
             ExportPickKind.Elements -> "Элементы"
@@ -132,34 +132,58 @@ fun ExportSectionPickerScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
+                    if (weightMb != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Вес сета: ${formatPickerWeight(weightMb)} МБ",
+                            color = if (overweight) Color.Red else Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
-                FlameWhiteLabelButton(
-                    label = "Выбрать $count/$max",
-                    onClick = onConfirm,
-                    fullWidth = false,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = if (readOnly) "Назад" else "Отмена",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .interactiveSpringPress(
+                                hapticEvent = HapticEvent.Selection,
+                                haptics = haptics,
+                                onClick = onDismiss,
+                            )
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                    )
+                    if (!readOnly) FlameWhiteLabelButton(
+                        label = "Выбрано $count",
+                        onClick = onConfirm,
+                        fullWidth = false,
+                    )
+                }
             }
 
-            if (kind == ExportPickKind.Elements || kind == ExportPickKind.Songs ||
-                kind == ExportPickKind.Choreographies
-            ) {
-                CatalogToolbar(
-                    filterOptions = filterOptions,
-                    selectedFilter = filterTag,
-                    onFilterSelect = { filterTag = it },
-                    sortOptions =
-                        listOf(
-                            "А → Я" to { sort = PickSort.NameAsc },
-                            "Я → А" to { sort = PickSort.NameDesc },
-                        ),
-                    sortActive = true,
-                    searchQuery = searchQuery,
-                    onSearchChange = { searchQuery = it },
-                    searchPlaceholder = searchPlaceholder,
-                    haptics = haptics,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            }
+            CatalogToolbar(
+                filterOptions = filterOptions,
+                selectedFilter = filterTag,
+                onFilterSelect = { filterTag = it },
+                sortOptions =
+                    listOf(
+                        "А → Я" to { sort = PickSort.NameAsc },
+                        "Я → А" to { sort = PickSort.NameDesc },
+                    ),
+                sortActive = true,
+                searchQuery = searchQuery,
+                onSearchChange = { searchQuery = it },
+                searchPlaceholder = searchPlaceholder,
+                haptics = haptics,
+                allFiltersLabel = "Все теги",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
 
             LazyColumn(
                 modifier = Modifier
@@ -172,7 +196,11 @@ fun ExportSectionPickerScreen(
                 if (visible.isEmpty()) {
                     item {
                         Text(
-                            text = "В этом стиле пока нечего выбрать.",
+                            text = when {
+                                searchQuery.isNotBlank() || !filterTag.isNullOrBlank() -> "Ничего не найдено."
+                                readOnly -> "В этом разделе архива нет материалов."
+                                else -> "В этом стиле пока нечего выбрать."
+                            },
                             color = Color.White.copy(alpha = 0.55f),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(top = 24.dp),
@@ -182,22 +210,30 @@ fun ExportSectionPickerScreen(
                 items(visible, key = { it.id }) { item ->
                     val checked = item.id in selectedIds
                     val shape = RoundedCornerShape(14.dp)
+                    val borderWidth =
+                        if (highlightSelected && checked) 2.dp else 1.dp
+                    val borderColor =
+                        if (highlightSelected && checked) {
+                            flame
+                        } else {
+                            flame.copy(alpha = 0.28f)
+                        }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(shape)
                             .background(Color(0xCC0A0B10))
-                            .border(1.dp, flame.copy(alpha = 0.28f), shape)
-                            .interactiveSpringPress(
+                            .border(borderWidth, borderColor, shape)
+                            .then(if (readOnly) Modifier else Modifier.interactiveSpringPress(
                                 pressedScale = 0.98f,
                                 hapticEvent = HapticEvent.Selection,
                                 haptics = haptics,
                                 onClick = { onToggle(item.id) },
-                            )
+                            ))
                             .padding(horizontal = 10.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(
+                        if (!readOnly) Checkbox(
                             checked = checked,
                             onCheckedChange = { onToggle(item.id) },
                             colors = CheckboxDefaults.colors(
@@ -206,6 +242,7 @@ fun ExportSectionPickerScreen(
                                 checkmarkColor = Color.Black,
                             ),
                         )
+                        Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(text = item.title, color = Color.White, fontSize = 15.sp)
                             if (item.subtitle.isNotBlank()) {
@@ -219,19 +256,15 @@ fun ExportSectionPickerScreen(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Отмена",
-                color = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier
-                    .padding(16.dp)
-                    .interactiveSpringPress(
-                        hapticEvent = HapticEvent.Selection,
-                        haptics = haptics,
-                        onClick = onDismiss,
-                    ),
-            )
         }
+    }
+}
+
+private fun formatPickerWeight(weightMb: Float): String {
+    val tenths = ((weightMb * 10f).toInt().coerceAtLeast(0)) / 10f
+    return if (tenths == tenths.toInt().toFloat()) {
+        tenths.toInt().toString() + ".0"
+    } else {
+        tenths.toString()
     }
 }

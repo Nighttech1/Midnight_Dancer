@@ -16,9 +16,9 @@ class MusicLogicSmokeTest {
         lifecycle.resume()
 
         assertEquals("Музыка", component.uiState.value.title)
-        assertEquals(8, component.uiState.value.libraryCount)
-        assertTrue(component.uiState.value.placeholderTracks.isNotEmpty())
+        assertEquals(0, component.uiState.value.libraryCount)
+        assertTrue(component.uiState.value.placeholderTracks.isEmpty())
         component.onIntent(MusicIntent.RefreshPlaceholders)
-        assertEquals(8, component.uiState.value.placeholderTracks.size)
+        assertEquals(0, component.uiState.value.placeholderTracks.size)
     }
 }

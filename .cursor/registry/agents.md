@@ -11,7 +11,7 @@
 | KMP Shared | `kmp-shared.mdc` | `midnight-kmp-core`, compose-skill, kmp-ios-skills, **wave-throughput** | |
 | Android Compose | `android-compose.mdc` | compose skills · **`cyber-acoustic-motion-kit`** · `stitch-to-kmp-ui` · `ui-block-from-link` | |
 | iOS SwiftUI | `ios-swiftui.mdc` | swiftui / swift-kmp | |
-| Motion Premium | `motion-premium.mdc` | **`midnight-premium-motion`**, **`cyber-acoustic-motion-kit`**, `stitch-to-kmp-ui` | `plugins/motion` · Rive Android 11.12+ Compose API |
+| Motion Premium | `motion-premium.mdc` | **`midnight-premium-motion`**, **`cyber-acoustic-motion-kit`**, **`rive-splash-logo-assemble`**, `stitch-to-kmp-ui` | `plugins/motion` · Rive Android 11.12+ Compose API |
 | **Voice TTS** | `voice-tts.mdc` | **`midnight-piper-tts`** | `plugins/voice-tts` |
 | Platform Ops | `platform-ops.mdc` | `app-updates-and-notify` | firebase, storepilot |
 | **Хакер** | `hacker.mdc` | `midnight-security-hacker`, cybersecurity-skills (mobile/owasp-audit), owasp-mas-ai-skill, cyberaudit-skill | **semgrep** · `plugins/hacker` |

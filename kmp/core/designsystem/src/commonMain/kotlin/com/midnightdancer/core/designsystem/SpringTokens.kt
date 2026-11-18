@@ -41,5 +41,17 @@ object SpringTokens {
             stiffness = 900f,
         )
 
-    val All: List<SpringToken> = listOf(NavigationCritical, InteractiveUnderdamped)
+    /**
+     * Horizontal ChildPages swipe settle — softer than nav critical so pages glide
+     * smoothly regardless of finger Y (C-133 / user 2026-10-12).
+     */
+    val PagerSwipe =
+        SpringToken(
+            id = "pager_swipe",
+            dampingRatio = 0.92f,
+            responseSeconds = 0.48f,
+            stiffness = 420f,
+        )
+
+    val All: List<SpringToken> = listOf(NavigationCritical, InteractiveUnderdamped, PagerSwipe)
 }

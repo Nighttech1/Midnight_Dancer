@@ -1,4 +1,4 @@
-name: KMP iOS Stage 4 (unsigned IPA)
+name: KMP iOS unsigned Debug smoke (not TestFlight)
 
 # Produces MidnightDancer-stage4.ipa for Mobile Next Cloud re-sign + install.
 # Windows cannot build Kotlin/Native iOS — this job must run on macos-latest.
@@ -14,12 +14,6 @@ on:
         options:
           - iphoneos
           - iphonesimulator
-  push:
-    paths:
-      - "kmp/**"
-      - ".github/workflows/kmp-ios.yml"
-      - "scripts/build-kmp-ios-ipa.sh"
-      - "ios-build/**"
 
 concurrency:
   group: kmp-ios-${{ github.ref }}
@@ -42,29 +36,43 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Select Xcode
+      - name: Record selected toolchain and revision
+        shell: bash
         run: |
-          echo "Available Xcodes:"
-          ls /Applications | grep -i Xcode || true
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
+          set -euo pipefail
+          mkdir -p ios-build/diagnostics
+          {
+            echo "Unsigned Debug compile smoke only; not TestFlight or installability acceptance."
+            echo "Using hosted runner default Xcode; compatibility unverified."
+            printf 'Revision: '; git rev-parse HEAD
+            xcode-select -p
+            xcodebuild -version
+            xcrun --sdk iphoneos --show-sdk-version
+            java -version
+          } 2>&1 | tee ios-build/diagnostics/toolchain.log
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Build unsigned IPA
+      - name: Build unsigned Debug IPA (not TestFlight)
         env:
           CONFIGURATION: Debug
+          SDK: ${{ inputs.sdk }}
         run: |
+          set -euo pipefail
+          mkdir -p ios-build/diagnostics
           chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
-          SDK="${{ github.event.inputs.sdk || 'iphoneos' }}"
-          ./scripts/build-kmp-ios-ipa.sh "${SDK}"
+          ./scripts/build-kmp-ios-ipa.sh "$SDK" 2>&1 | tee ios-build/diagnostics/build.log
+          {
+            printf 'Revision: '; git rev-parse HEAD
+            printf 'Configuration: %s; SDK: %s\n' "$CONFIGURATION" "$SDK"
+            shasum -a 256 ios-build/artifacts/current/MidnightDancer-stage4.ipa
+          } | tee ios-build/diagnostics/artifact.txt
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MidnightDancer-stage4-ipa
+          name: MidnightDancer-unsigned-Debug-smoke-${{ inputs.sdk }}
           path: ios-build/artifacts/current/MidnightDancer-stage4.ipa
           if-no-files-found: error
           retention-days: 14
@@ -79,3 +87,12 @@ jobs:
             kmp/shared/build/bin/iosSimulatorArm64/debugFramework
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Upload diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-smoke-diagnostics
+          path: ios-build/diagnostics/**
+          if-no-files-found: ignore
+          retention-days: 14

@@ -33,6 +33,12 @@ interface RootComponent {
 class DefaultRootComponent(
     componentContext: ComponentContext,
     private val factories: NavigationChildFactories = NavigationChildFactories(),
+    /**
+     * C-282: when Activity recreates after minimize / config change, skip splash and open Main.
+     * True cold start (process death / first launch) keeps [Config.Splash].
+     * Decompose [childStack] still restores saved stack when present.
+     */
+    startAtMain: Boolean = false,
 ) : RootComponent, ComponentContext by componentContext {
 
     private val navigation = StackNavigation<Config>()
@@ -40,7 +46,7 @@ class DefaultRootComponent(
     override val stack: Value<ChildStack<*, RootComponent.Child>> = childStack(
         source = navigation,
         serializer = Config.serializer(),
-        initialConfiguration = Config.Splash,
+        initialConfiguration = if (startAtMain) Config.Main else Config.Splash,
         handleBackButton = true,
         childFactory = ::child,
     )

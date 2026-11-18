@@ -18,11 +18,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 
 /**
- * Splash / boot — advances to Main via [finishSplash] (tap Continue).
- * Android plays looping muted `splash_boot.mp4`; [autoFinish] only for tests.
+ * Splash / boot — advances to Main via [finishSplash].
+ * Android plays muted `splash_boot.mp4` once; on video end → Continue → Elements tab.
+ * [autoFinish] only for unit tests (immediate Main).
  *
- * Production Root passes [autoFinish]=false and waits for TTS prepare (C-49).
- * [RootComponentSmokeTest] relies on default [autoFinish]=true (immediate Main).
+ * Production Root passes [autoFinish]=false; TTS prepare still runs in background (C-49)
+ * but no longer gates Continue — video end / Continue always advances (C-160).
  */
 interface SplashComponent {
     val uiState: StateFlow<SplashUiState>
@@ -82,9 +83,7 @@ class DefaultSplashComponent(
     override fun onIntent(intent: SplashIntent) {
         when (intent) {
             SplashIntent.Continue -> {
-                if (!autoFinish && !_uiState.value.bootReady) {
-                    return
-                }
+                // C-160: video end / Continue always advances (no Loading/Skip gate).
                 advanceToMain()
             }
             is SplashIntent.SetLegalStub ->

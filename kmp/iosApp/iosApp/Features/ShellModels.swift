@@ -90,10 +90,36 @@ struct VaultItemSnapshot: Equatable, Identifiable {
     var statusLabel: String
 }
 
+struct EditorClipSnapshot: Equatable, Identifiable {
+    var label: String
+    var durationMs: Int64
+    var mediaUri: String?
+    var speed: Double
+    var sourceStartMs: Int64
+
+    var id: String {
+        "\(mediaUri ?? label)|\(sourceStartMs)|\(durationMs)|\(speed)"
+    }
+}
+
+/// Pro Editor state mapped from [SequenceEditorUiState] — pure Swift for Features/.
+struct SequenceEditorSnapshot: Equatable {
+    var title: String
+    var isPlaying: Bool
+    var previewElementLabel: String?
+    var elementClips: [EditorClipSnapshot]
+    var elementsDurationMs: Int64
+    var playheadInElementsMs: Int64
+    /// C-231: playhead past last element → empty preview stage.
+    var previewIsEmpty: Bool
+}
+
 struct ChoreographyFeatureSnapshot: Equatable {
     var title: String
     var searchQuery: String
     var items: [VaultItemSnapshot]
+    /// Non-nil when nested stack shows Pro Editor (mirrors Android TabScreens).
+    var editor: SequenceEditorSnapshot?
 }
 
 struct TrainerFeatureSnapshot: Equatable {

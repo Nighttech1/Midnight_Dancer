@@ -1,20 +1,22 @@
 package com.midnightdancer.app.ui.trainer
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
@@ -33,10 +36,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,25 +49,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import com.midnightdancer.app.ui.components.MdPageTitle
 import com.midnightdancer.app.ui.components.MusicPulseVisualizer
 import com.midnightdancer.app.ui.components.VisualizerPlaybackState
 import com.midnightdancer.app.ui.elements.AtelierColors
+import com.midnightdancer.app.ui.motion.FlameGoldWhiteShimmer
 import com.midnightdancer.app.ui.motion.interactiveSpringPress
 import com.midnightdancer.app.ui.motion.rememberMdHaptics
 import com.midnightdancer.app.ui.theme.MdFonts
@@ -77,7 +86,6 @@ import com.midnightdancer.feature.trainer.logic.TrainerSessionIntent
 import com.midnightdancer.feature.trainer.logic.TrainerSessionUiState
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.min
 import kotlin.math.sin
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -89,16 +97,27 @@ private val Hairline = Color.White.copy(alpha = 0.12f)
 private val FinishCtaClearance = 12.dp
 private val FinishReserve = 92.dp
 private val CueItemHeight = 48.dp
+private val CueItemGap = 6.dp
 /** Fits ~5 cue cards under the visualizer. */
 private val CueViewportHeight = 320.dp
-private const val HoldDurationMs = 1000L
+/**
+ * C-202: active cue sits on the **middle** list row (sketch: triangles point at center).
+ * Slot 0 = above mid, 1 = mid (active gate), 2+ = below.
+ */
+private const val ActiveCueSlot = 1f
 private const val CueStepSec = 8f
-/** Mock full track length for MM.SS clock (cap display at 99.59). */
-private const val TrackTotalSec = 225f
-private const val VisibleCueSlots = 5
+private val VolumeThumbOuter = 14.dp
+private val VolumeThumbInner = 8.dp
+private val NeonTriangleSize = 18.dp
+/** C-226: inset so scale×1.5 triangles do not clip at screen edges. */
+private val NeonTriangleEdgeInset = 14.dp
 
 /**
- * Live session (C-98) — Understrukk clock, side vols, beat-wave, cue on line touch.
+ * Live session (C-98 / C-164 / C-192) — Understrukk clock, side vols, beat-wave, cue pipeline.
+ *
+ * ANDROID COMPOSE / MOTION — C-164: volume end-thumbs, cue scroll↑, tap Finish,
+ * scrub-safe playhead, play button closer to ring center.
+ * C-192: real Media3 track + TTS cues + soft fade carousel edges.
  */
 @Composable
 fun LiveFlowScreen(
@@ -109,17 +128,103 @@ fun LiveFlowScreen(
 ) {
     val haptics = rememberMdHaptics()
     val oled = ColorTokens.OledTrueBlack.toComposeColor()
+    var userScrubbing by remember { mutableStateOf(false) }
+    /** C-278: last user seek target — block ticker until Exo catches up (no ring snap-back). */
+    var scrubLatchFrac by remember { mutableFloatStateOf(-1f) }
+    var scrubSettleJob by remember { mutableStateOf<Job?>(null) }
+    val scrubScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val trackTotalSec = remember(state.trackDurationMs, state.cueSchedule) {
+        com.midnightdancer.feature.trainer.logic.TrainerReady.sessionTotalSec(state)
+            .coerceAtLeast(1f)
+    }
 
-    // Auto-advance playhead while playing so clock / cues sync (session stub has no audio clock yet).
+    // C-178: Live training takes the audio — stop library Music deck.
+    LaunchedEffect(Unit) {
+        com.midnightdancer.core.domain.audio.LibraryAudioStopBus.requestStop()
+        com.midnightdancer.app.audio.LibraryAudioController.forceStop()
+    }
+
+    // C-256: process-scoped player — do NOT release on tab leave / Compose dispose.
+    val musicPlayer = remember(context) {
+        com.midnightdancer.app.audio.TrainerLiveAudioController.obtain(context)
+    }
+    val playlistUris = remember(state.musicPlaylist, state.trackMediaUri) {
+        state.musicPlaylist.map { it.uri }.filter { it.isNotBlank() }
+            .ifEmpty { listOfNotNull(state.trackMediaUri?.takeIf { it.isNotBlank() }) }
+    }
+    val playlistDurations = remember(state.musicPlaylist, state.trackDurationMs) {
+        if (state.musicPlaylist.isNotEmpty()) {
+            state.musicPlaylist.map { it.durationMs.coerceAtLeast(1_000L) }
+        } else {
+            listOf(state.trackDurationMs.coerceAtLeast(1_000L))
+        }
+    }
+    // C-276: bind full choreography music playlist (or single freestyle URI).
+    LaunchedEffect(playlistUris) {
+        val exo = if (playlistUris.size > 1) {
+            com.midnightdancer.app.audio.TrainerLiveAudioController.ensurePlaylist(context, playlistUris)
+        } else {
+            com.midnightdancer.app.audio.TrainerLiveAudioController.ensureUri(
+                context,
+                playlistUris.firstOrNull(),
+            )
+        }
+        exo.volume = state.trackVol.coerceIn(0f, 1f)
+        if (playlistUris.isNotEmpty() && !state.isPaused) exo.play()
+    }
+    LaunchedEffect(state.isPaused, state.trackVol) {
+        musicPlayer.volume = state.trackVol.coerceIn(0f, 1f)
+        if (state.isPaused) musicPlayer.pause() else if (musicPlayer.mediaItemCount > 0) {
+            musicPlayer.play()
+        }
+    }
+    // C-226: if the platform still stalls the player during TTS, nudge play — keep BPM motion alive.
     LaunchedEffect(state.isPaused) {
         if (state.isPaused) return@LaunchedEffect
-        var frac = state.playheadFraction
+        while (isActive) {
+            delay(250)
+            if (!state.isPaused &&
+                musicPlayer.mediaItemCount > 0 &&
+                !musicPlayer.isPlaying &&
+                musicPlayer.playbackState == androidx.media3.common.Player.STATE_READY
+            ) {
+                musicPlayer.play()
+            }
+        }
+    }
+
+    // C-199: playhead follows real ExoPlayer position (ring scrub seeks the player).
+    // C-276: absolute position across playlist windows.
+    // C-226: if position stalls while session runs, advance by wall clock so cues/wave keep moving.
+    LaunchedEffect(state.isPaused, userScrubbing, trackTotalSec, playlistUris) {
+        if (state.isPaused || userScrubbing) return@LaunchedEffect
+        var lastPos = -1L
         while (isActive) {
             delay(50)
-            val step = 50f / (TrackTotalSec * 1000f)
-            frac = (frac + step).coerceAtMost(1f)
-            onIntent(TrainerSessionIntent.Seek(frac))
-            if (frac >= 1f) break
+            val totalMs = (trackTotalSec * 1000f).toLong().coerceAtLeast(1L)
+            val mediaDur = com.midnightdancer.app.audio.TrainerLiveAudioController
+                .absoluteDurationMs(musicPlayer, totalMs)
+            val frac = if (musicPlayer.mediaItemCount > 0 && mediaDur > 0L) {
+                val pos = com.midnightdancer.app.audio.TrainerLiveAudioController
+                    .absolutePositionMs(musicPlayer)
+                if (!musicPlayer.isPlaying && pos == lastPos) {
+                    (state.playheadFraction + 50f / totalMs).coerceAtMost(1f)
+                } else {
+                    lastPos = pos
+                    (pos.toFloat() / mediaDur.toFloat()).coerceIn(0f, 1f)
+                }
+            } else {
+                (state.playheadFraction + 50f / totalMs).coerceAtMost(1f)
+            }
+            onIntent(TrainerSessionIntent.Seek(frac, fromUserScrub = false))
+            // C-243: track end → Stop becomes Play (paused) automatically.
+            if (frac >= 1f) {
+                if (!state.isPaused) {
+                    onIntent(TrainerSessionIntent.TogglePause)
+                }
+                break
+            }
         }
     }
 
@@ -140,8 +245,63 @@ fun LiveFlowScreen(
                 isPaused = state.isPaused,
                 trackVol = state.trackVol,
                 voiceVol = state.voiceVol,
+                trackTotalSec = trackTotalSec,
                 onTogglePause = { onIntent(TrainerSessionIntent.TogglePause) },
-                onSeek = { onIntent(TrainerSessionIntent.Seek(it)) },
+                onSeek = { frac ->
+                    val f = frac.coerceIn(0f, 1f)
+                    scrubLatchFrac = f
+                    // C-199/C-276/C-278: ring scrub across playlist absolute timeline.
+                    val mediaDur = com.midnightdancer.app.audio.TrainerLiveAudioController
+                        .absoluteDurationMs(musicPlayer, state.trackDurationMs.coerceAtLeast(1L))
+                    val targetMs = (f * mediaDur).toLong().coerceIn(0L, mediaDur - 1L)
+                    com.midnightdancer.app.audio.TrainerLiveAudioController.seekAbsolute(
+                        musicPlayer,
+                        targetMs,
+                        playlistDurations,
+                    )
+                    onIntent(TrainerSessionIntent.Seek(f, fromUserScrub = true))
+                },
+                onScrubStart = {
+                    scrubSettleJob?.cancel()
+                    userScrubbing = true
+                },
+                onScrubEnd = {
+                    // C-278: keep ticker paused until Exo position ≈ latch (reverse scrub snap fix).
+                    scrubSettleJob?.cancel()
+                    scrubSettleJob = scrubScope.launch {
+                        val target = scrubLatchFrac
+                        if (target < 0f) {
+                            userScrubbing = false
+                            return@launch
+                        }
+                        var attempt = 0
+                        while (isActive && attempt < 24) {
+                            val mediaDur = com.midnightdancer.app.audio.TrainerLiveAudioController
+                                .absoluteDurationMs(
+                                    musicPlayer,
+                                    state.trackDurationMs.coerceAtLeast(1L),
+                                )
+                            val pos = com.midnightdancer.app.audio.TrainerLiveAudioController
+                                .absolutePositionMs(musicPlayer)
+                            val exoFrac = (pos.toFloat() / mediaDur.toFloat()).coerceIn(0f, 1f)
+                            if (kotlin.math.abs(exoFrac - target) <= 0.025f) break
+                            // Re-assert seek if player lagged behind reverse drag.
+                            if (attempt == 4 || attempt == 12) {
+                                val targetMs = (target * mediaDur).toLong()
+                                    .coerceIn(0L, mediaDur - 1L)
+                                com.midnightdancer.app.audio.TrainerLiveAudioController.seekAbsolute(
+                                    musicPlayer,
+                                    targetMs,
+                                    playlistDurations,
+                                )
+                            }
+                            delay(40)
+                            attempt++
+                        }
+                        userScrubbing = false
+                        scrubLatchFrac = -1f
+                    }
+                },
                 onTrack = { onIntent(TrainerSessionIntent.SetTrackVol(it)) },
                 onVoice = { onIntent(TrainerSessionIntent.SetVoiceVol(it)) },
                 haptics = haptics,
@@ -149,19 +309,27 @@ fun LiveFlowScreen(
             CuePipeline(
                 cues = state.cueSchedule,
                 playheadFraction = state.playheadFraction,
+                // C-267: same clock as Seek/TTS — prevents voice 3s ahead of highlight.
+                sessionTotalSec = trackTotalSec,
                 isPaused = state.isPaused,
+                bpm = state.bpm.toFloat(),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
         FinishDanceCta(
-            holdProgress = state.holdProgress,
-            onTick = { onIntent(TrainerSessionIntent.HoldFinishTick(it)) },
-            onReset = { onIntent(TrainerSessionIntent.ResetHold) },
-            onComplete = onBack,
+            onComplete = {
+                if (!state.isPaused) {
+                    onIntent(TrainerSessionIntent.TogglePause)
+                }
+                // C-256: only Finish tears down session audio.
+                com.midnightdancer.app.audio.TrainerLiveAudioController.forceStop()
+                onBack()
+            },
             haptics = haptics,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .zIndex(10f)
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = FinishCtaClearance),
         )
@@ -174,8 +342,11 @@ private fun PhaseHubWithSideVols(
     isPaused: Boolean,
     trackVol: Float,
     voiceVol: Float,
+    trackTotalSec: Float,
     onTogglePause: () -> Unit,
     onSeek: (Float) -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubEnd: () -> Unit,
     onTrack: (Float) -> Unit,
     onVoice: (Float) -> Unit,
     haptics: HapticFeedback,
@@ -197,8 +368,11 @@ private fun PhaseHubWithSideVols(
         PhaseHub(
             playheadFraction = playheadFraction,
             isPaused = isPaused,
+            trackTotalSec = trackTotalSec,
             onTogglePause = onTogglePause,
             onSeek = onSeek,
+            onScrubStart = onScrubStart,
+            onScrubEnd = onScrubEnd,
             haptics = haptics,
             modifier = Modifier.weight(1f).fillMaxHeight(),
         )
@@ -241,15 +415,14 @@ private fun SideVolumeBar(
             color = AtelierColors.Flame,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
+            fontFamily = MdFonts.Display,
         )
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
                 .padding(vertical = 8.dp)
-                .width(10.dp)
-                .clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.10f))
-                .pointerInput(value) {
+                .width(VolumeThumbOuter)
+                .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         fun fromY(y: Float): Float {
@@ -263,20 +436,55 @@ private fun SideVolumeBar(
                         }
                     }
                 },
-            contentAlignment = Alignment.BottomCenter,
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(value.coerceIn(0.04f, 1f))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(AtelierColors.Gold, AtelierColors.Flame),
+            val v = value.coerceIn(0f, 1f)
+            // C-187: top = 100%, bottom = 0% — same mapping as circular scrub fraction.
+            val thumbTop =
+                ((maxHeight - VolumeThumbOuter) * (1f - v)).coerceAtLeast(0.dp)
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .width(10.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.10f)),
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .width(10.dp)
+                        .fillMaxHeight(v.coerceIn(0.04f, 1f))
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(AtelierColors.Gold, AtelierColors.Flame),
+                            ),
                         ),
-                        RoundedCornerShape(50),
-                    ),
-            )
+                )
+                VolumeEndThumb(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = thumbTop),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun VolumeEndThumb(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(VolumeThumbOuter)
+            .background(Color.White, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(VolumeThumbInner)
+                .background(AtelierColors.Flame, CircleShape),
+        )
     }
 }
 
@@ -284,23 +492,18 @@ private fun SideVolumeBar(
 private fun PhaseHub(
     playheadFraction: Float,
     isPaused: Boolean,
+    trackTotalSec: Float,
     onTogglePause: () -> Unit,
     onSeek: (Float) -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubEnd: () -> Unit,
     haptics: HapticFeedback,
     modifier: Modifier = Modifier,
 ) {
     val progress = playheadFraction.coerceIn(0f, 1f)
-    val timeLabel = formatTrackClock(progress * TrackTotalSec)
-    val shimmer = rememberInfiniteTransition(label = "clock-shimmer")
-    val shimmerShift by shimmer.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "clock-shift",
-    )
+    val timeLabel = formatTrackClock(progress * trackTotalSec.coerceAtLeast(1f))
+    // C-222: shared Flame→Gold→White vocabulary (Reverse, ~4.5s) + yellow highlight.
+    val shimmerShift by FlameGoldWhiteShimmer.rememberShift(label = "clock-shimmer")
 
     Box(
         modifier = modifier,
@@ -321,10 +524,15 @@ private fun PhaseHub(
                             deg = (deg + 90.0 + 360.0) % 360.0
                             return (deg / 360.0).toFloat()
                         }
-                        onSeek(fractionFrom(down.position))
-                        drag(down.id) { change ->
-                            change.consume()
-                            onSeek(fractionFrom(change.position))
+                        onScrubStart()
+                        try {
+                            onSeek(fractionFrom(down.position))
+                            drag(down.id) { change ->
+                                change.consume()
+                                onSeek(fractionFrom(change.position))
+                            }
+                        } finally {
+                            onScrubEnd()
                         }
                     }
                 },
@@ -361,26 +569,16 @@ private fun PhaseHub(
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             style = androidx.compose.ui.text.TextStyle(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        AtelierColors.Flame,
-                        Color.White,
-                        AtelierColors.Gold,
-                        Color.White,
-                        AtelierColors.Flame,
-                    ),
-                    start = Offset(shimmerShift * 400f - 200f, 0f),
-                    end = Offset(shimmerShift * 400f + 200f, 80f),
-                ),
+                brush = FlameGoldWhiteShimmer.linearBrush(shimmerShift),
             ),
             modifier = Modifier.offset(y = (-18).dp),
         )
 
-        // Play/pause — lower in ring, transparent chrome (×1.5 vs prior 48/30 hit/icon)
+        // Play/pause — nearer ring center (C-164 §4.6: was 52.dp → ~24.dp)
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = 52.dp)
+                .offset(y = 24.dp)
                 .size(72.dp)
                 .interactiveSpringPress(
                     hapticEvent = HapticEvent.Selection,
@@ -422,43 +620,50 @@ internal fun formatTrackClock(elapsedSec: Float): String {
     return "%02d.%02d".format(m, s)
 }
 
+/**
+ * C-164 / C-202 — cues scroll bottom→up; **active gate = middle row** between neon triangles.
+ * Glow lasts the full cue interval (stepSec). Past cues evaporate upward past the gate.
+ */
 @Composable
 private fun CuePipeline(
     cues: List<CueAt>,
     playheadFraction: Float,
+    sessionTotalSec: Float,
     isPaused: Boolean,
+    bpm: Float = 128f,
     modifier: Modifier = Modifier,
 ) {
-    var firstIndex by remember { mutableIntStateOf(0) }
-    var evaporating by remember { mutableStateOf<Int?>(null) }
+    val density = LocalDensity.current
+    val stridePx = with(density) { (CueItemHeight + CueItemGap).toPx() }
+    val cardHeightPx = with(density) { CueItemHeight.toPx() }
+    val midGateTopPx = ActiveCueSlot * stridePx
 
-    val totalSec = remember(cues) {
-        if (cues.isEmpty()) CueStepSec else (cues.last().sec + CueStepSec).coerceAtLeast(CueStepSec)
+    val stepSec = remember(cues) {
+        com.midnightdancer.feature.trainer.logic.TrainerReady.cueStepSec(cues)
     }
+    val totalSec = sessionTotalSec.coerceAtLeast(1f)
     val t = playheadFraction.coerceIn(0f, 1f) * totalSec
+    // Active while playhead is inside [cue.sec, next.sec) — full spoken duration.
     val timeIndex = remember(cues, t) {
         if (cues.isEmpty()) 0 else cues.indexOfLast { it.sec <= t }.coerceAtLeast(0)
     }
-
-    LaunchedEffect(timeIndex, cues.size) {
-        if (cues.isEmpty() || evaporating != null) return@LaunchedEffect
-        if (timeIndex > firstIndex) {
-            evaporating = firstIndex
-            delay(400)
-            firstIndex = timeIndex
-            evaporating = null
+    // C-229: variable element durations broke uniform stepSec → cues overlapped.
+    // Slot by index + intra-cue progress (one visual row per cue).
+    val gateProgress = remember(cues, timeIndex, t, stepSec) {
+        if (cues.isEmpty()) 0f
+        else {
+            val cur = cues[timeIndex].sec
+            val next = cues.getOrNull(timeIndex + 1)?.sec ?: (cur + stepSec)
+            val span = (next - cur).coerceAtLeast(0.05f)
+            ((t - cur) / span).coerceIn(0f, 1f)
         }
     }
 
-    val window = remember(cues, firstIndex) {
-        cues.drop(firstIndex).take(VisibleCueSlots).mapIndexed { i, cue ->
-            (firstIndex + i) to cue
-        }
-    }
-
+    // C-226: keep BPM/ambient bars Active while the session runs — TTS duck must not freeze wave.
+    // Idle only at true session ends; never drop to Idle mid-cue just because audio ducked.
     val vizState = when {
         isPaused -> VisualizerPlaybackState.Paused
-        playheadFraction <= 0f || playheadFraction >= 1f -> VisualizerPlaybackState.Idle
+        playheadFraction >= 1f -> VisualizerPlaybackState.Idle
         else -> VisualizerPlaybackState.Active
     }
 
@@ -472,39 +677,203 @@ private fun CuePipeline(
         MusicPulseVisualizer(
             isPlaying = vizState == VisualizerPlaybackState.Active,
             playbackState = vizState,
+            bpm = bpm.coerceAtLeast(60f),
             modifier = Modifier.fillMaxWidth(),
             height = 72.dp,
         )
 
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 2.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 2.dp)
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    val fadePx = size.height * 0.18f
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0f to Color.Transparent,
+                                (fadePx / size.height).coerceIn(0f, 0.4f) to Color.Black,
+                                (1f - fadePx / size.height).coerceIn(0.6f, 1f) to Color.Black,
+                                1f to Color.Transparent,
+                            ),
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
+                },
         ) {
-            window.forEach { (globalIdx, cue) ->
-                val isEvaporating = evaporating == globalIdx
-                val evaporateProgress by animateFloatAsState(
-                    targetValue = if (isEvaporating) 0f else 1f,
-                    animationSpec = tween(380),
-                    label = "cue-evap-$globalIdx",
-                )
-                // Lights only when this cue is current and sits under the visualizer (top slot).
-                val active = !isEvaporating && globalIdx == timeIndex && globalIdx == firstIndex
+            cues.forEachIndexed { globalIdx, cue ->
+                // slotOffset 0 = "now" → parked on mid gate (ActiveCueSlot).
+                val slotOffset = (globalIdx - timeIndex).toFloat() - gateProgress
+                val translationY = (slotOffset + ActiveCueSlot) * stridePx
+                // Past the mid gate upward → evaporate (toward visualizer).
+                val evaporate = (-slotOffset).coerceIn(0f, 1.2f)
+                val edgeFade = when {
+                    translationY < 0f -> (1f + translationY / (cardHeightPx * 1.2f)).coerceIn(0f, 1f)
+                    translationY > stridePx * 4.2f ->
+                        (1f - (translationY - stridePx * 4.2f) / (cardHeightPx * 1.4f)).coerceIn(0f, 1f)
+                    else -> 1f
+                }
+                val alpha = when {
+                    evaporate <= 0f -> edgeFade
+                    evaporate >= 1f -> 0f
+                    else -> (1f - evaporate) * edgeFade
+                }
+                val scale = when {
+                    evaporate <= 0f -> 1f
+                    evaporate >= 1f -> 0.88f
+                    else -> 1f - 0.12f * evaporate
+                }
+                if (translationY < -cardHeightPx * 1.5f || translationY > stridePx * 6f) {
+                    return@forEachIndexed
+                }
+                if (alpha <= 0.01f) return@forEachIndexed
+
+                // Lit for the whole cue duration while it is the current spoken element.
+                val active = globalIdx == timeIndex && evaporate < 0.95f
+                // C-218: keep chips inside animation track — clear of neon side triangles.
                 CueCard(
                     label = cue.label,
                     active = active,
                     past = globalIdx < timeIndex,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = evaporateProgress
-                        translationY = (1f - evaporateProgress) * -32f
-                        scaleX = 0.96f + 0.04f * evaporateProgress
-                        scaleY = evaporateProgress.coerceAtLeast(0.01f)
-                    },
+                    modifier = Modifier
+                        .fillMaxWidth(0.72f)
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 4.dp)
+                        .graphicsLayer {
+                            this.alpha = alpha
+                            this.translationY = translationY
+                            scaleX = scale
+                            scaleY = scale
+                            if (evaporate > 0f) {
+                                this.translationY = translationY - evaporate * 28f
+                            }
+                        },
                 )
             }
+
+            // C-202: neon triangles mark the mid gate (sketch).
+            NeonGateTriangles(
+                gateTopY = with(density) { midGateTopPx.toDp() },
+                cardHeight = CueItemHeight,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
+    }
+}
+
+/** Inward neon triangles L/R — C-226: clock color morph + scale pulse 1.0↔1.5. */
+@Composable
+private fun NeonGateTriangles(
+    gateTopY: Dp,
+    cardHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val pulse = rememberInfiniteTransition(label = "neon-gate")
+    val glow by pulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "neon-glow",
+    )
+    // Soft breathe 1.0↔1.5 (infinite Reverse) — feels springy without hard snap.
+    val scalePulse by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1_600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "neon-scale",
+    )
+    // C-222/C-226: same Flame→Gold→White shift as Live clock.
+    val colorShift by FlameGoldWhiteShimmer.rememberShift(label = "neon-color")
+    val centerY = gateTopY + cardHeight / 2
+
+    Box(modifier = modifier) {
+        NeonTriangle(
+            pointRight = true,
+            glow = glow,
+            colorShift = colorShift,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(
+                    x = NeonTriangleEdgeInset,
+                    y = centerY - NeonTriangleSize / 2,
+                )
+                .size(NeonTriangleSize)
+                .graphicsLayer {
+                    scaleX = scalePulse
+                    scaleY = scalePulse
+                },
+        )
+        NeonTriangle(
+            pointRight = false,
+            glow = glow,
+            colorShift = colorShift,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(
+                    x = -NeonTriangleEdgeInset,
+                    y = centerY - NeonTriangleSize / 2,
+                )
+                .size(NeonTriangleSize)
+                .graphicsLayer {
+                    scaleX = scalePulse
+                    scaleY = scalePulse
+                },
+        )
+    }
+}
+
+@Composable
+private fun NeonTriangle(
+    pointRight: Boolean,
+    glow: Float,
+    colorShift: Float,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val path = Path().apply {
+            if (pointRight) {
+                moveTo(0f, 0f)
+                lineTo(w, h / 2f)
+                lineTo(0f, h)
+            } else {
+                moveTo(w, 0f)
+                lineTo(0f, h / 2f)
+                lineTo(w, h)
+            }
+            close()
+        }
+        val morph = FlameGoldWhiteShimmer.linearBrush(
+            shift = colorShift,
+            span = w * 2.2f,
+            vertical = h,
+        )
+        // C-254: full-triangle hatch only — no perimeter stroke outline.
+        drawPath(
+            path = path,
+            brush = morph,
+            alpha = (0.55f + 0.45f * glow).coerceIn(0f, 1f),
+        )
+        drawPath(
+            path = path,
+            brush = Brush.linearGradient(
+                colors = FlameGoldWhiteShimmer.Colors.map { c ->
+                    c.copy(alpha = (0.40f + 0.50f * glow).coerceIn(0f, 1f))
+                },
+                start = Offset(w * colorShift, 0f),
+                end = Offset(w * (colorShift + 0.85f), h),
+            ),
+        )
     }
 }
 
@@ -515,19 +884,27 @@ private fun CueCard(
     past: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val neon = rememberInfiniteTransition(label = "cue-neon")
+    val rim by neon.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(850, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "cue-rim",
+    )
     val borderColor = when {
-        active -> AtelierColors.Flame.copy(alpha = 0.70f)
+        active -> AtelierColors.Flame.copy(alpha = 0.55f + 0.40f * rim)
         else -> Hairline
     }
     val bg = when {
-        active -> AtelierColors.Flame.copy(alpha = 0.16f)
+        active -> AtelierColors.Flame.copy(alpha = 0.12f + 0.10f * rim)
         else -> Color.White.copy(alpha = 0.03f)
     }
-    val titleColor = when {
-        active -> Color.White
-        past -> Color.White.copy(alpha = 0.35f)
-        else -> Color.White.copy(alpha = 0.55f)
-    }
+    val titleColor = Color.White
+    @Suppress("UNUSED_VARIABLE")
+    val unusedPast = past
 
     Box(
         modifier = modifier
@@ -536,9 +913,31 @@ private fun CueCard(
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .border(
-                width = if (active) 1.5.dp else 1.dp,
+                // C-255: active cue border 2× thicker (2→4.dp).
+                width = if (active) 4.dp else 1.dp,
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp),
+            )
+            .then(
+                if (active) {
+                    Modifier.drawWithContent {
+                        drawContent()
+                        drawRoundRect(
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    AtelierColors.Flame.copy(alpha = 0.0f),
+                                    AtelierColors.Glow.copy(alpha = 0.55f * rim),
+                                    Color.White.copy(alpha = 0.35f * rim),
+                                    AtelierColors.Flame.copy(alpha = 0.0f),
+                                ),
+                            ),
+                            style = Stroke(width = 4.dp.toPx()),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),
+                        )
+                    }
+                } else {
+                    Modifier
+                },
             )
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
@@ -551,25 +950,21 @@ private fun CueCard(
             letterSpacing = 1.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            fontFamily = MdFonts.Display,
         )
     }
 }
 
-/** Same Flame shimmer CTA as Storyline «Танцуем!» — hold 1s to exit. */
+/**
+ * C-164 §4.3 — tap «Завершить» ends session (hold was unreliable / dock stole touches).
+ * zIndex kept high so sibling content does not intercept.
+ */
 @Composable
 private fun FinishDanceCta(
-    holdProgress: Float,
-    onTick: (Float) -> Unit,
-    onReset: () -> Unit,
     onComplete: () -> Unit,
     haptics: HapticFeedback,
     modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
-    var localProgress by remember { mutableFloatStateOf(0f) }
-    val displayProgress = if (holdProgress > 0f) holdProgress else localProgress
-    var holdJob by remember { mutableStateOf<Job?>(null) }
-    var completed by remember { mutableStateOf(false) }
     val shimmer = rememberInfiniteTransition(label = "finish-shimmer")
     val shineX by shimmer.animateFloat(
         initialValue = -0.3f,
@@ -584,7 +979,9 @@ private fun FinishDanceCta(
 
     Box(
         modifier = modifier
+            .zIndex(10f)
             .clip(shape)
+            .clickable(onClick = onComplete)
             .background(
                 Brush.horizontalGradient(
                     listOf(AtelierColors.Flame, AtelierColors.Glow, AtelierColors.Gold),
@@ -607,53 +1004,14 @@ private fun FinishDanceCta(
                     ),
                 )
             }
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    completed = false
-                    holdJob?.cancel()
-                    holdJob = scope.launch {
-                        val start = System.currentTimeMillis()
-                        while (isActive) {
-                            val elapsed = System.currentTimeMillis() - start
-                            val p = min(elapsed.toFloat() / HoldDurationMs, 1f)
-                            localProgress = p
-                            onTick(p)
-                            if (p >= 1f) {
-                                completed = true
-                                haptics.perform(HapticEvent.Success)
-                                onComplete()
-                                break
-                            }
-                            delay(16)
-                        }
-                    }
-                    do {
-                        val event = awaitPointerEvent()
-                        val pressed = event.changes.any { it.pressed }
-                    } while (pressed)
-                    holdJob?.cancel()
-                    holdJob = null
-                    if (!completed) {
-                        localProgress = 0f
-                        onReset()
-                    }
-                }
-            }
+            .interactiveSpringPress(
+                hapticEvent = HapticEvent.Success,
+                haptics = haptics,
+                onClick = onComplete,
+            )
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // Hold fill overlay
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    transformOrigin = TransformOrigin(0f, 0.5f)
-                    scaleX = displayProgress.coerceIn(0f, 1f).takeIf { it > 0f } ?: 0.001f
-                    alpha = if (displayProgress > 0f) 0.35f else 0f
-                }
-                .background(Color.Black.copy(alpha = 0.35f)),
-        )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -664,11 +1022,12 @@ private fun FinishDanceCta(
                     .background(Color.White, RoundedCornerShape(2.dp)),
             )
             Text(
-                text = if (displayProgress > 0f) "Сохранение…" else "Завершить",
+                text = "Завершить",
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.sp,
+                fontFamily = MdFonts.Display,
             )
         }
     }

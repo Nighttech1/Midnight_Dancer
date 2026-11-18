@@ -19,6 +19,27 @@ data class ElementCard(
     val videoAssetKey: String = "splash_boot",
     val description: String = "",
     val kind: ElementCardKind,
+    /** Dance style this element belongs to ([DanceStyleOption.id]); StyleSplitSelector filters by it. */
+    val styleId: String = "",
+    /** Pinned cards float to the top of the list (flag / bookmark tap). */
+    val pinned: Boolean = false,
+    /** User-picked video (content Uri string); null → bundled demo clip. */
+    val videoUri: String? = null,
+)
+
+/** Editor sheet draft — new element when [cardId] is null, otherwise edits that card. */
+data class ElementEditorDraft(
+    val cardId: String?,
+    val title: String = "",
+    val styleId: String,
+    /** Optional — empty tags are valid. */
+    val tag: String? = null,
+    val videoUri: String? = null,
+    val description: String = "",
+    /** Mastery 0..100 edited via the «Прогресс изучения» slider. */
+    val masteryPercent: Int = 0,
+    /** Probed video length from the editor player (C-189); 0 = unknown. */
+    val durationMs: Long = 0L,
 )
 
 sealed interface ElementCardKind {
@@ -42,6 +63,8 @@ enum class ElementsSortMode {
  * Elements tab — catalog title «Элементы», search / sort / category filter.
  */
 data class ElementsUiState(
+    val saving: Boolean = false,
+    val saveError: String? = null,
     val title: String = "Элементы",
     val styles: List<DanceStyleOption> = DEFAULT_STYLES,
     val selectedStyleIndex: Int = 0,
@@ -50,9 +73,17 @@ data class ElementsUiState(
     val filterCategory: String? = null,
     val categories: List<String> = ElementCategoryConfig.DEFAULT_NAMES,
     val catalogCards: List<ElementCard> = DEFAULT_ELEMENT_CARDS,
-    val cards: List<ElementCard> = DEFAULT_ELEMENT_CARDS,
+    val cards: List<ElementCard> = visibleElementCards(
+        catalog = DEFAULT_ELEMENT_CARDS,
+        filterCategory = null,
+        searchQuery = "",
+        sortMode = ElementsSortMode.ByLevel,
+        selectedStyleId = DEFAULT_STYLES.first().id,
+    ),
     val playingCardId: String? = null,
     val detailCardId: String? = null,
+    /** Non-null while the element editor sheet is open. */
+    val editor: ElementEditorDraft? = null,
 ) {
     val selectedStyle: DanceStyleOption
         get() = styles.getOrElse(selectedStyleIndex) { styles.first() }
@@ -77,6 +108,15 @@ sealed interface ElementsIntent {
     data object StopPlayback : ElementsIntent
     data class OpenDetail(val cardId: String) : ElementsIntent
     data object CloseDetail : ElementsIntent
+
+    /** Open editor sheet: [cardId] null → new element draft. */
+    data class OpenEditor(val cardId: String?) : ElementsIntent
+    data class UpdateEditorDraft(val draft: ElementEditorDraft) : ElementsIntent
+    data object SaveElement : ElementsIntent
+    data object CloseEditor : ElementsIntent
+
+    /** Flag / bookmark tap — pin card to the top of the list. */
+    data class TogglePin(val cardId: String) : ElementsIntent
     data object RefreshPlaceholders : ElementsIntent
 
     /** @deprecated level chips removed — kept for test migration until callers update. */
@@ -89,7 +129,10 @@ internal val DEFAULT_STYLES: List<DanceStyleOption> = listOf(
     DanceStyleOption("kizomba", "Kizomba", "96 BPM"),
 )
 
-internal val DEFAULT_ELEMENT_CARDS: List<ElementCard> = buildList {
+internal val DEFAULT_ELEMENT_CARDS: List<ElementCard> = emptyList()
+
+@Suppress("unused")
+private val LEGACY_DEFAULT_ELEMENT_CARDS: List<ElementCard> = buildList {
     fun card(
         id: String,
         title: String,
@@ -110,6 +153,7 @@ internal val DEFAULT_ELEMENT_CARDS: List<ElementCard> = buildList {
         videoAssetKey = "splash_boot",
         description = description,
         kind = kind,
+        styleId = DEFAULT_STYLES[size % DEFAULT_STYLES.size].id,
     )
     add(
         card(
@@ -184,14 +228,32 @@ fun buildEdgeStressElementCards(count: Int): List<ElementCard> {
     }
 }
 
+/** Stable style id from a Settings style name (shared by component + defaults). */
+internal fun styleIdFromName(name: String): String =
+    if (name.equals(com.midnightdancer.core.domain.styles.ReservedDanceStyle.NAME, true))
+        com.midnightdancer.core.domain.styles.ReservedDanceStyle.ID
+    else name.trim().lowercase().replace(' ', '-')
+
+/**
+ * Cards of [selectedStyleId] (or style [selectedStyleName]) → tag filter → search → sort.
+ * Pinned cards always come first, then the regular sort order.
+ */
 internal fun visibleElementCards(
     catalog: List<ElementCard>,
     filterCategory: String?,
     searchQuery: String,
     sortMode: ElementsSortMode,
+    selectedStyleId: String? = null,
+    selectedStyleName: String? = null,
 ): List<ElementCard> {
     val query = searchQuery.trim()
     val filtered = catalog.filter { card ->
+        val noStyleFilter = selectedStyleId.isNullOrBlank() && selectedStyleName.isNullOrBlank()
+        val matchesStyle =
+            noStyleFilter ||
+                (!selectedStyleId.isNullOrBlank() && card.styleId.equals(selectedStyleId, ignoreCase = true)) ||
+                (!selectedStyleName.isNullOrBlank() && card.styleId.equals(selectedStyleName, ignoreCase = true))
+        if (!matchesStyle) return@filter false
         val matchesFilter =
             filterCategory.isNullOrBlank() ||
                 card.category.equals(filterCategory, ignoreCase = true) ||
@@ -201,11 +263,51 @@ internal fun visibleElementCards(
         matchesFilter && matchesSearch
     }
     return when (sortMode) {
-        ElementsSortMode.Alphabetical -> filtered.sortedBy { it.title.lowercase() }
+        ElementsSortMode.Alphabetical ->
+            filtered.sortedWith(
+                compareByDescending<ElementCard> { it.pinned }.thenBy { it.title.lowercase() },
+            )
         ElementsSortMode.ByLevel ->
             filtered.sortedWith(
-                compareBy<ElementCard> { levelRank(it.levelLabel) }.thenBy { it.title.lowercase() },
+                compareByDescending<ElementCard> { it.pinned }
+                    .thenBy { levelRank(it.levelLabel) }
+                    .thenBy { it.title.lowercase() },
             )
+    }
+}
+
+/** Re-home cards whose [ElementCard.styleId] no longer exists in Settings styles. */
+internal fun List<ElementCard>.withValidStyles(styles: List<DanceStyleOption>): List<ElementCard> {
+    if (styles.isEmpty()) return this
+    return mapIndexed { index, card ->
+        val known = styles.any {
+            it.id.equals(card.styleId, ignoreCase = true) ||
+                it.name.equals(card.styleId, ignoreCase = true)
+        }
+        if (known) card else card.copy(styleId = com.midnightdancer.core.domain.styles.ReservedDanceStyle.ID)
+    }
+}
+
+/**
+ * C-134: when a tag is deleted from Settings, strip it from cards.
+ * Elements stay in the catalog — only the tag label is cleared.
+ */
+internal fun List<ElementCard>.withTagsClearedOutside(allowedTags: List<String>): List<ElementCard> {
+    if (allowedTags.isEmpty()) {
+        return map { card ->
+            if (card.tags.isEmpty()) card
+            else card.copy(tags = emptyList(), category = "", levelLabel = "")
+        }
+    }
+    val allowed = allowedTags.map { it.lowercase() }.toSet()
+    return map { card ->
+        val kept = card.tags.filter { it.lowercase() in allowed }
+        if (kept == card.tags) {
+            card
+        } else {
+            val primary = kept.firstOrNull().orEmpty()
+            card.copy(tags = kept, category = primary, levelLabel = primary)
+        }
     }
 }
 
