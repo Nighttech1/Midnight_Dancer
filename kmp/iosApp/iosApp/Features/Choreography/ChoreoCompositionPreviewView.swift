@@ -42,6 +42,12 @@ struct ChoreoCompositionPreviewView: View {
                     ChoreoPlayerLayerView(player: playback.player)
                         .frame(width: frameWidth, height: frameHeight)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else {
+                    Text("Не удалось открыть видео элемента.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(MdColor.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(16)
                 }
 
                 if let label = currentElementLabel, !label.isEmpty, !isEmpty {

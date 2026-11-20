@@ -200,6 +200,7 @@ data class SequenceEditorUiState(
     val placeholderItems: List<String> = listOf("Video A", "Audio bed", "Move markers"),
     /** Incremented on each Save so UI can flash a confirmation. */
     val saveCount: Int = 0,
+    val saveError: String? = null,
     /** C-272: bumps after Room catalog reload so picker recomposes with new elements. */
     val catalogRevision: Int = 0,
 ) {

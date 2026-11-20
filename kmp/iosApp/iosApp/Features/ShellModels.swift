@@ -44,6 +44,18 @@ struct ElementCardSnapshot: Equatable, Identifiable {
     var kindLabel: String
 }
 
+struct ElementEditorSnapshot: Equatable {
+    var cardId: String?
+    var title: String
+    var styleId: String
+    var styleName: String
+    var tag: String?
+    var videoUri: String?
+    var description: String
+    var masteryPercent: Int
+    var durationMs: Int64
+}
+
 struct ElementsFeatureSnapshot: Equatable {
     var title: String
     var styleName: String
@@ -55,6 +67,9 @@ struct ElementsFeatureSnapshot: Equatable {
     var cards: [ElementCardSnapshot]
     var playingCardId: String?
     var detail: ElementCardSnapshot?
+    var editor: ElementEditorSnapshot? = nil
+    var saving = false
+    var saveError: String? = nil
 }
 
 struct MusicTrackSnapshot: Equatable, Identifiable {
@@ -102,6 +117,11 @@ struct EditorClipSnapshot: Equatable, Identifiable {
     }
 }
 
+struct SequenceElementChoice: Equatable, Identifiable {
+    var id: String
+    var title: String
+}
+
 /// Pro Editor state mapped from [SequenceEditorUiState] — pure Swift for Features/.
 struct SequenceEditorSnapshot: Equatable {
     var title: String
@@ -112,6 +132,10 @@ struct SequenceEditorSnapshot: Equatable {
     var playheadInElementsMs: Int64
     /// C-231: playhead past last element → empty preview stage.
     var previewIsEmpty: Bool
+    var styleName: String
+    var availableStyles: [String]
+    var saveCount: Int
+    var saveError: String?
 }
 
 struct ChoreographyFeatureSnapshot: Equatable {

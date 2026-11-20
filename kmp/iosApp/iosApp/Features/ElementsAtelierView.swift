@@ -11,6 +11,7 @@ struct ElementsAtelierView: View {
     var onPlay: (String) -> Void
     var onOpenDetail: (String) -> Void
     var onCloseDetail: () -> Void
+    var onSave: (ElementEditorSnapshot) -> Void
 
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -36,15 +37,24 @@ struct ElementsAtelierView: View {
                 }
             }
         }
-        .sheet(item: detailBinding) { card in
-            detailSheet(card)
+        .sheet(isPresented: editorBinding) {
+            if let draft = snapshot.editor {
+                ElementEditSheet(
+                    initialDraft: draft,
+                    categories: snapshot.categories,
+                    saving: snapshot.saving,
+                    saveError: snapshot.saveError,
+                    onSave: onSave,
+                    onClose: onCloseDetail
+                )
+            }
         }
     }
 
-    private var detailBinding: Binding<ElementCardSnapshot?> {
+    private var editorBinding: Binding<Bool> {
         Binding(
-            get: { snapshot.detail },
-            set: { if $0 == nil { onCloseDetail() } }
+            get: { snapshot.editor != nil },
+            set: { if !$0 { onCloseDetail() } }
         )
     }
 
@@ -140,7 +150,8 @@ struct ElementsAtelierView: View {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(MdColor.surfaceElevated)
                         .aspectRatio(1, contentMode: .fit)
-                    if let urlStr = card.coverUrl, let url = URL(string: urlStr) {
+                    if let urlStr = card.coverUrl, let url = URL(string: urlStr),
+                       url.scheme == "https" || url.scheme == "http" {
                         MdRemoteImage(url: url)
                             .aspectRatio(contentMode: .fill)
                             .clipped()
@@ -189,47 +200,5 @@ struct ElementsAtelierView: View {
                 MdHaptics.perform(.selection)
             }
         )
-    }
-
-    private func detailSheet(_ card: ElementCardSnapshot) -> some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(card.title)
-                    .font(MdType.titleLarge)
-                    .foregroundStyle(MdColor.textPrimary)
-                Text(card.description)
-                    .font(MdType.bodyMedium)
-                    .foregroundStyle(MdColor.textSecondary)
-                HStack {
-                    Text(card.tag)
-                    Spacer()
-                    Text("\(card.masteryPercent)%")
-                    Text(card.durationLabel)
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(MdColor.neonOrange)
-                Button {
-                    onPlay(card.id)
-                } label: {
-                    Text(snapshot.playingCardId == card.id ? "Пауза" : "Смотреть")
-                        .font(.system(size: 16, weight: .bold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(MdColor.neonOrange))
-                        .foregroundStyle(MdColor.oledTrueBlack)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-            .padding(20)
-            .background(MdColor.oledTrueBlack.ignoresSafeArea())
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Закрыть") { onCloseDetail() }
-                        .foregroundStyle(MdColor.neonOrange)
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
     }
 }

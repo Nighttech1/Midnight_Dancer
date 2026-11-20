@@ -47,8 +47,30 @@ final class RootBridge: ObservableObject {
     private weak var exchangeRef: ExchangeComponent?
     private weak var settingsRef: SettingsComponent?
 
+    @Published private(set) var startupError: String?
+    private var starting = false
+
     func start() {
-        guard root == nil else { return }
+        guard root == nil, !starting else { return }
+        starting = true
+        startupError = nil
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.starting = false }
+            do {
+                let result = try await IosLibraryBootstrap.shared.prepare()
+                guard result.ready else {
+                    self.startupError = result.error ?? "Не удалось открыть библиотеку."
+                    return
+                }
+                self.startRoot()
+            } catch {
+                self.startupError = "Открытие библиотеки прервано. Повторите попытку."
+            }
+        }
+    }
+
+    private func startRoot() {
 
         MdImageCacheConfig.installSharedURLCacheIfNeeded()
 
@@ -58,8 +80,9 @@ final class RootBridge: ObservableObject {
         lifecycle.onResume()
         self.lifecycle = lifecycle
 
-        let root = DefaultRootComponent(
-            componentContext: DefaultComponentContext(lifecycle: lifecycle)
+        let root = IosLibraryBootstrap.shared.createRoot(
+            componentContext: DefaultComponentContext(lifecycle: lifecycle),
+            startAtMain: false
         )
         self.root = root
 
@@ -95,7 +118,22 @@ final class RootBridge: ObservableObject {
     func elementsFilter(_ cat: String?) { elementsRef?.setFilterCategory(category: cat) }
     func elementsPlay(_ id: String) { elementsRef?.playCard(cardId: id) }
     func elementsOpenDetail(_ id: String) { elementsRef?.openDetail(cardId: id) }
-    func elementsCloseDetail() { elementsRef?.closeDetail() }
+    func elementsCloseDetail() { elementsRef?.closeEditor() }
+
+    func elementsSave(_ draft: ElementEditorSnapshot) {
+        guard let component = elementsRef else { return }
+        component.updateEditorDraft(
+            cardId: draft.cardId,
+            title: draft.title,
+            styleId: draft.styleId,
+            tag: draft.tag,
+            videoUri: draft.videoUri,
+            description: draft.description,
+            masteryPercent: Int32(draft.masteryPercent),
+            durationMs: draft.durationMs
+        )
+        component.saveElement()
+    }
 
     // MARK: - Music
 
@@ -115,6 +153,20 @@ final class RootBridge: ObservableObject {
     func vaultDelete(_ id: String) { choreographyRef?.deleteItem(id: id) }
     func vaultEditorBack() { _ = choreographyRef?.onBack() }
     func vaultEditorTogglePlay() { sequenceEditorRef?.togglePlay() }
+    func vaultEditorSetTitle(_ title: String) { sequenceEditorRef?.setSequenceTitle(title: title) }
+    func vaultEditorSetStyle(_ style: String) { sequenceEditorRef?.setSequenceStyle(style: style) }
+    func vaultEditorSave() { sequenceEditorRef?.saveSequence() }
+
+    func vaultEditorElementChoices() -> [SequenceElementChoice] {
+        guard let editor = sequenceEditorRef else { return [] }
+        return editor.elementChoices().map {
+            SequenceElementChoice(id: $0.id, title: $0.title)
+        }
+    }
+
+    func vaultEditorAddElement(_ id: String) {
+        sequenceEditorRef?.addVideoElement(id: id)
+    }
 
     // MARK: - Trainer
 
@@ -426,7 +478,22 @@ final class RootBridge: ObservableObject {
             categories: Array(state.categories),
             cards: cards,
             playingCardId: state.playingCardId,
-            detail: detail
+            detail: detail,
+            editor: state.editor.map { draft in
+                ElementEditorSnapshot(
+                    cardId: draft.cardId,
+                    title: draft.title,
+                    styleId: draft.styleId,
+                    styleName: state.styles.first(where: { $0.id == draft.styleId })?.name ?? state.selectedStyle.name,
+                    tag: draft.tag,
+                    videoUri: draft.videoUri,
+                    description: draft.description,
+                    masteryPercent: Int(draft.masteryPercent),
+                    durationMs: draft.durationMs
+                )
+            },
+            saving: state.saving,
+            saveError: state.saveError
         )
     }
 
@@ -572,7 +639,11 @@ final class RootBridge: ObservableObject {
             elementClips: clips,
             elementsDurationMs: elementsDuration,
             playheadInElementsMs: playheadInElements,
-            previewIsEmpty: clips.isEmpty || pastElements
+            previewIsEmpty: clips.isEmpty || pastElements,
+            styleName: state.styleNamesById[state.style] ?? state.style,
+            availableStyles: Array(state.availableStyles),
+            saveCount: Int(state.saveCount),
+            saveError: state.saveError
         )
     }
 

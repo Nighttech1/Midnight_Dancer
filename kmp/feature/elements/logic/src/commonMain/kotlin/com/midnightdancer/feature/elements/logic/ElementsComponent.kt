@@ -42,6 +42,12 @@ interface ElementsComponent {
     fun closeDetail() = onIntent(ElementsIntent.CloseDetail)
     fun togglePin(cardId: String) = onIntent(ElementsIntent.TogglePin(cardId))
     fun openEditor(cardId: String?) = onIntent(ElementsIntent.OpenEditor(cardId))
+    fun updateEditorDraft(
+        cardId: String?, title: String, styleId: String, tag: String?, videoUri: String?,
+        description: String, masteryPercent: Int, durationMs: Long,
+    ) = onIntent(ElementsIntent.UpdateEditorDraft(
+        ElementEditorDraft(cardId, title, styleId, tag, videoUri, description, masteryPercent, durationMs),
+    ))
     fun saveElement() = onIntent(ElementsIntent.SaveElement)
     fun closeEditor() = onIntent(ElementsIntent.CloseEditor)
 }

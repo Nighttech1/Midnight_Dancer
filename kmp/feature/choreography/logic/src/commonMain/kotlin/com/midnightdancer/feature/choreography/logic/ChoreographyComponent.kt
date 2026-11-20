@@ -34,6 +34,22 @@ interface SequenceEditorStubComponent {
     fun seekToFraction(fraction: Float) = onIntent(SequenceEditorIntent.SeekTo(fraction))
     fun seekStart() = onIntent(SequenceEditorIntent.SeekStart)
     fun seekEnd() = onIntent(SequenceEditorIntent.SeekEnd)
+    fun elementChoices(): List<ChoreoCatalogEntry> = ChoreoCatalog.elementsForStyle(uiState.value.style)
+    fun addVideoElement(id: String) {
+        val entry = elementChoices().firstOrNull { it.id == id } ?: return
+        onIntent(SequenceEditorIntent.AddElementClips(listOf(ChoreoCatalog.elementClip(entry))))
+    }
+    fun saveSequence() = onIntent(SequenceEditorIntent.Save)
+    fun setSequenceStyle(style: String) {
+        val state = uiState.value
+        if (state.elementClips.isEmpty() && state.musicClips.isEmpty()) {
+            onIntent(SequenceEditorIntent.SetTitleAndStyle(state.title, style, state.tag))
+        }
+    }
+    fun setSequenceTitle(title: String) {
+        val state = uiState.value
+        onIntent(SequenceEditorIntent.SetTitleAndStyle(title, state.style, state.tag))
+    }
 }
 
 class DefaultSequenceEditorStubComponent(
@@ -419,8 +435,13 @@ class DefaultSequenceEditorStubComponent(
                     musicVolume = s.musicVolume,
                     tag = s.tag,
                 )
-                currentItemId = onSave(currentItemId, snapshot).ifBlank { currentItemId }
-                _uiState.update { it.copy(saveCount = it.saveCount + 1) }
+                val id = onSave(currentItemId, snapshot)
+                if (id.isBlank()) {
+                    _uiState.update { it.copy(saveError = "Не удалось сохранить хореографию. Повторите попытку.") }
+                } else {
+                    currentItemId = id
+                    _uiState.update { it.copy(saveCount = it.saveCount + 1, saveError = null) }
+                }
             }
         }
     }
@@ -771,7 +792,7 @@ class DefaultChoreographyComponent(
         )
         navigation.pushNew(
             Config.SequenceEditor(
-                itemId = draftId,
+                itemId = draftId.takeIf { it.isNotBlank() },
                 title = trimmed,
                 style = style,
                 tag = tag,
@@ -795,14 +816,13 @@ class DefaultChoreographyComponent(
 
     private fun saveFromEditor(itemId: String?, snapshot: ChoreographySnapshot): String {
         val snapshot = danceStyles?.state?.value?.let { snapshot.copy(style = it.canonicalId(snapshot.style)) } ?: snapshot
-        var savedId = itemId.orEmpty()
-        _uiState.update { state ->
-            val (next, id) = upsertSnapshot(state, itemId, snapshot)
-            savedId = id
-            next
-        }
-        // C-273 + C-301: process store + disk so force-stop keeps STRESS/user clips (D1.3).
-        persistVault(_uiState.value.items)
+        val (next, savedId) = upsertSnapshot(_uiState.value, itemId, snapshot)
+        val items = danceStyles?.state?.value?.let { normalizeVaultStyles(next.items, it) } ?: next.items
+        // Publish the new snapshot only after the vault write succeeds.
+        val persister = vaultPersister
+        if (persister != null && runCatching { persister.writeRaw(encodeVaultItems(items)) }.isFailure) return ""
+        _uiState.update { it.copy(items = items) }
+        ChoreographyVaultStore.replaceAll(items)
         return savedId
     }
 

@@ -17,7 +17,8 @@ struct TabShellView: View {
                 onFilter: actions.elementsFilter,
                 onPlay: actions.elementsPlay,
                 onOpenDetail: actions.elementsOpenDetail,
-                onCloseDetail: actions.elementsCloseDetail
+                onCloseDetail: actions.elementsCloseDetail,
+                onSave: actions.elementsSave
             )
         case .music(let snap):
             MotionDeckView(
@@ -33,7 +34,12 @@ struct TabShellView: View {
                 ProEditorShellView(
                     snapshot: editor,
                     onBack: actions.vaultEditorBack,
-                    onTogglePlay: actions.vaultEditorTogglePlay
+                    onTogglePlay: actions.vaultEditorTogglePlay,
+                    onSetTitle: actions.vaultEditorSetTitle,
+                    onSetStyle: actions.vaultEditorSetStyle,
+                    onSave: actions.vaultEditorSave,
+                    elementChoices: actions.vaultEditorElementChoices,
+                    onAddElement: actions.vaultEditorAddElement
                 )
             } else {
                 KineticVaultView(
@@ -82,6 +88,7 @@ struct TabFeatureActions {
     var elementsPlay: (String) -> Void = { _ in }
     var elementsOpenDetail: (String) -> Void = { _ in }
     var elementsCloseDetail: () -> Void = {}
+    var elementsSave: (ElementEditorSnapshot) -> Void = { _ in }
 
     var musicSelect: (String) -> Void = { _ in }
     var musicSearch: (String) -> Void = { _ in }
@@ -95,6 +102,11 @@ struct TabFeatureActions {
     var vaultDelete: (String) -> Void = { _ in }
     var vaultEditorBack: () -> Void = {}
     var vaultEditorTogglePlay: () -> Void = {}
+    var vaultEditorSetTitle: (String) -> Void = { _ in }
+    var vaultEditorSetStyle: (String) -> Void = { _ in }
+    var vaultEditorSave: () -> Void = {}
+    var vaultEditorElementChoices: () -> [SequenceElementChoice] = { [] }
+    var vaultEditorAddElement: (String) -> Void = { _ in }
 
     var trainerSelectVoice: (Int) -> Void = { _ in }
     var trainerSpeak: () -> Void = {}

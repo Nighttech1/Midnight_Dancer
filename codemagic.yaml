@@ -248,6 +248,51 @@ workflows:
       - ios-build/artifacts/current/*.ipa
       - ios-build/diagnostics/**
 
+  ios-kmp-internal-testflight:
+    name: KMP iOS signed internal TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: Midnight Dancer
+    environment:
+      xcode: latest
+      java: 17
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.midnightdancer.app
+      vars:
+        APP_STORE_APPLE_ID: "6762514145"
+        IOS_MARKETING_VERSION: "1.0.4"
+    scripts:
+      - name: Prepare Release framework and Xcode project
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
+          git rev-parse HEAD
+          xcodebuild -version
+          CONFIGURATION=Release PREPARE_ONLY=1 ./scripts/build-kmp-ios-ipa.sh iphoneos
+      - name: Apply signing and archive for internal testing
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR/kmp/iosApp"
+          latest=$(app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS)
+          [[ "$latest" =~ ^[0-9]+$ ]] || { echo 'Could not read latest Apple build number'; exit 1; }
+          if (( latest < 19 )); then latest=19; fi
+          build_number=$((latest + 1))
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $IOS_MARKETING_VERSION" iosApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" iosApp/Info.plist
+          xcode-project use-profiles --project MidnightDancerIos.xcodeproj
+          xcode-project build-ipa --project MidnightDancerIos.xcodeproj --scheme iosApp
+    artifacts:
+      - kmp/iosApp/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
+
   # ─── KMP Android manual QA плеера хорео (матрикс D + E) ───
   # D (правки/целостность) — unit-тесты, без устройства, быстрый гейт.
   # E (проигрывание через стыки) — connected-тест на эмуляторе CI (счётчики декодера).

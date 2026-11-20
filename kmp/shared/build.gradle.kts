@@ -74,7 +74,7 @@ kotlin {
             implementation(libs.koin.android)
         }
         iosMain.dependencies {
-            // Koin common only on iOS for Stage 1.
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }

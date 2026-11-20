@@ -98,6 +98,10 @@ echo "==> XcodeGen"
   xcodegen generate --spec project.yml
 )
 
+if [[ "${PREPARE_ONLY:-0}" == "1" ]]; then
+  exit 0
+fi
+
 echo "==> xcodebuild (unsigned)"
 rm -rf "${DERIVED}"
 mkdir -p "${DERIVED}"

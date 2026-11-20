@@ -241,6 +241,20 @@ class RoomCatalogRepository(
         songs.deleteById(id)
     }
 
+    suspend fun isIosLegacyCatalogMigrated(): Boolean =
+        meta.get(IOS_LEGACY_MIGRATION_KEY)?.value == "1"
+
+    /** Commit user data and the migration marker together, before the app can open its editors. */
+    suspend fun migrateIosLegacyCatalogOnce(data: AppData) {
+        db.withTransaction {
+            if (isIosLegacyCatalogMigrated()) return@withTransaction
+            val existing = assembleAppData()
+            check(existing == AppData()) { "A populated catalog requires a separate legacy reconciliation" }
+            writeCatalog(data)
+            meta.upsert(CatalogMetaEntity(key = IOS_LEGACY_MIGRATION_KEY, value = "1"))
+        }
+    }
+
     /** Idempotent upsert of full AppData (used by catalog migrator). */
     suspend fun upsertAllIdempotent(data: AppData) {
         db.withTransaction {
@@ -293,3 +307,5 @@ class RoomCatalogRepository(
     private companion object { const val STYLE_META = "canonical_styles_v1" }
 }
 
+
+private const val IOS_LEGACY_MIGRATION_KEY = "ios_flutter_catalog_v1"

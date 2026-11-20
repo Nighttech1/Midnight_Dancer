@@ -9,7 +9,17 @@ struct ContentView: View {
             MdColor.oledTrueBlack.ignoresSafeArea()
             switch bridge.route {
             case .splash(let snap):
-                SplashShellView(snapshot: snap, onContinue: { bridge.splashContinue() })
+                if let error = bridge.startupError {
+                    VStack(spacing: 16) {
+                        Text("Не удалось открыть библиотеку").font(.headline)
+                        Text(error).multilineTextAlignment(.center)
+                        Button("Повторить", action: bridge.start)
+                            .buttonStyle(.borderedProminent)
+                    }
+                    .padding(24)
+                } else {
+                    SplashShellView(snapshot: snap, onContinue: { bridge.splashContinue() })
+                }
             case .main(let chrome):
                 MainShellView(
                     chrome: chrome,
@@ -35,6 +45,7 @@ struct ContentView: View {
             elementsPlay: { bridge.elementsPlay($0) },
             elementsOpenDetail: { bridge.elementsOpenDetail($0) },
             elementsCloseDetail: { bridge.elementsCloseDetail() },
+            elementsSave: { bridge.elementsSave($0) },
             musicSelect: { bridge.musicSelect($0) },
             musicSearch: { bridge.musicSearch($0) },
             musicBeginUpload: { bridge.musicBeginUpload() },
@@ -46,6 +57,11 @@ struct ContentView: View {
             vaultDelete: { bridge.vaultDelete($0) },
             vaultEditorBack: { bridge.vaultEditorBack() },
             vaultEditorTogglePlay: { bridge.vaultEditorTogglePlay() },
+            vaultEditorSetTitle: { bridge.vaultEditorSetTitle($0) },
+            vaultEditorSetStyle: { bridge.vaultEditorSetStyle($0) },
+            vaultEditorSave: { bridge.vaultEditorSave() },
+            vaultEditorElementChoices: { bridge.vaultEditorElementChoices() },
+            vaultEditorAddElement: { bridge.vaultEditorAddElement($0) },
             trainerSelectVoice: { bridge.trainerSelectVoice(index: $0) },
             trainerSpeak: { bridge.trainerSpeak() },
             trainerStartDance: { bridge.trainerStartDance() },

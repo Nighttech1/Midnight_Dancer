@@ -1,0 +1,1 @@
+1. Wire durable iOS catalog and choreography. 2. Import and play owned videos; preserve legacy data with migration and tests. 3. Signed Codemagic internal TestFlight on existing Bundle ID. 4. Owner-assisted iPhone restart and upgrade checks.

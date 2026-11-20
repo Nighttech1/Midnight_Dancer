@@ -97,6 +97,32 @@ class RoomCatalogRepositoryTest : KoinTest {
         }
         """.trimIndent()
 
+    @Test
+    fun legacyMigrationCommitsOnceAndKeepsLaterEdits() = runTest {
+        val repository = get<RoomCatalogRepository>()
+        val original = DomainJson.decodeAppData(goldenJson)
+        repository.migrateIosLegacyCatalogOnce(original)
+        assertTrue(repository.isIosLegacyCatalogMigrated())
+        assertEquals(original, repository.load())
+        val edited = original.copy(songs = original.songs.map { it.copy(title = "Edited after migration") })
+        repository.save(edited)
+        repository.migrateIosLegacyCatalogOnce(original)
+        assertEquals(edited, repository.load())
+    }
+
+    @Test
+    fun legacyMigrationDoesNotOverwriteAnExistingCatalog() = runTest {
+        val repository = get<RoomCatalogRepository>()
+        val original = DomainJson.decodeAppData(goldenJson)
+        val existing = original.copy(choreographies = emptyList())
+        repository.save(existing)
+        kotlin.test.assertFailsWith<IllegalStateException> {
+            repository.migrateIosLegacyCatalogOnce(original)
+        }
+        assertFalse(repository.isIosLegacyCatalogMigrated())
+        assertEquals(existing, repository.load())
+    }
+
     @Before
     fun setUp() {
         bindCatalogDatabaseContext(ApplicationProvider.getApplicationContext())
@@ -107,7 +133,11 @@ class RoomCatalogRepositoryTest : KoinTest {
 
     @After
     fun tearDown() {
-        stopKoin()
+        try {
+            get<CatalogDatabase>().close()
+        } finally {
+            stopKoin()
+        }
     }
 
     @Test

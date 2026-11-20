@@ -4,7 +4,7 @@ import Foundation
 /// Single AVPlayer timeline — seek policy mirrors Android C-293 (no per-tick seek while playing).
 @MainActor
 final class ChoreoCompositionPlaybackController: ObservableObject {
-    private(set) var player: AVPlayer?
+    @Published private(set) var player: AVPlayer?
     private var boundKey: String?
     private var lastPlayheadTargetMs: Int64 = 0
     private var compositionDurationMs: Int64 = 0
@@ -109,6 +109,10 @@ final class ChoreoCompositionPlaybackController: ObservableObject {
     }
 
     private func playerPositionMs(_ player: AVPlayer) -> Int64 {
-        Int64(CMTimeGetSeconds(player.currentTime()) * 1_000)
+        let positionMs = CMTimeGetSeconds(player.currentTime()) * 1_000
+        guard positionMs.isFinite, positionMs >= 0, positionMs < Double(Int64.max) else {
+            return 0
+        }
+        return Int64(positionMs)
     }
 }
