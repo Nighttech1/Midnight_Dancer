@@ -1,5 +1,7 @@
 package com.midnightdancer.feature.trainer.logic
 
+import kotlin.concurrent.Volatile
+
 import com.midnightdancer.core.domain.styles.*
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull

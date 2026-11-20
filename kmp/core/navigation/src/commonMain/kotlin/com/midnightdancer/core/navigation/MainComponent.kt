@@ -1,5 +1,7 @@
 package com.midnightdancer.core.navigation
 
+import kotlin.concurrent.Volatile
+
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.router.children.ChildNavState.Status
 import com.arkivanov.decompose.router.pages.ChildPages

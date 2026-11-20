@@ -1,5 +1,7 @@
 package com.midnightdancer.feature.exchange.logic
 
+import kotlin.concurrent.Volatile
+
 /**
  * Process-scoped SavedSet list so Sets survive ChildPages DESTROY when leaving the tab (C-244).
  * Not a full Room migration — same process lifetime as LibraryAudioController pattern.

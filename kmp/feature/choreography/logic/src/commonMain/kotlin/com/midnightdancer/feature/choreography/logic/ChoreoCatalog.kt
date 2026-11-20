@@ -1,5 +1,7 @@
 package com.midnightdancer.feature.choreography.logic
 
+import kotlin.concurrent.Volatile
+
 import com.midnightdancer.core.domain.entity.AppData
 import com.midnightdancer.core.domain.media.ElementDurationCodec
 import com.midnightdancer.core.domain.styles.DanceStyleCatalogSnapshot

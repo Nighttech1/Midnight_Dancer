@@ -1,5 +1,7 @@
 package com.midnightdancer.feature.trainer.logic
 
+import kotlin.concurrent.Volatile
+
 /**
  * C-268: process-scoped Live session snapshot so a ChildPages remount cannot wipe
  * an active training run down to a single «Фристайл» cue. Cleared only on Finish.
