@@ -1,6 +1,5 @@
 package com.midnightdancer.core.data.db
 
-import androidx.room.withTransaction
 import com.midnightdancer.core.data.db.entity.CatalogMetaEntity
 import com.midnightdancer.core.data.db.entity.CatalogMetaKeys
 import com.midnightdancer.core.data.db.entity.DanceStyleEntity
@@ -293,4 +292,4 @@ class RoomCatalogRepository(
 
     private companion object { const val STYLE_META = "canonical_styles_v1" }
 }
-
+
