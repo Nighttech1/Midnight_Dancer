@@ -5,6 +5,7 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
+import okio.use
 import platform.Foundation.NSRecursiveLock
 import platform.Foundation.NSUUID
 
