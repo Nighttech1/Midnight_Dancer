@@ -22,6 +22,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core:domain"))
+            // C-273: read vault picks for Live choreography sessions.
+            implementation(project(":feature:choreography:logic"))
             api(project(":core:tts"))
             api(libs.decompose)
             api(libs.essenty.lifecycle)
@@ -33,6 +35,7 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.kotlinx.serialization.json)
         }
     }
 }

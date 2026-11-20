@@ -54,7 +54,7 @@ fun ExportStylePickerDialog(
                 .padding(18.dp),
         ) {
             Text(
-                text = "Стиль пакета",
+                text = "Стиль сета",
                 color = Color.White,
                 fontFamily = MdFonts.Display,
                 fontWeight = FontWeight.Bold,
@@ -62,7 +62,7 @@ fun ExportStylePickerDialog(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "В одном пакете можно собрать содержимое только одного стиля.",
+                text = "В одном сете можно собрать содержимое только одного стиля.",
                 color = Color.White.copy(alpha = 0.65f),
                 fontSize = 13.sp,
                 lineHeight = 17.sp,
@@ -108,7 +108,11 @@ fun ExportStylePickerDialog(
             }
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(onClick = onDismiss) {
-                Text("Отмена", color = Color.White.copy(alpha = 0.7f))
+                Text(
+                    "Отмена",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 15.sp,
+                )
             }
         }
     }

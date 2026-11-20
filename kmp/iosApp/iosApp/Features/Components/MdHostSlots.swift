@@ -129,7 +129,7 @@ struct MdNeonDancerSilhouette: View {
                         Gradient(colors: [accent.opacity(0.35 + 0.35 * intensity), .clear]),
                         center: CGPoint(x: cx, y: cy),
                         startRadius: 4,
-                        endRadius: size.minDimension * 0.45
+                        endRadius: min(size.width, size.height) * 0.45
                     )
                 )
 

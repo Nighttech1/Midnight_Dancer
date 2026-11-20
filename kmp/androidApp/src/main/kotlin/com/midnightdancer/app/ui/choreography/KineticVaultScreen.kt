@@ -18,12 +18,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,10 +70,73 @@ fun KineticVaultScreen(
     state: ChoreographyUiState,
     onIntent: (ChoreographyIntent) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
     val haptics = rememberMdHaptics()
     val oled = ColorTokens.OledTrueBlack.toComposeColor()
     val softFling = rememberSoftGridFlingBehavior()
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<ChoreographyVaultItem?>(null) }
+
+    if (showCreateDialog) {
+        ChoreoNameStyleDialog(
+            title = "Новая хореография",
+            confirmLabel = "Создать",
+            initialName = "",
+            initialStyle = state.availableStyles.firstOrNull().orEmpty(),
+            styles = state.availableStyles,
+            tagCatalog = state.tagCatalog,
+            onConfirm = { name, style, tag ->
+                showCreateDialog = false
+                onIntent(ChoreographyIntent.CreateNamed(name, style, tag))
+            },
+            onDismiss = { showCreateDialog = false },
+        )
+    }
+
+    // 5.1: confirm before removing a choreography from the vault.
+    pendingDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            containerColor = Color(0xFF12131A),
+            title = {
+                Text(
+                    text = "Удалить хореографию?",
+                    color = Color.White,
+                    fontFamily = MdFonts.Display,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = "Хореография «${item.title}» будет удалена без возможности восстановления.",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontFamily = MdFonts.Display,
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDelete = null
+                        onIntent(ChoreographyIntent.DeleteItem(item.id))
+                    },
+                ) {
+                    Text("Удалить", color = AtelierColors.Flame, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(
+                        "Отмена",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 15.sp,
+                        fontFamily = MdFonts.Display,
+                    )
+                }
+            },
+        )
+    }
 
     Box(
         modifier = modifier
@@ -85,65 +155,84 @@ fun KineticVaultScreen(
                 ),
         )
 
+        // C-142: fixed header (title + create CTA + toolbar); only the cards scroll.
+        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                com.midnightdancer.app.ui.components.MdPageTitle(
+                    text = state.title,
+                    modifier = Modifier.weight(1f),
+                )
+                com.midnightdancer.app.ui.components.MdSettingsGear(
+                    onClick = onOpenSettings,
+                    haptics = haptics,
+                )
+            }
+            val raiseHardDisk = com.midnightdancer.app.ui.components.LocalRaiseHardDisk.current
+            CreateChoreographyCta(
+                haptics = haptics,
+                onClick = {
+                    if (com.midnightdancer.app.ui.components.guardMediaDiskOrRaise(raiseHardDisk)) {
+                        showCreateDialog = true
+                    }
+                },
+            )
+            CatalogToolbar(
+                filterOptions = state.tagCatalog,
+                selectedFilter = state.selectedTag.takeIf {
+                    !it.equals("Все", ignoreCase = true) && !it.equals("Все теги", ignoreCase = true)
+                },
+                onFilterSelect = { tag ->
+                    onIntent(ChoreographyIntent.SetTagFilter(tag ?: "Все теги"))
+                },
+                sortOptions = listOf(
+                    stringResource(R.string.catalog_sort_tag) to {
+                        onIntent(ChoreographyIntent.SetSortMode(ChoreographySortMode.ByTag))
+                    },
+                    stringResource(R.string.catalog_sort_alpha) to {
+                        onIntent(ChoreographyIntent.SetSortMode(ChoreographySortMode.Alphabetical))
+                    },
+                ),
+                sortActive = state.sortMode != ChoreographySortMode.ByTag,
+                searchQuery = state.searchQuery,
+                onSearchChange = { onIntent(ChoreographyIntent.SetSearchQuery(it)) },
+                searchPlaceholder = stringResource(R.string.choreo_search_placeholder),
+                haptics = haptics,
+                allFiltersLabel = "Все теги",
+            )
+        }
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = 10.dp,
+                top = 0.dp,
                 bottom = 100.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
             flingBehavior = softFling,
         ) {
-            item(key = "kv-header") {
-                com.midnightdancer.app.ui.components.MdPageTitle(
-                    text = state.title,
-                )
-            }
-            item(key = "kv-toolbar") {
-                CatalogToolbar(
-                    filterOptions = state.tagCatalog,
-                    selectedFilter = state.selectedTag.takeIf { it != "Все теги" },
-                    onFilterSelect = { tag ->
-                        onIntent(ChoreographyIntent.SetTagFilter(tag ?: "Все теги"))
-                    },
-                    sortOptions = listOf(
-                        stringResource(R.string.catalog_sort_tag) to {
-                            onIntent(ChoreographyIntent.SetSortMode(ChoreographySortMode.ByTag))
-                        },
-                        stringResource(R.string.catalog_sort_alpha) to {
-                            onIntent(ChoreographyIntent.SetSortMode(ChoreographySortMode.Alphabetical))
-                        },
-                    ),
-                    sortActive = state.sortMode != ChoreographySortMode.ByTag,
-                    searchQuery = state.searchQuery,
-                    onSearchChange = { onIntent(ChoreographyIntent.SetSearchQuery(it)) },
-                    searchPlaceholder = stringResource(R.string.choreo_search_placeholder),
-                    haptics = haptics,
-                    allFiltersLabel = "Все теги",
-                )
-            }
-            item(key = "kv-cta") {
-                val raiseHardDisk = com.midnightdancer.app.ui.components.LocalRaiseHardDisk.current
-                CreateChoreographyCta(
-                    haptics = haptics,
-                    onClick = {
-                        if (com.midnightdancer.app.ui.components.guardMediaDiskOrRaise(raiseHardDisk)) {
-                            onIntent(ChoreographyIntent.CreateChoreography)
-                        }
-                    },
-                )
-            }
             items(
                 items = state.filteredItems,
                 key = { it.id },
             ) { item ->
                 VaultCard(
                     item = item,
+                    styleLabel = state.displayStyle(item.style),
                     onOpen = { onIntent(ChoreographyIntent.OpenEditor(item.id)) },
                     onEdit = { onIntent(ChoreographyIntent.EditItem(item.id)) },
-                    onDelete = { onIntent(ChoreographyIntent.DeleteItem(item.id)) },
+                    onCopy = { onIntent(ChoreographyIntent.CopyItem(item.id)) },
+                    onDelete = { pendingDelete = item },
                     haptics = haptics,
                 )
             }
@@ -159,6 +248,7 @@ fun KineticVaultScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -167,44 +257,21 @@ private fun CreateChoreographyCta(
     haptics: HapticFeedback,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(AtelierColors.Flame, AtelierColors.Glow, AtelierColors.Gold),
-                ),
-            )
-            .interactiveSpringPress(
-                pressedScale = 0.96f,
-                hapticEvent = HapticEvent.MediumImpact,
-                haptics = haptics,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null, tint = Color.Black)
-            Text(
-                text = "Создать хореографию",
-                color = Color.Black,
-                fontWeight = FontWeight.Bold,
-                fontFamily = MdFonts.Display,
-            )
-        }
-    }
+    // C-230: white label + shimmer (parity «Создать элемент»).
+    com.midnightdancer.app.ui.components.FlameShimmerCta(
+        label = "Создать хореографию",
+        haptics = haptics,
+        onClick = onClick,
+    )
 }
 
 @Composable
 private fun VaultCard(
     item: ChoreographyVaultItem,
+    styleLabel: String,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
+    onCopy: () -> Unit,
     onDelete: () -> Unit,
     haptics: HapticFeedback,
 ) {
@@ -252,6 +319,14 @@ private fun VaultCard(
                         modifier = Modifier.size(16.dp),
                     )
                 }
+                IconButton(onClick = onCopy, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Filled.ContentCopy,
+                        contentDescription = "Копировать",
+                        tint = AtelierColors.Flame,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
                         Icons.Filled.Delete,
@@ -268,7 +343,7 @@ private fun VaultCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "${item.style} · ${item.trackName} · ${item.durationLabel} · " +
+                    text = "$styleLabel · ${item.trackName} · ${item.durationLabel} · " +
                         String.format("%.1f×", item.songPlaybackSpeed),
                     color = Color.White.copy(alpha = 0.50f),
                     fontSize = 12.sp,

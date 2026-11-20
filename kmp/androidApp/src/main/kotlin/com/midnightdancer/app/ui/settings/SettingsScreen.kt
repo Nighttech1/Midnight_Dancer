@@ -79,6 +79,8 @@ import com.midnightdancer.core.designsystem.HapticEvent
 import com.midnightdancer.core.designsystem.ShellChromeTokens
 import com.midnightdancer.feature.settings.logic.SettingsComponent
 import com.midnightdancer.feature.settings.logic.SettingsIntent
+import com.midnightdancer.core.domain.styles.DanceStyleEntry
+import com.midnightdancer.core.domain.styles.ReservedDanceStyle
 import kotlinx.coroutines.launch
 
 private val LanguageOptions = listOf(
@@ -99,7 +101,29 @@ fun SettingsScreen(
         "${state.reminderHour}:${state.reminderMinute.toString().padStart(2, '0')}"
     val flame = ColorTokens.NeonOrange.toComposeColor()
     val haptics = rememberMdHaptics()
-    var stylePendingDelete by remember { mutableStateOf<String?>(null) }
+    var stylePendingDelete by remember { mutableStateOf<DanceStyleEntry?>(null) }
+    var showStyleCreate by remember { mutableStateOf(false) }
+    var styleCreateName by remember { mutableStateOf("") }
+    var styleCreateError by remember { mutableStateOf<String?>(null) }
+    var styleCreatePending by remember { mutableStateOf<String?>(null) }
+    var styleCreateSubmitted by remember { mutableStateOf(false) }
+
+    LaunchedEffect(styleCreatePending, state.stylesBusy, state.stylesError, state.newStyleDraft, state.styleEntries) {
+        val pending = styleCreatePending
+        if (pending != null) {
+            // Read the authoritative current value: Compose may conflate a quick busy->success transition.
+            val current = component.uiState.value
+            if (!current.stylesBusy) {
+                if (current.stylesError != null) {
+                    styleCreatePending = null
+                } else if (current.newStyleDraft.isEmpty() && current.styleEntries.any { it.name == pending }) {
+                    styleCreatePending = null
+                    showStyleCreate = false
+                    styleCreateName = ""
+                }
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -218,7 +242,13 @@ fun SettingsScreen(
                         AddTagPill(
                             label = stringResource(R.string.settings_style_add),
                             flame = flame,
-                            onClick = { component.onIntent(SettingsIntent.AddStyle) },
+                            enabled = !state.stylesBusy && !state.stylesLoading,
+                            onClick = {
+                                styleCreateName = ""; styleCreateError = null
+                                styleCreatePending = null; styleCreateSubmitted = false
+                                component.onIntent(SettingsIntent.SetStyleDraft(""))
+                                showStyleCreate = true
+                            },
                         )
                     }
 
@@ -229,6 +259,10 @@ fun SettingsScreen(
                         color = ColorTokens.TextSecondary.toComposeColor(),
                     )
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    if (state.stylesLoading) Text("Загрузка стилей…", color = Color.LightGray)
+                    if (state.stylesBusy) Text("Сохранение изменений…", color = Color.LightGray)
+                    state.stylesError?.let { Text(it, color = Color(0xFFFFB4AB)) }
 
                     // C-75: ~5 TagRow visible (≈48dp each + gaps), then vertical scroll.
                     PremiumTagScrollHost(
@@ -241,18 +275,21 @@ fun SettingsScreen(
                             modifier = scrollModifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            state.danceStyles.forEach { name ->
+                            state.styleEntries.forEach { entry ->
                                 TagRow(
-                                    name = name,
+                                    name = entry.name,
                                     maxLength = state.styleNameMaxLength,
                                     flame = flame,
+                                    enabled = !state.stylesBusy && !state.stylesLoading,
+                                    editable = !entry.reserved,
+                                    removable = !entry.reserved,
                                     removeCd = stringResource(R.string.settings_style_remove),
                                     onRename = { next ->
                                         component.onIntent(
-                                            SettingsIntent.RenameStyle(name, next),
+                                            SettingsIntent.RenameStyleById(entry.id, next),
                                         )
                                     },
-                                    onRemove = { stylePendingDelete = name },
+                                    onRemove = { if (entry.id != ReservedDanceStyle.ID) stylePendingDelete = entry },
                                 )
                             }
                         }
@@ -260,6 +297,10 @@ fun SettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
+
+                com.midnightdancer.app.ui.media.OwnedMediaSettingsCard(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
 
                 NeonCard(accent = ColorTokens.NeonOrange) {
                     Row(
@@ -329,46 +370,72 @@ fun SettingsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                NeonCard(accent = ColorTokens.NeonOrange) {
-                    Text(
-                        text = "Синхронизация",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ColorTokens.TextPrimary.toComposeColor(),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (state.prefsLoaded) {
-                            "Prefs загружены · язык ${state.languageCode.uppercase()}"
-                        } else {
-                            "Загрузка prefs…"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ColorTokens.TextSecondary.toComposeColor(),
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    NeonActionButton(
-                        label = "Обновить из prefs",
-                        accent = ColorTokens.NeonOrange,
-                        onClick = { component.onIntent(SettingsIntent.ReloadFromPrefs) },
-                        solidFill = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                if (BuildConfig.DEBUG) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    EdgeStressDebugSeedCard()
-                }
+                // C-181: Sync + DEBUG seed blocks removed from Settings.
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
 
-    stylePendingDelete?.let { styleName ->
+    if (showStyleCreate) {
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focus.requestFocus() }
+        val saving = state.stylesBusy || styleCreatePending != null
+        val error = styleCreateError ?: state.stylesError.takeIf { styleCreateSubmitted }
+        AlertDialog(
+            onDismissRequest = { if (!saving) showStyleCreate = false },
+            containerColor = Color(0xFF121319),
+            title = { Text("Новый стиль", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = styleCreateName,
+                        onValueChange = {
+                            styleCreateName = it.take(state.styleNameMaxLength)
+                            styleCreateError = null; styleCreateSubmitted = false
+                        },
+                        label = { Text("Название стиля") },
+                        enabled = !saving,
+                        singleLine = true,
+                        isError = error != null,
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                            focusedBorderColor = flame, cursorColor = flame,
+                        ),
+                    )
+                    error?.let { Text(it, color = Color(0xFFFFB4AB)) }
+                    if (saving) Text("Сохранение стиля…", color = Color.LightGray)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !saving && !state.stylesLoading, onClick = {
+                    val current = component.uiState.value
+                    if (current.stylesBusy || current.stylesLoading || styleCreatePending != null) return@TextButton
+                    val name = styleCreateName.trim()
+                    styleCreateError = when {
+                        name.isEmpty() -> "Введите название стиля."
+                        current.styleEntries.any { it.name.equals(name, ignoreCase = true) } -> "Стиль с таким названием уже существует."
+                        else -> null
+                    }
+                    if (styleCreateError == null) {
+                        styleCreateSubmitted = true
+                        styleCreatePending = name
+                        component.onIntent(SettingsIntent.SetStyleDraft(name))
+                        component.onIntent(SettingsIntent.AddStyle)
+                    }
+                }) { Text("Создать", color = flame, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(enabled = !saving, onClick = { showStyleCreate = false }) {
+                    Text("Отмена", color = Color.LightGray)
+                }
+            },
+        )
+    }
+
+    stylePendingDelete?.let { style ->
         AlertDialog(
             onDismissRequest = { stylePendingDelete = null },
             containerColor = Color(0xFF121319),
@@ -381,14 +448,15 @@ fun SettingsScreen(
             },
             text = {
                 Text(
-                    text = stringResource(R.string.settings_style_delete_message),
+                    text = "Удалить стиль «${style.name}»? Его элементы, музыка, хореографии и ваши сеты перейдут в «Без стиля». Материалы сохранятся. Добавленные архивы останутся без изменений.",
                     color = Color.White.copy(alpha = 0.85f),
                 )
             },
             confirmButton = {
                 TextButton(
+                    enabled = !state.stylesBusy && !state.stylesLoading,
                     onClick = {
-                        component.onIntent(SettingsIntent.RemoveStyle(styleName))
+                        component.onIntent(SettingsIntent.RemoveStyleById(style.id))
                         stylePendingDelete = null
                         haptics.perform(HapticEvent.MediumImpact)
                     },
@@ -471,6 +539,7 @@ private fun EdgeStressDebugSeedCard() {
 private fun AddTagPill(
     label: String,
     flame: Color,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val haptics = rememberMdHaptics()
@@ -479,6 +548,7 @@ private fun AddTagPill(
             .size(40.dp)
             .background(flame, RoundedCornerShape(12.dp))
             .interactiveSpringPress(
+                enabled = enabled,
                 pressedScale = 0.94f,
                 hapticEvent = HapticEvent.MediumImpact,
                 haptics = haptics,
@@ -503,13 +573,17 @@ private fun TagRow(
     removeCd: String = stringResource(R.string.settings_tag_remove),
     onRename: (String) -> Unit,
     onRemove: () -> Unit,
+    enabled: Boolean = true,
+    editable: Boolean = true,
+    removable: Boolean = true,
 ) {
     var editing by remember(name) { mutableStateOf(false) }
+    var hadFocusInEdit by remember(name) { mutableStateOf(false) }
     var draft by remember(name) { mutableStateOf(name) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(editing) {
-        if (editing) {
+        if (editing && enabled && editable) {
             draft = name
             focusRequester.requestFocus()
         }
@@ -524,11 +598,14 @@ private fun TagRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        if (editing) {
-            BasicTextField(
+        if (editing && enabled && editable) {
+            // C-184: double-tap rename → select entire name.
+            com.midnightdancer.app.ui.components.MdSelectAllTextField(
                 value = draft,
                 onValueChange = { draft = it.take(maxLength) },
                 singleLine = true,
+                maxLength = maxLength,
+                selectAllOnOpen = true,
                 textStyle = TextStyle(
                     color = Color.White,
                     fontSize = 16.sp,
@@ -539,8 +616,11 @@ private fun TagRow(
                     .weight(1f)
                     .focusRequester(focusRequester)
                     .onFocusChanged { focus ->
-                        if (!focus.isFocused && editing) {
+                        if (focus.isFocused && editing) {
+                            hadFocusInEdit = true
+                        } else if (!focus.isFocused && editing && hadFocusInEdit) {
                             editing = false
+                            hadFocusInEdit = false
                             val cleaned = draft.trim()
                             if (cleaned.isNotEmpty() && cleaned != name) {
                                 onRename(cleaned)
@@ -558,15 +638,22 @@ private fun TagRow(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .weight(1f)
-                    .pointerInput(name) {
+                    .pointerInput(name, enabled, editable) {
                         detectTapGestures(
-                            onDoubleTap = { editing = true },
+                            onDoubleTap = {
+                                if (enabled && editable) {
+                                    hadFocusInEdit = false
+                                    draft = name
+                                    editing = true
+                                }
+                            },
                         )
                     },
             )
         }
-        IconButton(
+        if (removable) IconButton(
             onClick = onRemove,
+            enabled = enabled,
             modifier = Modifier.size(40.dp),
         ) {
             Icon(
@@ -575,6 +662,7 @@ private fun TagRow(
                 tint = flame,
             )
         }
+        else Text("Постоянный", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
     }
 }
 

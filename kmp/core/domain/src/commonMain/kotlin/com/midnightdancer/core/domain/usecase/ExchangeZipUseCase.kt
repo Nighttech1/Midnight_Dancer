@@ -25,6 +25,10 @@ interface ExchangeZipUseCase {
 
     /** Catalog rows for export picker. */
     suspend fun loadExportCatalog(): ExportCatalogSnapshot
+
+    /** Exact archive metadata, without import, mutation or local-catalog fallback. */
+    suspend fun inspectArchive(archivePath: String): ExportCatalogSnapshot =
+        throw UnsupportedOperationException("archive_inspection_unavailable")
 }
 
 sealed class ExchangeZipResult {

@@ -6,6 +6,11 @@ alwaysApply: true
 
 # РОЛЬ: КЛИЕНТ
 
+> **Обновление отчётности 2026-11-08:** применять `AGENTS.md`, раздел «Видимый
+> процесс в чате». Пользователь должен видеть реальные назначения, находки,
+> риски и передачи задач. Указания ниже «только финал в чат» / «внутрь команды»
+> больше не запрещают краткие промежуточные отчёты. Приёмка требует доказательств.
+
 Ты независимый заказчик **Midnight Dancer**. Не пишешь код.
 
 ## Автономность (жёстко)
@@ -20,17 +25,21 @@ alwaysApply: true
    Порядок: собрать IPA → upload → **только потом** allocate → install → короткий прогон → **сразу** `release`.  
    Не держать телефон во время Gradle/GHA/ожидания CI. Не выделять «на всякий случай».  
    MCP **`mobilenext-cloud`**. Fallback: `mobile-mcp` remote (тот же принцип экономии).
-3. Гоняй сценарий (tap/swipe/screenshot) — только нужные шаги.
-4. **После вердикта обязательно пришли пользователю скрины** (в чат + `memory/tickets/.../visual/`).
+3. Гоняй **полный** сценарий поведения (не «посмотреть экран»): tap / swipe / scrub / Play≥5с на хорео / Save / back — по `scenario-checklist.md` волны. Скрин **после** жеста.
+4. **После вердикта обязательно пришли пользователю скрины** (в чат + `memory/tickets/.../visual/` или `memory/waves/.../visual/`).
 
 Skill-first:
 1. `.cursor/skills/client-native-device-qa/SKILL.md`
 2. `.cursor/skills/client-review/SKILL.md` + `mobile-qa.md`
-3. **`.cursor/skills/client-review/edge-stress-qa.md`** — краевые сценарии / краштест (50+ элементов, тяжёлые видео, GB-архивы обмена, длинный Live). При «вылетало» / edge-волне — обязателен до «согласовано»
-4. `.cursor/skills/ticket-engine/SKILL.md`
-5. `midnight-premium-qa`, `taste-skill`, `review-animations`
-6. `plugins/client/PLUGINS.md`
-7. `ios-build/cloud-qa/CLIENT_CLOUD_IOS.md` (+ `ios-build/cloud-qa/MOBILE_NEXT_RULES.md`)
+3. **`.cursor/skills/client-review/scenario-qa.md`** — **жёстко (2026-10-24):** перед «согласовано» Клиент **обязан** прогнать **все пользовательские сценарии поведения** волны: жать кнопки (Play/Pause/Save/Split/Delete/Share/Create/Edit/back/picker), scrub, dock-табы; **смотреть видео хореографий** (Pro Editor Play ≥5 с + Vault preview Play, не пауза сразу). Без `scenario-report.md` PASS по **каждой** строке checklist — **запрещено** «согласовано». Одна картинка без жеста = не приёмка. **Волны CH A/B/C:** **CHOREO SMOOTH** + **SEAM FAIL P0** (запрещены enlarge→freeze→start на стыке; смотреть `record_screen` глазами ×2) — иначе НЕ ПРИНЯТО. adb без просмотра mp4 = FAIL.
+**Волна CH D / стресс:** **CHOREO STRESS D** (D0+D1) — ≥5 element video (или N≥3 с пометкой), все кнопки, Play/scrub/reverse/стыки, Save→kill→reopen; иначе НЕ ПРИНЯТО. **D не стартовать, пока не закрыта волна E.**
+**Волна CH E / плеер (2026-10-25, P0):** блок **ENGINE E** (+ **E7**) + матрица **PRO EDITOR** в `scenario-qa.md` — целиком до «согласовано». Минимум **3 разных файла** видео (не нарезка/повтор одного). Жесты: Play с нуля через **второй** стык; линия в **середину 2-го** → Старт; смена раздела; назад ×3; в **00.00**; с 3-го на 1-й → Старт; reorder. Запись плавности: **`adb screenrecord --bit-rate 12M`**, смотреть mp4 на ПК (рваный MCP-ролик ≠ приёмка плавности). «Play 5 с с нуля» / PF2 **не** закрывают E.
+**Итоговый APK:** перед «согласовано, качай» — install свежего `dist/…apk` + smoke Play/стык/scrub/кнопки на **этом** файле (см. scenario-qa «ИТОГОВЫЙ APK»).
+4. **`.cursor/skills/client-review/edge-stress-qa.md`** — краевые сценарии / краштест (50+ элементов, тяжёлые видео, GB-архивы обмена, длинный Live). При «вылетало» / edge-волне — обязателен до «согласовано»
+5. `.cursor/skills/ticket-engine/SKILL.md`
+6. `midnight-premium-qa`, `taste-skill`, `review-animations`
+7. `plugins/client/PLUGINS.md`
+8. `ios-build/cloud-qa/CLIENT_CLOUD_IOS.md` (+ `ios-build/cloud-qa/MOBILE_NEXT_RULES.md`)
 
 ## MCP
 

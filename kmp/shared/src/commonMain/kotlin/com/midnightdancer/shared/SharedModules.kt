@@ -9,7 +9,10 @@ import com.midnightdancer.core.data.network.networkModule
 import com.midnightdancer.core.data.zip.SecureZipMetadataReader
 import com.midnightdancer.core.data.zip.di.secureZipKoinModule
 import com.midnightdancer.core.domain.usecase.ExchangeZipUseCase
+import com.midnightdancer.core.domain.usecase.LoadLibrary
 import com.midnightdancer.core.domain.usecase.ReadWriteUserPrefs
+import com.midnightdancer.core.domain.styles.ManageDanceStyles
+import com.midnightdancer.core.domain.usecase.SaveAppData
 import com.midnightdancer.core.navigation.DefaultRootComponent
 import com.midnightdancer.core.navigation.NavigationChildFactories
 import com.midnightdancer.core.navigation.RootComponent
@@ -48,22 +51,51 @@ fun sharedCommonModule(): Module = module {
                 DefaultElementsComponent(
                     componentContext = ctx,
                     userPrefs = getOrNull<ReadWriteUserPrefs>(),
+                    loadLibrary = getOrNull<LoadLibrary>(),
+                    saveAppData = getOrNull<SaveAppData>(),
+                    danceStyles = getOrNull<ManageDanceStyles>(),
                 )
             },
-            music = { ctx -> DefaultMusicComponent(ctx) },
-            choreography = { ctx -> DefaultChoreographyComponent(ctx) },
-            trainer = { ctx -> DefaultTrainerComponent(ctx) },
+            music = { ctx ->
+                DefaultMusicComponent(
+                    componentContext = ctx,
+                    loadLibrary = getOrNull<LoadLibrary>(),
+                    saveAppData = getOrNull<SaveAppData>(),
+                    danceStyles = getOrNull<ManageDanceStyles>(),
+                )
+            },
+            choreography = { ctx ->
+                DefaultChoreographyComponent(
+                    componentContext = ctx,
+                    loadLibrary = getOrNull<LoadLibrary>(),
+                    vaultPersister = getOrNull<com.midnightdancer.feature.choreography.logic.ChoreographyVaultPersister>(),
+                    creationAccess = getOrNull<com.midnightdancer.core.domain.settings.CreationAccessPolicy>(),
+                    deletedObserver = getOrNull<com.midnightdancer.core.domain.settings.ChoreographyDeletedObserver>(),
+                    danceStyles = getOrNull<ManageDanceStyles>(),
+                )
+            },
+            trainer = { ctx ->
+                DefaultTrainerComponent(
+                    componentContext = ctx,
+                    loadLibrary = getOrNull<LoadLibrary>(),
+                    userPrefs = getOrNull<ReadWriteUserPrefs>(),
+                    danceStyles = getOrNull<ManageDanceStyles>(),
+                )
+            },
             exchange = { ctx ->
                 DefaultExchangeComponent(
                     componentContext = ctx,
                     exchangeZip = getOrNull<ExchangeZipUseCase>(),
+                    savedSetsPersister = getOrNull<com.midnightdancer.feature.exchange.logic.SavedSetsPersister>(),
                     deviceStorage = getOrNull(),
+                    danceStyles = getOrNull<ManageDanceStyles>(),
                 )
             },
             settings = { ctx ->
                 DefaultSettingsComponent(
                     componentContext = ctx,
                     userPrefs = getOrNull(),
+                    danceStyles = getOrNull<ManageDanceStyles>(),
                 )
             },
         )
@@ -81,35 +113,62 @@ fun sharedCommonModule(): Module = module {
         DefaultElementsComponent(
             componentContext = componentContext,
             userPrefs = getOrNull<ReadWriteUserPrefs>(),
+            loadLibrary = getOrNull<LoadLibrary>(),
+            saveAppData = getOrNull<SaveAppData>(),
+            danceStyles = getOrNull<ManageDanceStyles>(),
         )
     }
     factory<MusicComponent> { (componentContext: ComponentContext) ->
-        DefaultMusicComponent(componentContext)
+        DefaultMusicComponent(
+            componentContext = componentContext,
+            loadLibrary = getOrNull<LoadLibrary>(),
+            saveAppData = getOrNull<SaveAppData>(),
+            danceStyles = getOrNull<ManageDanceStyles>(),
+        )
     }
     factory<ChoreographyComponent> { (componentContext: ComponentContext) ->
-        DefaultChoreographyComponent(componentContext)
+        DefaultChoreographyComponent(
+            componentContext = componentContext,
+            loadLibrary = getOrNull<LoadLibrary>(),
+            vaultPersister = getOrNull<com.midnightdancer.feature.choreography.logic.ChoreographyVaultPersister>(),
+            creationAccess = getOrNull<com.midnightdancer.core.domain.settings.CreationAccessPolicy>(),
+            deletedObserver = getOrNull<com.midnightdancer.core.domain.settings.ChoreographyDeletedObserver>(),
+            danceStyles = getOrNull<ManageDanceStyles>(),
+        )
     }
     factory<TrainerComponent> { (componentContext: ComponentContext) ->
-        DefaultTrainerComponent(componentContext)
+        DefaultTrainerComponent(
+            componentContext = componentContext,
+            loadLibrary = getOrNull<LoadLibrary>(),
+            userPrefs = getOrNull<ReadWriteUserPrefs>(),
+            danceStyles = getOrNull<ManageDanceStyles>(),
+        )
     }
     factory<ExchangeComponent> { (componentContext: ComponentContext) ->
         DefaultExchangeComponent(
             componentContext = componentContext,
             exchangeZip = getOrNull<ExchangeZipUseCase>(),
+            savedSetsPersister = getOrNull<com.midnightdancer.feature.exchange.logic.SavedSetsPersister>(),
             deviceStorage = getOrNull(),
+            danceStyles = getOrNull<ManageDanceStyles>(),
         )
     }
     factory<SettingsComponent> { (componentContext: ComponentContext) ->
         DefaultSettingsComponent(
             componentContext = componentContext,
             userPrefs = getOrNull<ReadWriteUserPrefs>(),
+            danceStyles = getOrNull<ManageDanceStyles>(),
         )
     }
 
-    factory<RootComponent> { (componentContext: ComponentContext) ->
+    factory<RootComponent> { params ->
+        val componentContext = params.get<ComponentContext>()
+        // C-282: optional Boolean startAtMain (MainActivity passes savedInstanceState != null).
+        val startAtMain = runCatching { params.get<Boolean>() }.getOrDefault(false)
         DefaultRootComponent(
             componentContext = componentContext,
             factories = get(),
+            startAtMain = startAtMain,
         )
     }
 }

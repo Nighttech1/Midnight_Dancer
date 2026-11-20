@@ -1,7 +1,15 @@
 package com.midnightdancer.app.ui.exchange
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,59 +22,155 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import com.midnightdancer.app.R
+import com.midnightdancer.app.ui.components.CatalogToolbar
+import com.midnightdancer.app.ui.components.FlameShimmerCta
 import com.midnightdancer.app.ui.components.MdPageTitle
+import com.midnightdancer.app.ui.components.MdSettingsGear
 import com.midnightdancer.app.ui.elements.AtelierColors
 import com.midnightdancer.app.ui.motion.interactiveSpringPress
 import com.midnightdancer.app.ui.motion.rememberMdHaptics
-import com.midnightdancer.app.ui.motion.rememberSoftGridFlingBehavior
+import com.midnightdancer.app.ui.theme.MdFonts
 import com.midnightdancer.app.ui.theme.toComposeColor
 import com.midnightdancer.core.designsystem.ColorTokens
 import com.midnightdancer.core.designsystem.HapticEvent
 import com.midnightdancer.core.designsystem.HapticFeedback
 import com.midnightdancer.feature.exchange.logic.ExchangeIntent
 import com.midnightdancer.feature.exchange.logic.ExchangeUiState
+import com.midnightdancer.feature.exchange.logic.SetHubTab
+import com.midnightdancer.feature.exchange.logic.SetsSortMode
+import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
-private val CardShape = RoundedCornerShape(18.dp)
-private val DisabledGray = Color(0xFF5A5A5A)
+private val Hairline = Color.White.copy(alpha = 0.10f)
 
 /**
- * Stitch kinetic sync deck (C-94) — MdPageTitle + Flame hologram action cards.
- * C-109: disk free/required + gray disabled «Загрузить» when free < required×1.20.
+ * Sets hub — Мои | Добавленные, catalog chrome, Vault cards, system share (C-227).
  */
 @Composable
 fun KineticSyncDeckScreen(
     state: ExchangeUiState,
     onIntent: (ExchangeIntent) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     val haptics = rememberMdHaptics()
     val oled = ColorTokens.OledTrueBlack.toComposeColor()
-    val softFling = rememberSoftGridFlingBehavior()
     val importEnabled = state.importEnabled && !state.busy
     val raiseHard = com.midnightdancer.app.ui.components.LocalRaiseHardDisk.current
+    val latestOnIntent by rememberUpdatedState(onIntent)
+
+    val pickImport = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val name = runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull().orEmpty()
+        val lower = name.lowercase()
+        if (!lower.endsWith(".dance") && !lower.endsWith(".mdance") && lower.isNotBlank()) {
+            raiseHard?.invoke("Выберите файл сета .dance")
+            return@rememberLauncherForActivityResult
+        }
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        latestOnIntent(
+            ExchangeIntent.ImportPackagePicked(
+                contentUri = uri.toString(),
+                displayName = name.ifBlank { "import.dance" },
+            ),
+        )
+    }
+
+    LaunchedEffect(state.operationError) {
+        state.operationError?.let { raiseHard?.invoke(it) }
+    }
+
+    LaunchedEffect(state.lastActionLabel) {
+        val msg = state.lastActionLabel ?: return@LaunchedEffect
+        if (msg.contains("успешно импортирован", ignoreCase = true)) {
+            raiseHard?.invoke(msg)
+        }
+        // C-289: empty-set share → bottom warn, never open chooser.
+        if (msg == com.midnightdancer.feature.exchange.logic.EMPTY_SET_SHARE_WARN_RU) {
+            raiseHard?.invoke(msg)
+        }
+    }
+
+    LaunchedEffect(state.pendingSharePath) {
+        val path = state.pendingSharePath ?: return@LaunchedEffect
+        val src = File(path)
+        if (!src.isFile) {
+            latestOnIntent(ExchangeIntent.ClearPendingShare)
+            raiseHard?.invoke("Файл сета не найден")
+            return@LaunchedEffect
+        }
+        val shareName =
+            state.pendingShareFileName.ifBlank { src.name }.let { n ->
+                when {
+                    n.endsWith(".dance", ignoreCase = true) -> n
+                    n.endsWith(".mdance", ignoreCase = true) -> n.dropLast(7) + ".dance"
+                    else -> "$n.dance"
+                }
+            }
+        val shareDir = File(context.cacheDir, "sets_share").apply { mkdirs() }
+        val shareFile = File(shareDir, shareName)
+        runCatching {
+            src.copyTo(shareFile, overwrite = true)
+            val uri =
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    shareFile,
+                )
+            val send =
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "application/octet-stream"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, shareName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    clipData = android.content.ClipData.newUri(
+                        context.contentResolver,
+                        shareName,
+                        uri,
+                    )
+                }
+            context.startActivity(Intent.createChooser(send, "Поделиться сетом"))
+        }.onFailure {
+            raiseHard?.invoke("Не удалось открыть «Поделиться»")
+        }
+        latestOnIntent(ExchangeIntent.ClearPendingShare)
+    }
 
     LaunchedEffect(Unit) {
         while (isActive) {
@@ -81,13 +185,29 @@ fun KineticSyncDeckScreen(
             styles = state.exportCatalog.styles,
             styleId = state.exportStyleId,
             styleName = state.exportStyleName,
-            selectedMoves = state.exportSelectedMoveIds.size,
-            selectedSongs = state.exportSelectedSongIds.size,
-            selectedChoreos = state.exportSelectedChoreoIds.size,
+            selectedMoves = if (state.viewingImportedSet) state.archiveInspectionCatalog?.elements?.size ?: 0 else state.exportSelectedMoveIds.size,
+            selectedSongs = if (state.viewingImportedSet) state.archiveInspectionCatalog?.songs?.size ?: 0 else state.exportSelectedSongIds.size,
+            selectedChoreos = if (state.viewingImportedSet) state.archiveInspectionCatalog?.choreographies?.size ?: 0 else state.exportSelectedChoreoIds.size,
+            weightMb = state.exportWeightMb,
+            overweight = state.exportOverWeight,
             onStyleSelect = { onIntent(ExchangeIntent.SelectExportStyle(it)) },
             onOpenPick = { onIntent(ExchangeIntent.OpenExportPick(it)) },
             onConfirm = { onIntent(ExchangeIntent.ConfirmExport) },
             onDismiss = { onIntent(ExchangeIntent.DismissExportDialog) },
+            isEditing = state.isEditingSet,
+            validationError = state.exportValidationError,
+            isBusy = state.busy,
+            catalogLoading = state.exportCatalogLoading,
+            readOnly = state.viewingImportedSet,
+            styleLocked = state.exportStyleLocked,
+            archiveLoading = state.archiveInspectionLoading,
+            archiveError = state.archiveInspectionError,
+            archiveReady = state.archiveInspectionCatalog != null && !state.archiveInspectionLoading && state.archiveInspectionError == null,
+            onRetryArchive = { onIntent(ExchangeIntent.RetryArchiveInspection) },
+            invalidSelectionCount = state.invalidExportSelectionCount,
+            onRemoveInvalidSelection = { onIntent(ExchangeIntent.RemoveInvalidExportSelection) },
+            setName = state.exportSetName,
+            onSetNameChange = { onIntent(ExchangeIntent.SetExportSetName(it)) },
         )
     }
 
@@ -97,6 +217,7 @@ fun KineticSyncDeckScreen(
             packageStyles = state.importPackageStyles,
             targetStyleId = state.importTargetStyleId,
             onTargetStyleChange = { onIntent(ExchangeIntent.SetImportTargetStyle(it)) },
+            onCreateNewStyle = { onIntent(ExchangeIntent.CreateImportTargetStyle) },
             onConfirm = {
                 if (!importEnabled) {
                     raiseHard?.invoke(
@@ -111,11 +232,60 @@ fun KineticSyncDeckScreen(
         )
     }
 
+    if (state.showShareSetPicker) {
+        AlertDialog(
+            onDismissRequest = { onIntent(ExchangeIntent.DismissShareSetPicker) },
+            containerColor = Color(0xFF12131A),
+            title = {
+                Text(
+                    text = "Выберите сет",
+                    color = Color.White,
+                    fontFamily = MdFonts.Display,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.height(240.dp),
+                ) {
+                    items(state.visibleSets.ifEmpty { state.savedSets }, key = { it.id }) { set ->
+                        TextButton(
+                            onClick = { onIntent(ExchangeIntent.ShareSet(set.id)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = set.name,
+                                color = AtelierColors.Flame,
+                                fontFamily = MdFonts.Display,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { onIntent(ExchangeIntent.DismissShareSetPicker) }) {
+                    Text("Отмена", color = Color.White.copy(alpha = 0.7f))
+                }
+            },
+        )
+    }
+
     // Full-screen section picker (Elements / Music / Choreography)
     val pickKind = state.exportPickKind
     if (pickKind != null) {
-        val items =
+        BackHandler { onIntent(ExchangeIntent.DismissExportPick) }
+        val items = if (state.viewingImportedSet) {
             when (pickKind) {
+                com.midnightdancer.core.domain.exchange.ExportPickKind.Elements -> state.archiveInspectionCatalog?.elements.orEmpty()
+                com.midnightdancer.core.domain.exchange.ExportPickKind.Songs -> state.archiveInspectionCatalog?.songs.orEmpty()
+                com.midnightdancer.core.domain.exchange.ExportPickKind.Choreographies -> state.archiveInspectionCatalog?.choreographies.orEmpty()
+            }
+        } else when (pickKind) {
                 com.midnightdancer.core.domain.exchange.ExportPickKind.Elements ->
                     state.exportCatalog.elementsForStyle(state.exportStyleId)
                 com.midnightdancer.core.domain.exchange.ExportPickKind.Songs ->
@@ -125,13 +295,17 @@ fun KineticSyncDeckScreen(
             }
         ExportSectionPickerScreen(
             kind = pickKind,
-            styleName = state.exportStyleName,
+            styleName = if (state.viewingImportedSet) "Состав архива" else state.exportStyleName,
             items = items,
             selectedIds = state.exportPickDraftIds,
             onToggle = { onIntent(ExchangeIntent.ToggleExportPickItem(it)) },
             onConfirm = { onIntent(ExchangeIntent.ConfirmExportPick) },
             onDismiss = { onIntent(ExchangeIntent.DismissExportPick) },
             modifier = modifier.fillMaxSize(),
+            highlightSelected = state.isEditingSet && !state.viewingImportedSet,
+            weightMb = if (state.isEditingSet && !state.viewingImportedSet) state.exportWeightMb else null,
+            readOnly = state.viewingImportedSet,
+            overweight = state.exportOverWeight,
         )
         return
     }
@@ -153,167 +327,168 @@ fun KineticSyncDeckScreen(
                 ),
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 10.dp,
-                bottom = 100.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            flingBehavior = softFling,
-        ) {
-            item(key = "ex-header") {
-                MdPageTitle(text = state.title)
-            }
-            item(key = "ex-share") {
-                HologramCard(
-                    title = "Поделиться",
-                    subtitle = "Отправь другу элементы, музыку, хореографии (.mdance)",
-                    accent = AtelierColors.Flame,
-                    icon = Icons.Filled.Share,
-                    haptics = haptics,
-                    enabled = !state.busy,
-                    onClick = { onIntent(ExchangeIntent.ExportStub) },
+        // C-229/C-230: sticky title + tabs + CTA + toolbar (parity Elements/Music).
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MdPageTitle(
+                        text = state.title.ifBlank { "Сеты" },
+                        modifier = Modifier.weight(1f),
+                    )
+                    MdSettingsGear(onClick = onOpenSettings, haptics = haptics)
+                }
+
+                SetsHubModeToggle(
+                    tab = state.hubTab,
+                    onTab = { onIntent(ExchangeIntent.SelectSetHubTab(it)) },
                 )
-            }
-            item(key = "ex-import") {
-                HologramCard(
-                    title = "Загрузить",
-                    subtitle =
-                        if (importEnabled) {
-                            "Добавить элементы, музыку, хореографии"
-                        } else {
-                            "Мало места · нужно ${state.requiredLabel} (+20%), свободно ${state.freeLabel}"
-                        },
-                    accent = if (importEnabled) AtelierColors.Flame else DisabledGray,
-                    icon = Icons.Filled.Upload,
+
+                val ctaLabel =
+                    when (state.hubTab) {
+                        SetHubTab.Mine -> "Создать сет"
+                        SetHubTab.Imported -> "Загрузить сет"
+                    }
+                FlameShimmerCta(
+                    label = ctaLabel,
+                    enabled = !state.busy && (state.hubTab == SetHubTab.Mine || importEnabled),
                     haptics = haptics,
-                    enabled = importEnabled,
                     onClick = {
-                        if (!importEnabled) {
-                            raiseHard?.invoke(
-                                com.midnightdancer.app.ui.components.HARD_DISK_BANNER_TEXT,
-                            )
-                        } else {
-                            onIntent(ExchangeIntent.ImportStub)
+                        when (state.hubTab) {
+                            SetHubTab.Mine -> onIntent(ExchangeIntent.ExportStub)
+                            SetHubTab.Imported -> {
+                                if (!importEnabled) {
+                                    raiseHard?.invoke(
+                                        com.midnightdancer.app.ui.components.HARD_DISK_BANNER_TEXT,
+                                    )
+                                } else {
+                                    pickImport.launch(arrayOf("*/*"))
+                                }
+                            }
                         }
                     },
                 )
-            }
-            item(key = "ex-rollback") {
-                HologramCard(
-                    title = "Откатить",
-                    subtitle = "Удалить последний загруженный пакет",
-                    detail = state.lastImportName.takeIf { it.isNotBlank() },
-                    accent = AtelierColors.Flame,
-                    icon = Icons.Filled.Refresh,
+
+                CatalogToolbar(
+                    filterOptions = state.tagCatalog,
+                    selectedFilter = state.selectedFilter.takeIf {
+                        !it.equals("Все", ignoreCase = true) &&
+                            !it.equals("Все теги", ignoreCase = true)
+                    },
+                    onFilterSelect = { tag ->
+                        onIntent(ExchangeIntent.SetSetsFilter(tag))
+                    },
+                    sortOptions = listOf(
+                        stringResource(R.string.catalog_sort_tag) to {
+                            onIntent(ExchangeIntent.SetSetsSortMode(SetsSortMode.ByStyle))
+                        },
+                        stringResource(R.string.catalog_sort_alpha) to {
+                            onIntent(ExchangeIntent.SetSetsSortMode(SetsSortMode.Alphabetical))
+                        },
+                    ),
+                    sortActive = state.sortMode != SetsSortMode.ByStyle,
+                    searchQuery = state.searchQuery,
+                    onSearchChange = { onIntent(ExchangeIntent.SetSetsSearchQuery(it)) },
+                    searchPlaceholder = stringResource(R.string.sets_search_placeholder),
                     haptics = haptics,
-                    enabled = !state.busy,
-                    onClick = { onIntent(ExchangeIntent.RollbackStub) },
+                    allFiltersLabel = "Все теги",
                 )
             }
-            if (state.lastActionLabel != null) {
-                item(key = "ex-last") {
-                    Text(
-                        text = "LAST · ${state.lastActionLabel}",
-                        color = AtelierColors.Soft,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
+
+            SetsListBody(
+                sets = state.visibleSets,
+                hubTab = state.hubTab,
+                onEdit = { onIntent(ExchangeIntent.EditSavedSet(it)) },
+                onShare = { onIntent(ExchangeIntent.ShareSet(it)) },
+                onDelete = { onIntent(ExchangeIntent.DeleteSavedSet(it)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 0.dp,
+                    bottom = 100.dp,
+                ),
+            )
+
+            // C-244: no bottom «Export OK…» / lastActionLabel footer under the list.
         }
     }
 }
 
 @Composable
-private fun HologramCard(
-    title: String,
-    subtitle: String,
-    accent: Color,
-    icon: ImageVector,
-    haptics: HapticFeedback,
-    onClick: () -> Unit,
-    detail: String? = null,
-    enabled: Boolean = true,
+private fun SetsHubModeToggle(
+    tab: SetHubTab,
+    onTab: (SetHubTab) -> Unit,
 ) {
-    val titleColor = if (enabled) Color.White else DisabledGray
-    val subColor = if (enabled) Color.White.copy(alpha = 0.55f) else DisabledGray.copy(alpha = 0.85f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(CardShape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        accent.copy(alpha = if (enabled) 0.16f else 0.06f),
-                        Color(0xCC0A0B10),
-                    ),
-                ),
-            )
-            .border(1.dp, accent.copy(alpha = if (enabled) 0.35f else 0.20f), CardShape)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xE6090B10))
+            .border(1.dp, Hairline, RoundedCornerShape(16.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        SetsModeChip(
+            label = "Мои",
+            active = tab == SetHubTab.Mine,
+            modifier = Modifier.weight(1f),
+            onClick = { onTab(SetHubTab.Mine) },
+        )
+        SetsModeChip(
+            label = "Добавленные",
+            active = tab == SetHubTab.Imported,
+            modifier = Modifier.weight(1f),
+            onClick = { onTab(SetHubTab.Imported) },
+        )
+    }
+}
+
+@Composable
+private fun SetsModeChip(
+    label: String,
+    active: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
             .then(
-                if (enabled) {
-                    Modifier.interactiveSpringPress(
-                        hapticEvent = HapticEvent.MediumImpact,
-                        haptics = haptics,
-                        onClick = onClick,
+                if (active) {
+                    Modifier.background(
+                        Brush.horizontalGradient(
+                            listOf(AtelierColors.Flame, AtelierColors.Glow),
+                        ),
                     )
                 } else {
-                    Modifier
+                    Modifier.background(Color.Transparent)
                 },
             )
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            // C-230: no haptic on Мои/Добавленные.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(accent.copy(alpha = if (enabled) 0.18f else 0.08f))
-                .border(1.dp, accent.copy(alpha = if (enabled) 0.40f else 0.18f), RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title.uppercase(),
-                color = titleColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                color = subColor,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-            )
-            if (!detail.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = detail,
-                    color = accent.copy(alpha = 0.90f),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-        }
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(accent, CircleShape),
+        Text(
+            text = label,
+            color = Color.White,
+            // Same face as Create set CTA.
+            fontWeight = FontWeight.Bold,
+            fontFamily = MdFonts.Display,
         )
     }
 }

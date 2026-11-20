@@ -205,7 +205,7 @@ workflows:
   #   — см. ios-build/kmp/CODEMAGIC.md и tasks/ПЛАН_миграции_на_KMP.md (Stage 5 checklist).
   # Документация: ios-build/kmp/CODEMAGIC.md · карта: ios-build/README.md
   ios-ipa-kmp:
-    name: Midnight Dancer KMP iOS IPA
+    name: KMP iOS unsigned Debug smoke (not TestFlight)
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
@@ -213,16 +213,81 @@ workflows:
       java: 17
       vars:
         IPA_NAME: MidnightDancer-stage4.ipa
+        CONFIGURATION: Debug
     scripts:
-      - name: Build KMP unsigned IPA via script
+      - name: Record smoke-build toolchain and revision
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          mkdir -p ios-build/diagnostics
+          {
+            echo "Unsigned Debug compile smoke only; not TestFlight or installability acceptance."
+            echo "Xcode selection: latest (compatibility unverified; record actual version below)."
+            printf 'Revision: '; git rev-parse HEAD
+            printf 'Configuration: %s\n' "$CONFIGURATION"
+            xcode-select -p
+            xcodebuild -version
+            xcrun --sdk iphoneos --show-sdk-version
+            java -version
+          } 2>&1 | tee ios-build/diagnostics/toolchain.log
+      - name: Build unsigned Debug IPA (not TestFlight)
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          mkdir -p ios-build/diagnostics
+          chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
+          ./scripts/build-kmp-ios-ipa.sh iphoneos 2>&1 | tee ios-build/diagnostics/build.log
+          test -f "ios-build/artifacts/current/${IPA_NAME}"
+          {
+            printf 'Revision: '; git rev-parse HEAD
+            printf 'Configuration: %s\n' "$CONFIGURATION"
+            echo "SDK target: iphoneos; unsigned smoke artifact, not TestFlight."
+            shasum -a 256 "ios-build/artifacts/current/${IPA_NAME}"
+          } | tee ios-build/diagnostics/artifact.txt
+    artifacts:
+      - ios-build/artifacts/current/*.ipa
+      - ios-build/diagnostics/**
+
+  # ─── KMP Android manual QA плеера хорео (матрикс D + E) ───
+  # D (правки/целостность) — unit-тесты, без устройства, быстрый гейт.
+  # E (проигрывание через стыки) — connected-тест на эмуляторе CI (счётчики декодера).
+  # Manual-only onboarding: no push/PR triggers; start this workflow explicitly in Codemagic.
+  kmp-android-tests:
+    name: Midnight Dancer KMP Android tests (D + E)
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      java: 17
+    scripts:
+      - name: Группа D — unit-тесты логики (без устройства, гейт)
         script: |
           set -e
           cd "$CM_BUILD_DIR"
-          chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
-          ./scripts/build-kmp-ios-ipa.sh iphoneos
-          mkdir -p ios-build/artifacts/current
-          test -f "ios-build/artifacts/current/${IPA_NAME}"
-          ls -lh "ios-build/artifacts/current/${IPA_NAME}"
-          echo "UNSIGNED IPA ready — Mobile Next re-signs. Variant B (App Store signing) deferred to release."
+          chmod +x kmp/gradlew
+          cd kmp
+          mkdir -p "$CM_BUILD_DIR/ci-diagnostics"
+          set -o pipefail
+          ./gradlew :feature:choreography:logic:testDebugUnitTest --console=plain 2>&1 | tee "$CM_BUILD_DIR/ci-diagnostics/android-unit.log"
+      - name: Группа E — поднять эмулятор + connected-тест плеера
+        script: |
+          set -eo pipefail
+          mkdir -p "$CM_BUILD_DIR/ci-diagnostics"
+          cd "$CM_BUILD_DIR"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "emulator" "system-images;android-33;google_apis;x86_64" >/dev/null
+          echo "no" | avdmanager --verbose create avd --force -n test -k "system-images;android-33;google_apis;x86_64" -d pixel
+          nohup "$ANDROID_SDK_ROOT/emulator/emulator" -avd test -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot &
+          adb wait-for-device
+          boot=""; n=0
+          until [ "$boot" = "1" ] || [ "$n" -ge 60 ]; do sleep 5; boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r'); n=$((n+1)); done
+          adb shell input keyevent 82 || true
+          cd kmp
+          ./gradlew :androidApp:connectedDebugAndroidTest \
+            "-Pandroid.testInstrumentationRunnerArguments.class=com.midnightdancer.app.ChoreoPlaybackSmokeTest" \
+            --console=plain 2>&1 | tee "$CM_BUILD_DIR/ci-diagnostics/android-connected.log"
     artifacts:
-      - ios-build/artifacts/current/*.ipa
+      - ci-diagnostics/**
+      - kmp/feature/choreography/logic/build/reports/tests/**
+      - kmp/feature/choreography/logic/build/test-results/**
+      - kmp/androidApp/build/reports/androidTests/**
+      - kmp/androidApp/build/outputs/**/androidTest-results/**

@@ -19,7 +19,7 @@ enum class NavTab {
             MUSIC -> "Music"
             CHOREOGRAPHY -> "Choreography"
             TRAINER -> "Trainer"
-            EXCHANGE -> "Exchange"
+            EXCHANGE -> "Сеты"
         }
 
     companion object {

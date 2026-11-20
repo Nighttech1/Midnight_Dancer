@@ -32,6 +32,11 @@ fun androidExchangeZipKoinModule(): List<Module> =
                     saveAppData = get(),
                     packageName = ctx.packageName,
                     deviceStorage = get(),
+                    contentResolver = ctx.contentResolver,
+                    choreographyBridge = getOrNull<com.midnightdancer.core.domain.exchange.ChoreographyExchangeBridge>(),
+                    mediaReferenceResolver = if (getOrNull<com.midnightdancer.core.domain.media.OwnedMediaStore>() != null)
+                        com.midnightdancer.core.data.files.OwnedMediaRuntime::resolveReference else { value -> value },
+                    debugDiagnostics = (ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0,
                 )
             }
         },

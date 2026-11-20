@@ -1,13 +1,7 @@
 name: KMP Android Stage 1
 
 on:
-  push:
-    paths:
-      - "kmp/**"
-      - ".github/workflows/kmp-android.yml"
-  pull_request:
-    paths:
-      - "kmp/**"
+  workflow_dispatch:
 
 jobs:
   android-debug:
@@ -25,10 +19,28 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
       - name: Assemble debug + unit tests
         run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/ci-diagnostics"
+          {
+            printf 'Revision: '; git rev-parse HEAD
+            java -version
+          } 2>&1 | tee "$GITHUB_WORKSPACE/ci-diagnostics/android-toolchain.log"
           chmod +x gradlew
-          ./gradlew :androidApp:assembleDebug :core:domain:testDebugUnitTest :core:navigation:testDebugUnitTest --no-daemon
+          ./gradlew :androidApp:assembleDebug :core:domain:testDebugUnitTest :core:navigation:testDebugUnitTest --no-daemon --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/ci-diagnostics/android-build.log"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: kmp-androidApp-debug
           path: kmp/androidApp/build/outputs/apk/debug/*.apk
+
+      - name: Upload diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-diagnostics
+          path: |
+            ci-diagnostics/**
+            kmp/core/domain/build/test-results/**
+            kmp/core/navigation/build/test-results/**
+          if-no-files-found: ignore
+          retention-days: 14

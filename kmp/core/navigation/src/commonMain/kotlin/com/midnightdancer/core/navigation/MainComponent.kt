@@ -1,6 +1,9 @@
 package com.midnightdancer.core.navigation
 
+import kotlin.concurrent.Volatile
+
 import com.arkivanov.decompose.ComponentContext
+import com.arkivanov.decompose.router.children.ChildNavState.Status
 import com.arkivanov.decompose.router.pages.ChildPages
 import com.arkivanov.decompose.router.pages.Pages
 import com.arkivanov.decompose.router.pages.PagesNavigation
@@ -38,6 +41,8 @@ interface MainComponent {
 
     fun onTabSelected(tab: NavTab)
     fun onTabSelected(index: Int)
+    /** ChildPages swipe/settle — coalesced with dock taps (C-260). */
+    fun onPagerPageSelected(index: Int)
     fun openSettings()
 
     /**
@@ -74,6 +79,11 @@ class DefaultMainComponent(
     private val pagesNavigation = PagesNavigation<TabConfig>()
     private val overlayNavigation = StackNavigation<OverlayConfig>()
     private val dialogNavigation = SlotNavigation<DialogConfig>()
+    /** C-260: latest dock/programmatic target — stale pager settles must not win. */
+    @Volatile
+    private var dockTargetIndex: Int = 0
+    @Volatile
+    private var dockSelectPending: Boolean = false
 
     override val pages: Value<ChildPages<*, MainComponent.TabChild>> = childPages(
         source = pagesNavigation,
@@ -83,6 +93,10 @@ class DefaultMainComponent(
                 items = TabConfig.ordered,
                 selectedIndex = 0,
             )
+        },
+        // C-260/C-268: never DESTROY distant tabs — Live Session + editors survive leave.
+        pageStatus = { index, pages ->
+            if (index == pages.selectedIndex) Status.RESUMED else Status.CREATED
         },
         childFactory = ::tabChild,
     )
@@ -111,6 +125,31 @@ class DefaultMainComponent(
 
     override fun onTabSelected(index: Int) {
         require(index in NavTab.ordered.indices) { "Tab index out of range: $index" }
+        // C-257/C-260: ignore re-select — stops ping-pong with ChildPages onPageSelected.
+        if (pages.value.selectedIndex == index) {
+            dockSelectPending = false
+            dockTargetIndex = index
+            return
+        }
+        dockTargetIndex = index
+        dockSelectPending = true
+        pagesNavigation.select(index = index)
+    }
+
+    /**
+     * C-260: ChildPages settle / swipe callback.
+     * While a dock select is pending, only the dock target is accepted (kills infinite flip).
+     * After the pager reaches the dock target, swipe-driven changes resume normally.
+     */
+    override fun onPagerPageSelected(index: Int) {
+        require(index in NavTab.ordered.indices) { "Tab index out of range: $index" }
+        if (pages.value.selectedIndex == index) {
+            if (index == dockTargetIndex) dockSelectPending = false
+            return
+        }
+        if (dockSelectPending && index != dockTargetIndex) return
+        dockTargetIndex = index
+        dockSelectPending = false
         pagesNavigation.select(index = index)
     }
 

@@ -20,17 +20,15 @@ fun SplashScreen(
 ) {
     val state by component.uiState.collectAsStateWithLifecycle()
 
-    // Transparent while video is up — OledTrueBlack must not paint a shelf under Skip.
-    // MainActivity Surface is also Transparent while Splash is active (C-59).
+    // C-292: muted boot video (half of user clip) → Continue → slide to Elements.
     if (state.show) {
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color.Transparent),
+                .background(Color.Black),
         ) {
             SplashBootHost(
-                skipVisible = state.skipVisible,
-                onSkip = { component.onIntent(SplashIntent.Continue) },
+                onFinished = { component.onIntent(SplashIntent.Continue) },
                 modifier = Modifier.fillMaxSize(),
             )
         }

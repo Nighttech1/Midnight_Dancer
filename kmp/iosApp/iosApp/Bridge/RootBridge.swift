@@ -24,7 +24,7 @@ final class RootBridge: ObservableObject {
             id: kind.rawValue,
             title: kind.defaultTitle,
             systemImage: kind.systemImage,
-            feature: Self.emptyFeature(for: kind)
+            feature: RootBridge.emptyFeature(for: kind)
         )
     }
 
@@ -35,6 +35,14 @@ final class RootBridge: ObservableObject {
     private weak var elementsRef: ElementsComponent?
     private weak var musicRef: MusicComponent?
     private weak var choreographyRef: ChoreographyComponent?
+    private weak var sequenceEditorRef: SequenceEditorStubComponent?
+    private var choreographyStackCancellation: Cancellation?
+    private var editorCollectTask: Task<Void, Never>?
+    private var choreographyTabIndex: Int = ShellTabKind.choreography.rawValue
+    private var choreographyHubTitle: String = ShellTabKind.choreography.defaultTitle
+    private var choreographyHubSearch: String = ""
+    private var choreographyHubItems: [VaultItemSnapshot] = []
+    private var choreographyEditorSnapshot: SequenceEditorSnapshot?
     private weak var trainerRef: TrainerComponent?
     private weak var exchangeRef: ExchangeComponent?
     private weak var settingsRef: SettingsComponent?
@@ -105,6 +113,8 @@ final class RootBridge: ObservableObject {
     func vaultCreate() { choreographyRef?.createChoreography() }
     func vaultOpen(_ id: String) { choreographyRef?.openEditor(id: id) }
     func vaultDelete(_ id: String) { choreographyRef?.deleteItem(id: id) }
+    func vaultEditorBack() { _ = choreographyRef?.onBack() }
+    func vaultEditorTogglePlay() { sequenceEditorRef?.togglePlay() }
 
     // MARK: - Trainer
 
@@ -245,13 +255,14 @@ final class RootBridge: ObservableObject {
             })
         case .choreography(let c):
             choreographyRef = c.component
+            choreographyTabIndex = index
+            bindChoreographyStack(c.component)
             tabCollectTasks.append(Task { @MainActor [weak self] in
                 for await state in c.component.uiState {
-                    self?.replaceTab(
-                        index: index,
-                        title: state.title,
-                        feature: .choreography(Self.mapVault(state))
-                    )
+                    self?.choreographyHubTitle = state.title
+                    self?.choreographyHubSearch = state.searchQuery
+                    self?.choreographyHubItems = Self.mapVaultItems(state)
+                    self?.publishChoreographyTab()
                 }
             })
         case .trainer(let c):
@@ -326,6 +337,12 @@ final class RootBridge: ObservableObject {
         elementsRef = nil
         musicRef = nil
         choreographyRef = nil
+        sequenceEditorRef = nil
+        choreographyStackCancellation?.cancel()
+        choreographyStackCancellation = nil
+        editorCollectTask?.cancel()
+        editorCollectTask = nil
+        choreographyEditorSnapshot = nil
         trainerRef = nil
         exchangeRef = nil
         settingsRef = nil
@@ -361,7 +378,12 @@ final class RootBridge: ObservableObject {
             )
         case .choreography:
             return .choreography(
-                ChoreographyFeatureSnapshot(title: kind.defaultTitle, searchQuery: "", items: [])
+                ChoreographyFeatureSnapshot(
+                    title: kind.defaultTitle,
+                    searchQuery: "",
+                    items: [],
+                    editor: nil
+                )
             )
         case .trainer:
             return .trainer(
@@ -452,8 +474,59 @@ final class RootBridge: ObservableObject {
         )
     }
 
-    private static func mapVault(_ state: ChoreographyUiState) -> ChoreographyFeatureSnapshot {
-        let items = state.filteredItems.map { item in
+    private func bindChoreographyStack(_ component: ChoreographyComponent) {
+        choreographyStackCancellation?.cancel()
+        editorCollectTask?.cancel()
+        editorCollectTask = nil
+        sequenceEditorRef = nil
+        choreographyEditorSnapshot = nil
+        onChoreographyStackChanged(component.stack.value)
+        choreographyStackCancellation = component.stack.subscribe { [weak self] stack in
+            Task { @MainActor in
+                self?.onChoreographyStackChanged(stack)
+            }
+        }
+    }
+
+    private func onChoreographyStackChanged(_ stack: ChildStack<AnyObject, ChoreographyComponentChild>) {
+        let instance = stack.active.instance
+        switch onEnum(of: instance) {
+        case .hub:
+            editorCollectTask?.cancel()
+            editorCollectTask = nil
+            sequenceEditorRef = nil
+            choreographyEditorSnapshot = nil
+            publishChoreographyTab()
+        case .sequenceEditor(let wrapped):
+            let editor = wrapped.component
+            sequenceEditorRef = editor
+            editorCollectTask?.cancel()
+            editorCollectTask = Task { @MainActor [weak self] in
+                for await state in editor.uiState {
+                    self?.choreographyEditorSnapshot = Self.mapSequenceEditor(state)
+                    self?.publishChoreographyTab()
+                }
+            }
+        }
+    }
+
+    private func publishChoreographyTab() {
+        replaceTab(
+            index: choreographyTabIndex,
+            title: choreographyHubTitle,
+            feature: .choreography(
+                ChoreographyFeatureSnapshot(
+                    title: choreographyHubTitle,
+                    searchQuery: choreographyHubSearch,
+                    items: choreographyHubItems,
+                    editor: choreographyEditorSnapshot
+                )
+            )
+        )
+    }
+
+    private static func mapVaultItems(_ state: ChoreographyUiState) -> [VaultItemSnapshot] {
+        state.filteredItems.map { item in
             let status: String = {
                 switch item.status {
                 case .draft: return "Draft"
@@ -472,10 +545,34 @@ final class RootBridge: ObservableObject {
                 statusLabel: status
             )
         }
-        return ChoreographyFeatureSnapshot(
+    }
+
+    private static func mapEditorClip(_ clip: EditorClip) -> EditorClipSnapshot {
+        EditorClipSnapshot(
+            label: clip.label,
+            durationMs: clip.durationMs,
+            mediaUri: clip.mediaUri,
+            speed: clip.speed,
+            sourceStartMs: clip.sourceStartMs
+        )
+    }
+
+    private static func mapSequenceEditor(_ state: SequenceEditorUiState) -> SequenceEditorSnapshot {
+        let clips = state.elementClips.map(mapEditorClip)
+        let elementsDuration = state.elementsDurationMs
+        let playheadMs = state.playheadMs
+        let pastElements = !clips.isEmpty && playheadMs >= elementsDuration
+        let playheadInElements: Int64 = pastElements
+            ? elementsDuration
+            : min(playheadMs, elementsDuration)
+        return SequenceEditorSnapshot(
             title: state.title,
-            searchQuery: state.searchQuery,
-            items: items
+            isPlaying: state.isPlaying,
+            previewElementLabel: state.previewElementLabel,
+            elementClips: clips,
+            elementsDurationMs: elementsDuration,
+            playheadInElementsMs: playheadInElements,
+            previewIsEmpty: clips.isEmpty || pastElements
         )
     }
 

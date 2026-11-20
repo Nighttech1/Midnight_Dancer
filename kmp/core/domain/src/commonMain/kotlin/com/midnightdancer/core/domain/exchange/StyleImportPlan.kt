@@ -36,6 +36,8 @@ data class CatalogPickItem(
     val subtitle: String = "",
     /** Style id for single-style export filter (C-116). */
     val styleId: String = "",
+    /** Approximate on-disk media size for set weight (C-219). */
+    val approximateBytes: Long = 0L,
 )
 
 data class ExportCatalogSnapshot(
@@ -44,18 +46,23 @@ data class ExportCatalogSnapshot(
     val songs: List<CatalogPickItem> = emptyList(),
     val choreographies: List<CatalogPickItem> = emptyList(),
 ) {
-    fun elementsForStyle(styleId: String): List<CatalogPickItem> =
-        elements.filter { it.styleId == styleId || styleId.isBlank() }
+    /** Blank/unknown style is never a request for the global catalog. IDs take priority over display aliases. */
+    fun canonicalStyleId(value: String): String? {
+        if (value.isBlank()) return null
+        return (styles.firstOrNull { it.id == value }
+            ?: styles.firstOrNull { it.id.equals(value, true) }
+            ?: styles.firstOrNull { it.name.equals(value, true) })?.id
+    }
 
-    fun songsForStyle(styleId: String): List<CatalogPickItem> =
-        songs.filter {
-            it.styleId == styleId ||
-                it.styleId.equals(styleId, ignoreCase = true) ||
-                styleId.isBlank()
-        }
+    private fun scoped(rows: List<CatalogPickItem>, styleId: String): List<CatalogPickItem> {
+        val canonical = canonicalStyleId(styleId) ?: return emptyList()
+        return rows.filter { canonicalStyleId(it.styleId) == canonical }
+    }
 
-    fun choreosForStyle(styleId: String): List<CatalogPickItem> =
-        choreographies.filter { it.styleId == styleId || styleId.isBlank() }
+    fun elementsForStyle(styleId: String): List<CatalogPickItem> = scoped(elements, styleId)
+    fun songsForStyle(styleId: String): List<CatalogPickItem> = scoped(songs, styleId)
+    fun choreosForStyle(styleId: String): List<CatalogPickItem> = scoped(choreographies, styleId)
+
 }
 
 enum class ExportPickKind {

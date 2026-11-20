@@ -56,7 +56,8 @@ fun MusicPulseVisualizer(
     val noise = remember(n) { FloatArray(n) { Random.nextFloat() } }
 
     // Shared ~16ms clock: update targets + spring-step heights + shimmer phase.
-    LaunchedEffect(state, bpm, n) {
+    // C-226: synthetic BPM motion — never driven by real amp (TTS duck must not flatten bars).
+    LaunchedEffect(state, isPlaying, bpm, n) {
         val stiffness = Spring.StiffnessMediumLow // ~200
         val dampingRatio = 0.65f
         val omega = sqrt(stiffness)
@@ -69,10 +70,12 @@ fun MusicPulseVisualizer(
             colorPhaseHolder[0] = (colorPhaseHolder[0] + dt / 4f) % 1f
             val t = timeHolder[0]
             val beat = (t / beatPeriodSec) * (2f * PI.toFloat())
+            // Treat isPlaying=true as Active even if enum briefly lags (TTS focus blip).
+            val drive = if (isPlaying) VisualizerPlaybackState.Active else state
 
             for (i in 0 until n) {
                 val edge = 1f - (2f * i / n - 1f).let { it * it }
-                targets[i] = when (state) {
+                targets[i] = when (drive) {
                     VisualizerPlaybackState.Active -> {
                         val wave = 0.55f + 0.45f * sin(beat + i * 0.22f + noise[i] * PI.toFloat())
                         val hat = 0.35f + 0.65f * abs(sin(beat * 2.1f + i * 0.41f))
@@ -80,8 +83,10 @@ fun MusicPulseVisualizer(
                         (0.18f + 0.72f * wave * hat * kick * edge).coerceIn(0.06f, 1f)
                     }
                     VisualizerPlaybackState.Paused -> {
-                        val jitter = 0.02f * sin(t * 1.4f + i * 0.7f + noise[i])
-                        (0.06f + 0.04f * edge + jitter).coerceIn(0.04f, 0.14f)
+                        // Soft ambient breathe — never a hard zero freeze.
+                        val jitter = 0.04f * sin(t * 1.4f + i * 0.7f + noise[i])
+                        val breathe = 0.08f + 0.06f * abs(sin(beat * 0.5f + i * 0.15f))
+                        (0.08f + 0.06f * edge + breathe + jitter).coerceIn(0.06f, 0.28f)
                     }
                     VisualizerPlaybackState.Idle -> {
                         val jitter = 0.015f * sin(t * 0.9f + i * 0.55f)

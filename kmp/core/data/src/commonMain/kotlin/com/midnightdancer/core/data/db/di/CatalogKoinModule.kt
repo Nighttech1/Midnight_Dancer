@@ -9,6 +9,7 @@ import com.midnightdancer.core.data.migrate.catalog.CatalogExporter
 import com.midnightdancer.core.data.migrate.catalog.CatalogMigrator
 import com.midnightdancer.core.domain.usecase.LoadLibrary
 import com.midnightdancer.core.domain.usecase.SaveAppData
+import com.midnightdancer.core.domain.styles.ManageDanceStyles
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -25,6 +26,7 @@ fun catalogDatabaseModule(
         single { RoomCatalogRepository(get()) }
         single<LoadLibrary> { get<RoomCatalogRepository>() }
         single<SaveAppData> { get<RoomCatalogRepository>() }
+        single<ManageDanceStyles> { get<RoomCatalogRepository>() }
         factory { CatalogMigrator(repository = get(), db = get()) }
         factory { CatalogExporter(repository = get()) }
     }

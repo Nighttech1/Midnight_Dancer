@@ -19,9 +19,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arkivanov.decompose.ExperimentalDecomposeApi
 import com.arkivanov.decompose.extensions.compose.pages.ChildPages
 import com.arkivanov.decompose.extensions.compose.pages.PagesScrollAnimation
@@ -41,10 +48,38 @@ import com.midnightdancer.app.ui.tabs.MusicTabScreen
 import com.midnightdancer.app.ui.tabs.TrainerTabScreen
 import com.midnightdancer.app.ui.theme.toComposeColor
 import com.midnightdancer.core.designsystem.ColorTokens
-import com.midnightdancer.core.designsystem.HapticEvent
 import com.midnightdancer.core.designsystem.ShellChromeTokens
 import com.midnightdancer.core.navigation.MainComponent
 import com.midnightdancer.core.navigation.NavTab
+
+@Composable
+private fun rememberElementsEditorOpen(
+    pages: com.arkivanov.decompose.router.pages.ChildPages<*, MainComponent.TabChild>,
+): Boolean {
+    val elements =
+        pages.items.getOrNull(NavTab.ELEMENTS.ordinal)?.instance as? MainComponent.TabChild.Elements
+    val emptyFlow = androidx.compose.runtime.remember {
+        kotlinx.coroutines.flow.MutableStateFlow(
+            com.midnightdancer.feature.elements.logic.ElementsUiState(),
+        )
+    }
+    val state by (elements?.component?.uiState ?: emptyFlow).collectAsStateWithLifecycle()
+    return elements != null && state.editor != null
+}
+
+/** C-197: Pro Editor open → disable ChildPages swipe so timeline pans, not tabs. */
+@Composable
+private fun rememberChoreoEditorOpen(
+    pages: com.arkivanov.decompose.router.pages.ChildPages<*, MainComponent.TabChild>,
+): Boolean {
+    val choreo =
+        pages.items.getOrNull(NavTab.CHOREOGRAPHY.ordinal)?.instance
+            as? MainComponent.TabChild.Choreography
+            ?: return false
+    val stack by choreo.component.stack.subscribeAsState()
+    return stack.active.instance is
+        com.midnightdancer.feature.choreography.logic.ChoreographyComponent.Child.SequenceEditor
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalDecomposeApi::class)
 @Composable
@@ -69,6 +104,7 @@ fun MainScaffold(
                             component = component,
                             selectedTab = selectedTab,
                             settingsVisible = settingsVisible,
+                            pages = pages,
                         )
                     }
                     is MainComponent.OverlayChild.Settings -> {
@@ -93,9 +129,26 @@ private fun MainTabsChrome(
     component: MainComponent,
     selectedTab: NavTab,
     settingsVisible: Boolean,
+    pages: com.arkivanov.decompose.router.pages.ChildPages<*, MainComponent.TabChild>,
 ) {
     val haptics = rememberMdHaptics()
+    @Suppress("UNUSED_VARIABLE")
+    val unusedHaptics = haptics
     val navFadeSpec = MdMotion.navigationCriticalSpec<Float>()
+    val lockPagerForElementEditor = rememberElementsEditorOpen(pages)
+    val lockPagerForChoreoEditor = rememberChoreoEditorOpen(pages)
+    val lockPagerForEditor = lockPagerForElementEditor || lockPagerForChoreoEditor
+    // C-179: editor open → stay on Elements (no accidental swipe flash to Music).
+    LaunchedEffect(lockPagerForElementEditor) {
+        if (lockPagerForElementEditor && selectedTab != NavTab.ELEMENTS) {
+            component.onTabSelected(NavTab.ELEMENTS)
+        }
+    }
+    LaunchedEffect(lockPagerForChoreoEditor) {
+        if (lockPagerForChoreoEditor && selectedTab != NavTab.CHOREOGRAPHY) {
+            component.onTabSelected(NavTab.CHOREOGRAPHY)
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -147,35 +200,70 @@ private fun MainTabsChrome(
             CyberAcousticDock(
                 selected = selectedTab,
                 onSelect = { tab ->
-                    if (tab != selectedTab) {
-                        haptics.perform(HapticEvent.Selection)
-                    }
+                    // C-141: dock taps silent — no Selection buzz on tab change.
                     component.onTabSelected(tab)
                 },
             )
         },
     ) { innerPadding ->
+        // C-259/C-262: only attach leftover-X consumer while editor open (swipe restored otherwise).
+        val blockPagerWhenEditor = remember {
+            object : NestedScrollConnection {
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset = Offset(available.x, 0f)
+            }
+        }
         ChildPages(
             pages = component.pages,
-            onPageSelected = component::onTabSelected,
+            onPageSelected = { index ->
+                component.onPagerPageSelected(index)
+            },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            scrollAnimation = PagesScrollAnimation.Custom(MdMotion.navigationCritical),
+                .padding(innerPadding)
+                .then(
+                    if (lockPagerForEditor) {
+                        Modifier.nestedScroll(blockPagerWhenEditor)
+                    } else {
+                        Modifier
+                    },
+                ),
+            // C-259: soft swipe between tabs; Disabled only while editors need exclusive X.
+            scrollAnimation = if (lockPagerForEditor) {
+                PagesScrollAnimation.Disabled
+            } else {
+                PagesScrollAnimation.Default
+            },
         ) { _, page ->
             when (page) {
                 is MainComponent.TabChild.Elements -> ElementsTabScreen(
                     component = page.component,
                     onOpenSettings = component::openSettings,
                 )
-                is MainComponent.TabChild.Music -> MusicTabScreen(page.component)
-                is MainComponent.TabChild.Choreography -> ChoreographyTabScreen(page.component)
+                is MainComponent.TabChild.Music -> MusicTabScreen(
+                    component = page.component,
+                    onOpenSettings = component::openSettings,
+                )
+                is MainComponent.TabChild.Choreography -> ChoreographyTabScreen(
+                    component = page.component,
+                    onOpenSettings = component::openSettings,
+                )
                 is MainComponent.TabChild.Trainer -> {
                     CompositionLocalProvider(LocalShowLowDiskBanner provides false) {
-                        TrainerTabScreen(page.component)
+                        TrainerTabScreen(
+                            component = page.component,
+                            onOpenSettings = component::openSettings,
+                            isTabSelected = selectedTab == NavTab.TRAINER,
+                        )
                     }
                 }
-                is MainComponent.TabChild.Exchange -> ExchangeTabScreen(page.component)
+                is MainComponent.TabChild.Exchange -> ExchangeTabScreen(
+                    component = page.component,
+                    onOpenSettings = component::openSettings,
+                )
             }
         }
     }

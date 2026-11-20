@@ -67,7 +67,15 @@ class RootComponentSmokeTest {
                 is MainComponent.TabChild.Trainer -> active.component.uiState.value.title
                 is MainComponent.TabChild.Exchange -> active.component.uiState.value.title
             }
-            assertEquals(tab.title, title)
+            // Dock labels and localized page headings are separate UI contracts.
+            val expectedPageTitle = when (tab) {
+                NavTab.ELEMENTS -> "Элементы"
+                NavTab.MUSIC -> "Музыка"
+                NavTab.CHOREOGRAPHY -> "Хореография"
+                NavTab.TRAINER -> "Тренировка"
+                NavTab.EXCHANGE -> "Сеты"
+            }
+            assertEquals(expectedPageTitle, title)
         }
     }
 
@@ -92,7 +100,7 @@ class RootComponentSmokeTest {
         main.openSettings()
         val settings = main.overlayStack.value.active.instance
         assertTrue(settings is MainComponent.OverlayChild.Settings)
-        assertEquals("Settings", settings.component.uiState.value.title)
+        assertEquals("Настройки", settings.component.uiState.value.title)
 
         assertTrue(main.onBack())
         assertTrue(main.overlayStack.value.active.instance is MainComponent.OverlayChild.None)
@@ -139,7 +147,7 @@ class RootComponentSmokeTest {
         // Production Root passes autoFinish=false; TTS prepare (Recording fallback) then Continue.
         val splash = root.stack.value.active.instance
         if (splash is RootComponent.Child.Splash) {
-            assertTrue(splash.component.uiState.value.bootReady)
+            // C-281/C-282: Continue advances regardless of bootReady (video/logo end path).
             splash.component.onIntent(SplashIntent.Continue)
         }
         return root

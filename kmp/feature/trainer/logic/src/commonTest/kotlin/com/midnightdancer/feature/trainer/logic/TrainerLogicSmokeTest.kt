@@ -121,16 +121,37 @@ class TrainerLogicSmokeTest {
 
         component.onIntent(TrainerIntent.SetMode(TrainerMode.Choreography))
         assertEquals(TrainerMode.Choreography, component.uiState.value.mode)
-        assertEquals(2, component.uiState.value.storylineSteps.size)
-        // Choreography: mode + default voice → 100
-        assertEquals(100, component.uiState.value.readyPercent)
+        assertEquals(3, component.uiState.value.storylineSteps.size)
+        // Choreography: needs selected choreography + voice → 0 without pick
+        assertEquals(0, component.uiState.value.readyPercent)
 
+        component.onIntent(TrainerIntent.SetExpandedStep(2))
+        assertEquals(2, component.uiState.value.expandedStep)
+
+        // Accordion toggle: tapping the open step collapses all (0), tapping again reopens.
+        component.onIntent(TrainerIntent.SetExpandedStep(2))
+        assertEquals(0, component.uiState.value.expandedStep)
         component.onIntent(TrainerIntent.SetExpandedStep(2))
         assertEquals(2, component.uiState.value.expandedStep)
 
         component.onIntent(TrainerIntent.SetMode(TrainerMode.Freestyle))
         assertEquals(4, component.uiState.value.storylineSteps.size)
         assertEquals(0, component.uiState.value.readyPercent)
+    }
+
+    @Test
+    fun nextCueAfter_skipsInProgressCue() {
+        val cues = listOf(
+            CueAt(sec = 0f, label = "A"),
+            CueAt(sec = 8f, label = "B"),
+            CueAt(sec = 16f, label = "C"),
+        )
+        // Mid-A (t=3) → next is B, not A.
+        assertEquals("B", TrainerReady.nextCueAfter(cues, 3f)?.label)
+        // Exactly at B start → next is C.
+        assertEquals("C", TrainerReady.nextCueAfter(cues, 8f)?.label)
+        // After last → null.
+        assertEquals(null, TrainerReady.nextCueAfter(cues, 20f)?.label)
     }
 
     @Test

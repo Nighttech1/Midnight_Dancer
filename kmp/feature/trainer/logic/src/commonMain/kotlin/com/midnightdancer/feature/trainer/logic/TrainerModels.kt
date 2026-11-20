@@ -26,12 +26,6 @@ data class RunwayItem(
     val detail: String = "",
 )
 
-/** Freestyle temp choreo cue — wall-clock seconds from session start. */
-data class CueAt(
-    val sec: Float,
-    val label: String,
-)
-
 /**
  * Trainer tab shell — Stage 4 wires real speak via [TrainerIntent.RequestSpeak] → Voice TTS.
  * Storyline fields (C-92): empty until configured; Dance only at readyPercent == 100.
@@ -42,12 +36,19 @@ data class TrainerUiState(
     /** Accordion step 1..N (freestyle 4 / choreography 2). */
     val expandedStep: Int = 1,
     val styleName: String = "",
+    val selectedStyleId: String = "",
     val trackTitle: String = "",
     val bpm: Int = 128,
     val levelLabel: String = "",
     /** Element tag shown in step 3 summary (alias of level for freestyle pick). */
     val elementTagLabel: String = "",
     val intervalSec: Float = 0f,
+    /**
+     * When true, Live cue spacing uses each element's video duration (C-225);
+     * missing/zero duration falls back to [intervalSec].
+     */
+    /** C-229: default ON — use video duration when present; interval = fallback for no-video. */
+    val useElementTiming: Boolean = true,
     /** Display name from [selectedVoice]; kept in sync on SelectVoice. */
     val voiceName: String = TrainerVoice.Ruslan.displayNameRu,
     val storylineSteps: List<StorylineStep> = FREESTYLE_STORYLINE,
@@ -62,30 +63,56 @@ data class TrainerUiState(
     val speakBackend: TtsBackend? = null,
     val isSpeaking: Boolean = false,
     val lastSpeakNote: String? = null,
+    /** Real Room catalogs for Storyline pickers (C-192) — empty until LoadLibrary. */
+    val styleOptions: List<String> = emptyList(),
+    val trackOptions: List<String> = emptyList(),
+    val tagOptions: List<String> = emptyList(),
+    /**
+     * C-273: choreography-mode step 2 — filter by tag then pick a vault choreography.
+     * Live session builds cues from [selectedChoreographyId] snapshot.
+     */
+    val choreographyTag: String = "",
+    val selectedChoreographyId: String = "",
+    val selectedChoreographyTitle: String = "",
+    val choreographyOptions: List<String> = emptyList(),
+    val choreographyIdsByTitle: Map<String, String> = emptyMap(),
 )
 
 data class TrainerSessionUiState(
     val title: String = "Тренировка",
-    val trackLabel: String = "Zacarias F. — Asesina",
-    val timecode: String = "01:24",
+    val trackLabel: String = "",
+    val timecode: String = "00:00",
     val bpm: Int = 128,
     val isPaused: Boolean = false,
-    val phaseIndex: Int = 2,
-    val phaseTotal: Int = 8,
-    val moveTitle: String = "BASIC STEP",
+    val phaseIndex: Int = 0,
+    val phaseTotal: Int = 1,
+    val moveTitle: String = "",
     val moveSubtitle: String = "",
     val trackVol: Float = 0.72f,
     val voiceVol: Float = 0.55f,
-    val runway: List<RunwayItem> = DEFAULT_RUNWAY,
+    val runway: List<RunwayItem> = emptyList(),
     /** 0f..1f track progress for PhaseHub ring + seek knob. */
     val playheadFraction: Float = 0f,
-    /** Freestyle temp choreo memory — cues at 0, 8, 16… sec. */
-    val cueSchedule: List<CueAt> = DEFAULT_CUE_SCHEDULE,
+    /** Freestyle temp choreo memory — cues at intervalSec steps. */
+    val cueSchedule: List<CueAt> = emptyList(),
     val holdProgress: Float = 0f,
     val placeholderItems: List<String> = listOf(
         "Phase cue",
         "Next move",
     ),
+    /** Content URI of the selected library track (C-192 Media3). */
+    val trackMediaUri: String? = null,
+    /**
+     * C-276: ordered music blocks from the selected choreography (or single freestyle track).
+     * Live plays this playlist; empty → fall back to [trackMediaUri].
+     */
+    val musicPlaylist: List<MusicClipAt> = emptyList(),
+    /** Full track length for playhead clock (ms). */
+    val trackDurationMs: Long = 180_000L,
+    /** Voice used for cue announcements. */
+    val selectedVoice: TrainerVoice = TrainerVoice.Ruslan,
+    /** Video URI of the cue currently under the playhead (optional preview). */
+    val currentElementMediaUri: String? = null,
 )
 
 sealed interface TrainerIntent {
@@ -98,10 +125,15 @@ sealed interface TrainerIntent {
     data class SetTrack(val track: String) : TrainerIntent
     data class SetElementTag(val tag: String) : TrainerIntent
     data class SetInterval(val seconds: Float) : TrainerIntent
+    data class SetUseElementTiming(val enabled: Boolean) : TrainerIntent
     data class SelectVoice(val voice: TrainerVoice) : TrainerIntent
     /** Starts platform TTS for [selectedVoice] (or [voice] override). */
     data class RequestSpeak(val voice: TrainerVoice? = null) : TrainerIntent
     data object RefreshPlaceholders : TrainerIntent
+    /** C-273: filter choreography list by tag. */
+    data class SetChoreographyTag(val tag: String) : TrainerIntent
+    /** C-273: pick vault choreography by display title. */
+    data class SetSelectedChoreography(val title: String) : TrainerIntent
 }
 
 sealed interface TrainerSessionIntent {
@@ -111,7 +143,8 @@ sealed interface TrainerSessionIntent {
     data class HoldFinishTick(val progress: Float) : TrainerSessionIntent
     data object ResetHold : TrainerSessionIntent
     /** Seek playhead 0f..1f; updates [TrainerSessionUiState.moveTitle] from [cueSchedule]. */
-    data class Seek(val fraction: Float) : TrainerSessionIntent
+    /** [fromUserScrub]=true → debounce TTS; false → speak immediately with cue highlight (C-255). */
+    data class Seek(val fraction: Float, val fromUserScrub: Boolean = false) : TrainerSessionIntent
 }
 
 object TrainerTtsLabels {
@@ -156,33 +189,81 @@ object TrainerReady {
                 if (ready) 100 else 0
             }
             TrainerMode.Choreography -> {
-                if (state.voiceName.isNotBlank()) 100 else 0
+                val ready =
+                    state.selectedChoreographyId.isNotBlank() &&
+                        state.voiceName.isNotBlank()
+                if (ready) 100 else 0
             }
         }
 
     fun applySeek(state: TrainerSessionUiState, fraction: Float): TrainerSessionUiState {
         val f = fraction.coerceIn(0f, 1f)
         val cues = state.cueSchedule
-        val totalSec =
-            if (cues.isEmpty()) {
-                1f
-            } else {
-                (cues.last().sec + CUE_STEP_SEC).coerceAtLeast(CUE_STEP_SEC)
-            }
+        val totalSec = sessionTotalSec(state)
         val t = f * totalSec
         val cue = cues.lastOrNull { it.sec <= t } ?: cues.firstOrNull()
         return state.copy(
             playheadFraction = f,
             moveTitle = cue?.label ?: state.moveTitle,
             moveSubtitle = "",
+            currentElementMediaUri = cue?.mediaUri ?: state.currentElementMediaUri,
+            phaseIndex = if (cues.isEmpty()) 0 else cues.indexOfLast { it.sec <= t }.coerceAtLeast(0),
+            phaseTotal = cues.size.coerceAtLeast(1),
         )
     }
 
-    fun seedCueSchedule(runway: List<RunwayItem>): List<CueAt> =
+    /**
+     * C-280: first cue that has **not** started yet at [tSec].
+     * Scrub TTS must speak this — never the in-progress cue (`sec <= t`).
+     */
+    fun nextCueAfter(cues: List<CueAt>, tSec: Float): CueAt? =
+        cues.firstOrNull { it.sec > tSec }
+
+    fun nextCueAfter(state: TrainerSessionUiState): CueAt? {
+        val t = state.playheadFraction.coerceIn(0f, 1f) * sessionTotalSec(state)
+        return nextCueAfter(state.cueSchedule, t)
+    }
+
+    fun sessionTotalSec(state: TrainerSessionUiState): Float {
+        val fromTrack = (state.trackDurationMs / 1000f).coerceAtLeast(1f)
+        val cues = state.cueSchedule
+        if (cues.isEmpty()) return fromTrack
+        // C-229: last cue duration = last inter-cue gap (variable element timing).
+        val lastStep = lastCueStepSec(cues)
+        return (cues.last().sec + lastStep).coerceAtLeast(fromTrack)
+    }
+
+    fun cueStepSec(cues: List<CueAt>): Float {
+        if (cues.size < 2) return CUE_STEP_SEC
+        val delta = cues[1].sec - cues[0].sec
+        return if (delta > 0f) delta else CUE_STEP_SEC
+    }
+
+    fun lastCueStepSec(cues: List<CueAt>): Float {
+        if (cues.size < 2) return cueStepSec(cues)
+        val gaps = cues.zipWithNext().map { (a, b) -> b.sec - a.sec }.filter { it > 0f }
+        return gaps.lastOrNull() ?: cueStepSec(cues)
+    }
+
+    fun seedCueSchedule(runway: List<RunwayItem>, intervalSec: Float = CUE_STEP_SEC): List<CueAt> =
         runway.mapIndexed { index, item ->
-            CueAt(sec = index * CUE_STEP_SEC, label = item.label)
+            CueAt(sec = index * intervalSec.coerceAtLeast(1f), label = item.label)
         }
 }
+
+/** Freestyle cue — wall-clock seconds from session start; optional element video. */
+/** One music block in a Live playlist (C-276). */
+data class MusicClipAt(
+    val uri: String,
+    val durationMs: Long,
+    val label: String = "",
+)
+
+data class CueAt(
+    val sec: Float,
+    val label: String,
+    val mediaUri: String? = null,
+)
 
 private const val CUE_STEP_SEC = 8f
 
@@ -193,14 +274,15 @@ private val DEFAULT_ITEMS: List<String> = listOf(
 
 internal val FREESTYLE_STORYLINE: List<StorylineStep> = listOf(
     StorylineStep(1, "Режим сессии", "Фристайл · Хореография"),
-    StorylineStep(2, "Стиль и Трек", "стиль · имя трека"),
-    StorylineStep(3, "Выбор элементов и интервала", "тег · интервал"),
-    StorylineStep(4, "Голосовой тренер", "голос"),
+    StorylineStep(2, "Стиль и трек", "Стиль · Имя трека"),
+    StorylineStep(3, "Выбор элементов и интервала", "Тег · Интервал"),
+    StorylineStep(4, "Голосовой тренер", "Голос"),
 )
 
 internal val CHOREOGRAPHY_STORYLINE: List<StorylineStep> = listOf(
     StorylineStep(1, "Режим сессии", "Фристайл · Хореография"),
-    StorylineStep(2, "Голосовой тренер", "голос"),
+    StorylineStep(2, "Выбор хореографии", "Тег · Хореография"),
+    StorylineStep(3, "Голосовой тренер", "Голос"),
 )
 
 private val DEFAULT_RUNWAY: List<RunwayItem> = listOf(

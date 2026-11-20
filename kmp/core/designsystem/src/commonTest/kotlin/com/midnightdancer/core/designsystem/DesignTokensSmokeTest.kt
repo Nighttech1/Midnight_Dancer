@@ -55,7 +55,8 @@ class DesignTokensSmokeTest {
         assertEquals(0.28f, interactive.responseSeconds)
         assertEquals(900f, interactive.stiffness)
 
-        assertEquals(2, SpringTokens.All.size)
+        assertEquals(3, SpringTokens.All.size)
+        assertEquals("pager_swipe", SpringTokens.PagerSwipe.id)
     }
 
     @Test

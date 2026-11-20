@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- C-286: window first paint — black + centered Flame orb. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#000000" />
+        </shape>
+    </item>
+    <item
+        android:gravity="center"
+        android:width="160dp"
+        android:height="160dp"
+        android:top="-80dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="80dp"
+                android:startColor="#FFFF5500"
+                android:centerColor="#CCFF8C00"
+                android:endColor="#00000000" />
+        </shape>
+    </item>
+</layer-list>

@@ -77,7 +77,7 @@ class IosAvSpeechTtsEngine : TtsEngine {
             )
         }
 
-    override suspend fun stop() =
+    override suspend fun stop(): Unit =
         withContext(Dispatchers.Main) {
             synthesizer.stopSpeakingAtBoundary(AVSpeechBoundary.AVSpeechBoundaryImmediate)
         }

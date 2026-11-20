@@ -24,11 +24,12 @@
 
 ## ФАЗА A — КЛИЕНТ
 
-`client.mdc` + client-review / midnight-premium-qa / ticket-engine.
+`client.mdc` + client-review / midnight-premium-qa / ticket-engine / **scenario-qa.md** / client-native-device-qa.
 
 1. **Скрины / живой билд:** один раз **в конце UI-волны**, не на каждый мелкий `C-*`. Если в волне **один** тикет с UI — смотреть на нём. Non-UI волны — отчёт Тестера + guards, без эмулятора/Mobile Next.
-2. Выдай `C-*` в `memory/tickets/` + `_index.md` (в т.ч. голоса/TTS → зона **Voice TTS**).
-3. Сразу передай управление Оркестратору.
+2. **HARD (2026-10-25):** перед «согласовано» Клиент прогоняет **все пользовательские сценарии поведения** волны — **жмёт кнопки**, scrub, picker, Save/back/dock; **смотрит видео хореографий** (Play ≥5 с + `record_screen`, не статичный кадр). Плеер хорео → блок **ENGINE E** (≥3 видео). Без `scenario-report.md` PASS слово запрещено.
+3. Выдай `C-*` в `memory/tickets/` + `_index.md` (в т.ч. голоса/TTS → зона **Voice TTS**).
+4. Сразу передай управление Оркестратору.
 
 ---
 
@@ -36,14 +37,15 @@
 
 1. `memory/waves/W-*.md`, `before_sha`.
 2. **Тренер** (`trainer.mdc` / `team-trainer`): смотрит план хода + roster → грейдит skills/rules/MCP/plugins → лог в `memory/team-trainer/`. Если пользователь жалуется — Тренер **до** Фиксера закрывает gap знаний.
-3. Архитектор: spec + `chain.md` **до кода**.
-4. Специалисты по chain:
+3. **Метка роли:** каждый блок в чате начинается с роли (`🏋️ ТРЕНЕР`, `🏗️ АРХИТЕКТОР`, `🤖 ANDROID`, `🧪 ТЕСТЕР`, `🚀 ДЕПЛОЕР`, `🧑‍💼 КЛИЕНТ` …). Не смешивать роли без метки.
+4. Архитектор: spec + `chain.md` **до кода**.
+5. Специалисты по chain:
    - KMP Shared / Android Compose / iOS SwiftUI / Motion Premium / Platform Ops
    - **Voice TTS** (Piper/Sherpa — если тикет про голоса, Trainer speak, latency TTS)
    - Хакер → Гуард (security-волны)
-5. Тестер + guard; Фиксер до зелёного; Деплоер (APK local; **IPA = Codemagic**).
-6. Закрытие только с guard. **Не** пиши пользователю «готов продолжить»: это внутренняя пометка в `memory/waves/`. Пока нет **«согласовано»** — сразу Фаза C (замечания = новые `C-*` / фикс) **в том же ходе**.
-7. **Throughput:** `.cursor/rules/wave-throughput.mdc` + skill `wave-throughput` — не фон на блокирующих Shared/Tester; один писатель на path; status/chain/guards в том же ходе после зелёного теста; Клиент на device QA **один раз в конце UI-волны** (исключение: волна из одного UI-тикета); non-UI без Mobile Next.
+6. Тестер + guard; Фиксер до зелёного; Деплоер (APK local; **IPA = Codemagic**).
+7. Закрытие только с guard. **Не** пиши пользователю «готов продолжить»: это внутренняя пометка в `memory/waves/`. Пока нет **«согласовано»** — сразу Фаза C (замечания = новые `C-*` / фикс) **в том же ходе**.
+8. **Throughput:** `.cursor/rules/wave-throughput.mdc` + skill `wave-throughput` — не фон на блокирующих Shared/Tester; один писатель на path; status/chain/guards в том же ходе после зелёного теста; Клиент на device QA **один раз в конце UI-волны** (исключение: волна из одного UI-тикета); non-UI без Mobile Next.
 
 ### Когда Оркестратор обязан звать Voice TTS
 

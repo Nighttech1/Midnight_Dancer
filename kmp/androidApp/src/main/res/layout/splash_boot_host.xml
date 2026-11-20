@@ -10,7 +10,7 @@
     android:id="@+id/splash_boot_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent"
+    android:background="@android:color/black"
     android:clipChildren="false"
     android:clipToPadding="false"
     android:fitsSystemWindows="false"
@@ -22,9 +22,9 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent"
         android:fitsSystemWindows="false"
-        app:resize_mode="zoom"
+        app:resize_mode="fit"
         app:shutter_background_color="@android:color/transparent"
-        app:surface_type="texture_view"
+        app:surface_type="surface_view"
         app:use_controller="false"
         app:keep_content_on_player_reset="true" />
 
@@ -42,7 +42,8 @@
         android:shadowRadius="4"
         android:text="@string/splash_loading_voice"
         android:textColor="#E0FFFFFF"
-        android:textSize="12sp" />
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <!--
       TextView CTA — not Material Button (default insetTop/Bottom paint a black shelf
