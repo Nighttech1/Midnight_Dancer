@@ -24,7 +24,7 @@ final class RootBridge: ObservableObject {
             id: kind.rawValue,
             title: kind.defaultTitle,
             systemImage: kind.systemImage,
-            feature: Self.emptyFeature(for: kind)
+            feature: RootBridge.emptyFeature(for: kind)
         )
     }
 
