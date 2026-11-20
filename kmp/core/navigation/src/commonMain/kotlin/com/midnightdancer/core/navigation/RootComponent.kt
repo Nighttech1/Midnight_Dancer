@@ -41,6 +41,12 @@ class DefaultRootComponent(
     startAtMain: Boolean = false,
 ) : RootComponent, ComponentContext by componentContext {
 
+    constructor(componentContext: ComponentContext) : this(
+        componentContext = componentContext,
+        factories = NavigationChildFactories(),
+        startAtMain = false,
+    )
+
     private val navigation = StackNavigation<Config>()
 
     override val stack: Value<ChildStack<*, RootComponent.Child>> = childStack(
