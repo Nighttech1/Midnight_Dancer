@@ -106,7 +106,6 @@ echo "==> xcodebuild (unsigned)"
 rm -rf "${DERIVED}"
 mkdir -p "${DERIVED}"
 
-set +e
 xcodebuild \
   -project "${IOS_APP}/MidnightDancerIos.xcodeproj" \
   -scheme iosApp \
@@ -120,26 +119,7 @@ xcodebuild \
   DEVELOPMENT_TEAM= \
   ONLY_ACTIVE_ARCH=NO \
   build
-XCODE_STATUS=$?
-set -e
 
-if [[ "${XCODE_STATUS}" -ne 0 ]]; then
-  echo "==> Unsigned build failed (exit ${XCODE_STATUS}); retrying ad-hoc CODE_SIGN_IDENTITY=-"
-  rm -rf "${DERIVED}"
-  mkdir -p "${DERIVED}"
-  xcodebuild \
-    -project "${IOS_APP}/MidnightDancerIos.xcodeproj" \
-    -scheme iosApp \
-    -configuration "${CONFIGURATION}" \
-    -sdk "${XCODE_SDK}" \
-    -destination "${DESTINATION}" \
-    -derivedDataPath "${DERIVED}" \
-    CODE_SIGN_IDENTITY=- \
-    CODE_SIGNING_REQUIRED=NO \
-    DEVELOPMENT_TEAM= \
-    ONLY_ACTIVE_ARCH=NO \
-    build
-fi
 APP_PATH="${DERIVED}/Build/Products/${PRODUCTS_DIR}/MidnightDancer.app"
 if [[ ! -d "${APP_PATH}" ]]; then
   echo "ERROR: .app not found at ${APP_PATH}"

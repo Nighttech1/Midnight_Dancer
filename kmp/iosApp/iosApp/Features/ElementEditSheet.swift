@@ -39,72 +39,10 @@ struct ElementEditSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("Название", text: $draft.title)
-                        .accessibilityIdentifier("element.name")
-                    LabeledContent("Стиль", value: draft.styleName)
-                    Picker("Категория", selection: $draft.tag) {
-                        Text("Без категории").tag(nil as String?)
-                        ForEach(categories, id: .self) { category in
-                            Text(category).tag(Optional(category))
-                        }
-                    }
-                    TextField("Описание", text: $draft.description, axis: .vertical)
-                    VStack(alignment: .leading) {
-                        Text("Прогресс изучения: \(draft.masteryPercent)%")
-                        Slider(value: Binding(
-                            get: { Double(draft.masteryPercent) },
-                            set: { draft.masteryPercent = Int($0.rounded()) }
-                        ), in: 0...100, step: 1)
-                    }
-                }
-
-                Section("Видео") {
-                    if let media = draft.videoUri, let url = OwnedElementVideo.resolve(media) {
-                        ElementVideoPreview(url: url)
-                            .id(url)
-                            .frame(minHeight: 190)
-                            .accessibilityIdentifier("element.player")
-                    } else if draft.videoUri != nil {
-                        Text("Видео недоступно. Можно выбрать другой файл.")
-                            .foregroundStyle(.secondary)
-                    }
-                    PhotosPicker(selection: $photo, matching: .videos, photoLibrary: .shared()) {
-                        Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
-                    }
-                    .accessibilityIdentifier("element.choosePhoto")
-                    Button {
-                        choosingFile = true
-                    } label: {
-                        Label("Выбрать из Файлов", systemImage: "folder")
-                    }
-                    .accessibilityIdentifier("element.chooseFile")
-                }
-
-                if busy {
-                    ProgressView(importing ? "Копирую видео…" : "Сохраняю элемент…")
-                }
-                if let message = importError ?? saveError {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("element.error")
-                }
-            }
-            .disabled(busy)
-            .navigationTitle(draft.cardId == nil ? "Новый элемент" : "Элемент")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Закрыть", action: cancel)
-                        .disabled(busy)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Сохранить", action: save)
-                        .disabled(busy || draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .accessibilityIdentifier("element.save")
-                }
-            }
+            editorForm
+                .navigationTitle(draft.cardId == nil ? "Новый элемент" : "Элемент")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { editorToolbar }
         }
         .tint(MdColor.neonOrange)
         .preferredColorScheme(.dark)
@@ -142,6 +80,70 @@ struct ElementEditSheet: View {
             importTask?.cancel()
             // Do not discard a file after the save was handed to the catalog.
             // The catalog transaction may commit while this sheet disappears.
+        }
+    }
+
+    private var editorForm: some View {
+        Form {
+            descriptionFields
+            videoFields
+            if busy {
+                ProgressView(importing ? "Копирую видео…" : "Сохраняю элемент…")
+            }
+            if let message = importError ?? saveError {
+                Text(message).foregroundStyle(.red).accessibilityIdentifier("element.error")
+            }
+        }
+        .disabled(busy)
+    }
+
+    private var descriptionFields: some View {
+        Section {
+            TextField("Название", text: $draft.title).accessibilityIdentifier("element.name")
+            LabeledContent("Стиль", value: draft.styleName)
+            Picker("Категория", selection: $draft.tag) {
+                Text("Без категории").tag(nil as String?)
+                ForEach(categories, id: \.self) { category in Text(category).tag(Optional(category)) }
+            }
+            TextField("Описание", text: $draft.description, axis: .vertical)
+            VStack(alignment: .leading) {
+                Text("Прогресс изучения: \(draft.masteryPercent)%")
+                Slider(value: masteryValue, in: 0...100, step: 1)
+            }
+        }
+    }
+
+    private var masteryValue: Binding<Double> {
+        Binding(get: { Double(draft.masteryPercent) }, set: { draft.masteryPercent = Int($0.rounded()) })
+    }
+
+    private var videoFields: some View {
+        Section("Видео") {
+            if let media = draft.videoUri, let url = OwnedElementVideo.resolve(media) {
+                ElementVideoPreview(url: url).id(url).frame(minHeight: 190)
+                    .accessibilityIdentifier("element.player")
+            } else if draft.videoUri != nil {
+                Text("Видео недоступно. Можно выбрать другой файл.").foregroundStyle(.secondary)
+            }
+            PhotosPicker(selection: $photo, matching: .videos, photoLibrary: .shared()) {
+                Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
+            }
+            .accessibilityIdentifier("element.choosePhoto")
+            Button { choosingFile = true } label: {
+                Label("Выбрать из Файлов", systemImage: "folder")
+            }
+            .accessibilityIdentifier("element.chooseFile")
+        }
+    }
+
+    @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Закрыть", action: cancel).disabled(busy)
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Сохранить", action: save)
+                .disabled(busy || draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("element.save")
         }
     }
 
