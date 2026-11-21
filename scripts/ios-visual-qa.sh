@@ -136,4 +136,3 @@ set -e
 printf 'Kotlin iOS test exit status: %s\n' "$KOTLIN_TEST_STATUS" | tee -a "$OUT/status.txt"
 if [[ "$TEST_STATUS" -ne 0 ]]; then exit "$TEST_STATUS"; fi
 exit "$KOTLIN_TEST_STATUS"
-
