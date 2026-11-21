@@ -58,7 +58,9 @@ internal class IosSavedSetsPersister(private val styles: ManageDanceStyles) : Sa
                 put("moveIds", set.moveIds.json()); put("songIds", set.songIds.json()); put("choreoIds", set.choreoIds.json())
                 put("estimatedBytes", JsonPrimitive(set.estimatedBytes)); put("updatedAt", JsonPrimitive(set.updatedAt))
                 put("origin", JsonPrimitive(set.origin.name)); put("tags", set.tags.json())
-                if (set.archivePath == null) remove("archivePath") else put("archivePath", JsonPrimitive(portableArchivePath(set.archivePath)))
+                val archivePath = set.archivePath
+                if (archivePath == null) remove("archivePath")
+                else put("archivePath", JsonPrimitive(portableArchivePath(archivePath)))
             })
         }
         val root = JsonObject(previous.orEmpty().toMutableMap().apply {
