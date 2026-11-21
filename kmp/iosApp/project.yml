@@ -26,7 +26,7 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.midnightdancer.app
       PRODUCT_NAME: MidnightDancer
       INFOPLIST_FILE: iosApp/Info.plist
-      TARGETED_DEVICE_FAMILY: "1"
+      TARGETED_DEVICE_FAMILY: "1,2"
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       # Staged static Shared.framework + Gradle bin paths (device + simulator)
       FRAMEWORK_SEARCH_PATHS:
@@ -47,6 +47,13 @@ targets:
       properties:
         CFBundleDisplayName: Midnight Dancer
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
 schemes:
   iosApp:
     build:

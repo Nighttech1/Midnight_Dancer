@@ -278,9 +278,9 @@ workflows:
         script: |
           set -euo pipefail
           cd "$CM_BUILD_DIR/kmp/iosApp"
-          latest=$(app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS)
+          latest=$(app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --platform IOS --all-versions)
           [[ "$latest" =~ ^[0-9]+$ ]] || { echo 'Could not read latest Apple build number'; exit 1; }
-          if (( latest < 19 )); then latest=19; fi
+          if (( latest < 20 )); then latest=20; fi
           build_number=$((latest + 1))
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $IOS_MARKETING_VERSION" iosApp/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" iosApp/Info.plist
