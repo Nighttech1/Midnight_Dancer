@@ -91,6 +91,9 @@ targets:
       GENERATE_INFOPLIST_FILE: YES
       TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MidnightDancer.app/MidnightDancer"
       BUNDLE_LOADER: "$(TEST_HOST)"
+      FRAMEWORK_SEARCH_PATHS:
+        - "$(inherited)"
+        - "$(SRCROOT)/Frameworks"
       TARGETED_DEVICE_FAMILY: "1"
 schemes:
   iosApp:

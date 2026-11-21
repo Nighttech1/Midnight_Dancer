@@ -82,6 +82,12 @@ object IosSetsActions {
     fun save(component: ExchangeComponent) =
         component.onIntent(ExchangeIntent.ConfirmLocalSet)
 
+    fun share(component: ExchangeComponent, id: String) =
+        component.onIntent(ExchangeIntent.ShareSet(id))
+
+    fun clearShare(component: ExchangeComponent) =
+        component.onIntent(ExchangeIntent.ClearPendingShare)
+
     fun retryArchive(component: ExchangeComponent) =
         component.onIntent(ExchangeIntent.RetryArchiveInspection)
 

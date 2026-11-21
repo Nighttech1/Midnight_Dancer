@@ -76,7 +76,7 @@ final class RootBridge: ObservableObject {
             guard let self else { return }
             defer { self.starting = false }
             do {
-                let result = try await IosLibraryBootstrap.shared.prepare()
+                let result = try await IosLibraryBootstrap.shared.prepare(archive: MdanceV1Codec())
                 guard result.ready else {
                     self.startupError = result.error ?? "Не удалось открыть библиотеку."
                     return
@@ -426,6 +426,12 @@ final class RootBridge: ObservableObject {
             },
             save: { [weak self] in
                 if let c = self?.exchangeRef { actions.save(component: c) }
+            },
+            share: { [weak self] id in
+                if let c = self?.exchangeRef { actions.share(component: c, id: id) }
+            },
+            dismissShare: { [weak self] in
+                if let c = self?.exchangeRef { actions.clearShare(component: c) }
             },
             retryArchive: { [weak self] in
                 if let c = self?.exchangeRef { actions.retryArchive(component: c) }
@@ -957,7 +963,7 @@ final class RootBridge: ObservableObject {
         return SetsHubSnapshot(tab: state.hubTab == .imported ? .imported : .mine,
             cards: cards, searchQuery: state.searchQuery, filter: state.selectedFilter,
             tags: state.tagCatalog, alphabetical: state.sortMode == .alphabetical,
-            busy: state.busy, error: state.operationError, editor: editor)
+            busy: state.busy, error: state.operationError, editor: editor, sharePath: state.pendingSharePath)
     }
 
     private static func mapSetEditor(_ state: ExchangeUiState) -> SetsEditorSnapshot {

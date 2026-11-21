@@ -346,6 +346,9 @@ workflows:
     environment:
       xcode: latest
       java: 17
+    cache:
+      cache_paths:
+        - ~/.gradle/caches
     scripts:
       - name: Cold splash, five tabs and Settings on disposable iPhone Simulator
         script: |

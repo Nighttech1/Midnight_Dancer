@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum SetsHubTab: Equatable {
     case mine
@@ -113,6 +114,7 @@ struct SetsHubSnapshot: Equatable {
     let busy: Bool
     let error: String?
     let editor: SetsEditorSnapshot?
+    var sharePath: String? = nil
 }
 
 struct SetsHubActions {
@@ -133,6 +135,7 @@ struct SetsHubActions {
     var save: () -> Void
     var loadArchive: (() -> Void)? = nil
     var share: ((String) -> Void)? = nil
+    var dismissShare: () -> Void = {}
     var retryArchive: (() -> Void)? = nil
     var removeInvalidSelection: (() -> Void)? = nil
 }
@@ -175,6 +178,12 @@ struct SetsHubView: View {
                 SetsEditorView(snapshot: editor, actions: actions, busy: snapshot.busy)
                     .interactiveDismissDisabled()
             }
+        }
+        .sheet(item: Binding<SetShareFile?>(
+            get: { snapshot.sharePath.map(SetShareFile.init) },
+            set: { if $0 == nil { actions.dismissShare() } }
+        ), onDismiss: actions.dismissShare) { file in
+            SetShareController(file: file)
         }
         .alert("Удалить сет?", isPresented: Binding(
             get: { pendingDelete != nil },
@@ -347,6 +356,22 @@ struct SetsHubView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
+}
+
+private struct SetShareFile: Identifiable {
+    let id: String
+    init(_ path: String) { id = path }
+    var url: URL { URL(fileURLWithPath: id) }
+}
+
+private struct SetShareController: UIViewControllerRepresentable {
+    let file: SetShareFile
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [file.url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 enum SetsChrome {

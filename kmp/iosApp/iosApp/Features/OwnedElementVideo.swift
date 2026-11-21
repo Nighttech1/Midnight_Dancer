@@ -32,6 +32,27 @@ struct OwnedElementVideo: Sendable {
             let url = folder.appendingPathComponent(fileName, isDirectory: false)
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
         }
+        if reference.hasPrefix("md-import-v1/") {
+            let parts = reference.split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 3, UUID(uuidString: String(parts[1])) != nil,
+                  !parts[2].isEmpty, !parts[2].hasPrefix("."),
+                  parts[2].utf8.allSatisfy({ byte in
+                      (48...57).contains(byte) || (65...90).contains(byte)
+                          || (97...122).contains(byte) || [45, 46, 95].contains(byte)
+                  }),
+                  let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            else { return nil }
+            let root = documents.standardizedFileURL.resolvingSymlinksInPath()
+            let imports = root.appendingPathComponent("exchange/imports", isDirectory: true)
+            let file = imports.appendingPathComponent(String(parts[1]), isDirectory: true)
+                .appendingPathComponent(String(parts[2]), isDirectory: false)
+            let resolved = file.resolvingSymlinksInPath()
+            guard resolved.path.hasPrefix(imports.path + "/"),
+                  let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
+                  values.isRegularFile == true
+            else { return nil }
+            return resolved
+        }
         let legacyFolders = [("md-legacy-video/", "videos"), ("md-legacy-music/", "music")]
         for (prefix, subfolder) in legacyFolders where reference.hasPrefix(prefix) {
             let name = String(reference.dropFirst(prefix.count))

@@ -19,6 +19,37 @@ final class MdanceV1Codec: NSObject, IosArchiveDriver {
         super.init()
     }
 
+    func resolveMedia(reference: String) -> String? {
+        guard let url = OwnedElementVideo.resolve(reference), url.isFileURL else { return nil }
+        let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+        let root = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+        guard resolved.path.hasPrefix(root.path + "/") else { return nil }
+        return resolved.path
+    }
+
+    func mediaSize(path: String) -> Int64 {
+        guard let size = try? regularFileSize(URL(fileURLWithPath: path)), size <= UInt64(Int64.max) else { return 0 }
+        return Int64(size)
+    }
+
+    func mediaSha256(path: String) throws -> String {
+        let url = URL(fileURLWithPath: path)
+        let size = try regularFileSize(url)
+        guard size > 0, size <= Self.maximumPlainBytes else { throw Failure.sizeLimit }
+        let source = try FileHandle(forReadingFrom: url)
+        defer { try? source.close() }
+        var hash = CryptoKit.SHA256()
+        var counted: UInt64 = 0
+        while let block = try source.read(upToCount: Self.blockBytes), !block.isEmpty {
+            try Task<Never, Never>.checkCancellation()
+            counted += UInt64(block.count)
+            guard counted <= size else { throw Failure.sourceChanged }
+            hash.update(data: block)
+        }
+        guard counted == size else { throw Failure.sourceChanged }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
     enum Failure: Error {
         case invalidInput, unsupportedVersion, sizeLimit, invalidDestination, sourceChanged
         case randomUnavailable, temporaryUnavailable, invalidTag, atomicPublicationFailed

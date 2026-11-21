@@ -63,7 +63,7 @@ xcrun simctl bootstatus "$SIM_ID" -b
 chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
 CONFIGURATION=Debug PREPARE_ONLY=1 ./scripts/build-kmp-ios-ipa.sh iphonesimulator 2>&1 | tee "$OUT/prepare.log"
 PROJECT="$ROOT/kmp/iosApp/MidnightDancerIos.xcodeproj"
-DERIVED="$OUT/DerivedData"
+DERIVED="$(mktemp -d "${TMPDIR:-/tmp}/midnight-visual-qa.XXXXXXXX")"
 FIXTURE="$ROOT/kmp/iosApp/iosApp/Resources/video/splash_boot.mp4"
 xcrun simctl addmedia "$SIM_ID" "$FIXTURE"
 xcodebuild -project "$PROJECT" -scheme iosApp -configuration Debug \

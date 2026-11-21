@@ -5,6 +5,7 @@ import com.midnightdancer.core.data.db.RoomCatalogRepository
 import com.midnightdancer.core.data.db.catalogDatabaseBuilder
 import com.midnightdancer.core.data.db.di.catalogDatabaseModule
 import com.midnightdancer.core.data.files.platformDocumentsDirectoryPath
+import com.midnightdancer.core.data.exchange.IosExchangeZipUseCase
 import com.midnightdancer.core.data.files.IosLegacyMetadataReader
 import com.midnightdancer.core.data.files.IosDurableTextFile
 import com.midnightdancer.core.data.migrate.PrefsMigrator
@@ -16,6 +17,7 @@ import com.midnightdancer.core.domain.settings.CreationAccessPolicy
 import com.midnightdancer.core.domain.storage.DeviceStorage
 import com.midnightdancer.core.domain.styles.ManageDanceStyles
 import com.midnightdancer.core.domain.usecase.ReadWriteUserPrefs
+import com.midnightdancer.core.domain.usecase.ExchangeZipUseCase
 import com.midnightdancer.core.navigation.RootComponent
 import com.midnightdancer.feature.choreography.logic.*
 import com.midnightdancer.feature.exchange.logic.*
@@ -37,7 +39,7 @@ object IosLibraryBootstrap {
     private var creationPolicy: IosCreationPolicy? = null
 
     @Throws(CancellationException::class)
-    suspend fun prepare(): IosLibraryBootstrapResult = withContext(Dispatchers.Default) {
+    suspend fun prepare(archive: IosArchiveDriver): IosLibraryBootstrapResult = withContext(Dispatchers.Default) {
         lock.withLock {
             if (prepared.value) return@withLock IosLibraryBootstrapResult(true)
             try {
@@ -53,6 +55,13 @@ object IosLibraryBootstrap {
                             single<ChoreographyVaultPersister> { IosChoreographyVaultPersister(get()) }
                             single<SavedSetsPersister> { IosSavedSetsPersister(get()) }
                             single<DeviceStorage> { createDeviceStorage() }
+                            single<ExchangeZipUseCase> {
+                                IosExchangeZipUseCase(
+                                    library = get(), storage = get(), containerCodec = IosArchiveCodecAdapter(archive),
+                                    choreographyBridge = IosChoreographyExportBridge(get(), archive),
+                                    mediaReferenceResolver = { source -> archive.resolveMedia(source) ?: error("selected_media_unavailable") },
+                                )
+                            }
                             single<LocalSetCatalogLoader> { IosLocalSetCatalogLoader(get(), get(), get()) }
                         },
                     ))
