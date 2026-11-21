@@ -30,7 +30,7 @@ enum TabFeatureSnapshot: Equatable {
     case music(MusicFeatureSnapshot)
     case choreography(ChoreographyFeatureSnapshot)
     case trainer(TrainerFeatureSnapshot)
-    case exchange(ExchangeFeatureSnapshot)
+    case exchange(SetsHubSnapshot)
 }
 
 struct ElementCardSnapshot: Equatable, Identifiable {
@@ -189,6 +189,7 @@ struct ChoreographyFeatureSnapshot: Equatable {
     var items: [VaultItemSnapshot]
     /// Non-nil when nested stack shows Pro Editor (mirrors Android TabScreens).
     var editor: SequenceEditorSnapshot?
+    var creationBlockedMessage: String? = nil
 }
 
 struct TrainerFeatureSnapshot: Equatable {
@@ -208,6 +209,7 @@ struct TrainerFeatureSnapshot: Equatable {
     var tagOptions: [String] = []
     var useElementTiming: Bool = true
     var session: TrainerSessionSnapshot? = nil
+    var choreography = TrainerChoreographyState()
 }
 
 struct TrainerSessionSnapshot: Equatable, Identifiable {
@@ -225,32 +227,6 @@ struct TrainerSessionSnapshot: Equatable, Identifiable {
     var playlistCount: Int
 }
 
-struct StyleRefSnapshot: Equatable, Identifiable {
-    var id: String
-    var name: String
-}
-
-struct ExchangeFeatureSnapshot: Equatable {
-    var title: String
-    var lastActionLabel: String?
-    var busy: Bool
-    var importEnabled: Bool
-    var freeLabel: String
-    var requiredLabel: String
-    var showExportDialog: Bool
-    var showImportParams: Bool
-    var exportStyleId: String
-    var exportStyleName: String
-    var exportLimitsText: String
-    var exportStyles: [StyleRefSnapshot]
-    var exportSelectedMoveCount: Int
-    var exportSelectedSongCount: Int
-    var exportSelectedChoreoCount: Int
-    var importLocalStyles: [StyleRefSnapshot]
-    var importTargetStyleId: String
-    var lastImportName: String
-}
-
 struct SettingsShellSnapshot: Equatable {
     var title: String
     var languageCode: String
@@ -259,6 +235,8 @@ struct SettingsShellSnapshot: Equatable {
     var reminderMinute: Int
     var prefsLoaded: Bool
     var danceStyles: [String]
+    var stylesBusy: Bool
+    var stylesError: String?
     var newStyleDraft: String
     var elementCategories: [String]
     var newCategoryDraft: String

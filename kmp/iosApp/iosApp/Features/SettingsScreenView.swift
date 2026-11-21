@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Full Settings — language, styles (delete warn), tags, low-disk.
 struct SettingsScreenView: View {
     let snapshot: SettingsShellSnapshot
     var onBack: () -> Void
@@ -14,243 +13,414 @@ struct SettingsScreenView: View {
     var onRemoveCategory: (String) -> Void
     var onSetLowDiskGib: (Int) -> Void
     var onSetLowDiskEnabled: (Bool) -> Void
+    var onRenameStyle: ((String, String) -> Void)? = nil
+    var stylesBusy = false
+    var stylesError: String? = nil
 
+    @State private var styleDialog: StyleDialog?
     @State private var stylePendingDelete: String?
-    @State private var languageExpanded = false
+    @State private var styleName = ""
 
-    private let languages = [("ru", "Русский"), ("en", "English"), ("es", "Español")]
+    private let languages = [(code: "ru", name: "Русский"), (code: "en", name: "English"), (code: "es", name: "Español")]
+    private let permanentStyle = "Без стиля"
+    private let styleNameLimit = 24
+    private let cardTitle = Font.custom("NotoSerif-Bold", size: 18, relativeTo: .headline)
 
     var body: some View {
-        ZStack {
-            MdNeonAtmosphere(accent: MdColor.neonOrange)
-            VStack(spacing: 0) {
-                topBar
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        languageBlock
-                        reminderBlock
-                        stylesBlock
-                        tagsBlock
-                        lowDiskBlock
-                        if !snapshot.prefsLoaded {
-                            ProgressView("Загрузка настроек…")
-                                .tint(MdColor.neonOrange)
-                        }
+        VStack(spacing: 0) {
+            topBar
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    languageBlock
+                    reminderBlock
+                    stylesBlock
+                    mediaBlock
+                    tagsBlock
+                    lowDiskBlock
+                    if !snapshot.prefsLoaded {
+                        ProgressView("Загрузка настроек…")
+                            .tint(MdColor.neonOrange)
                     }
-                    .padding(.horizontal, MdChrome.contentHorizontalPadding)
-                    .padding(.vertical, MdChrome.contentVerticalPadding)
-                    .padding(.bottom, 40)
                 }
+                .padding(.horizontal, MdChrome.contentHorizontalPadding)
+                .padding(.vertical, MdChrome.contentVerticalPadding)
+                .padding(.bottom, 26)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
-        .alert(
-            "Удалить стиль?",
-            isPresented: Binding(
-                get: { stylePendingDelete != nil },
-                set: { if !$0 { stylePendingDelete = nil } }
-            )
-        ) {
-            Button("Удалить", role: .destructive) {
-                if let name = stylePendingDelete {
-                    onRemoveStyle(name)
-                }
-                stylePendingDelete = nil
+        .background(MdColor.oledTrueBlack.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .sheet(item: $styleDialog) { dialog in
+            styleNameForm(dialog)
+                .presentationDetents([.medium])
+        }
+        .alert("Удалить стиль?", isPresented: Binding(
+            get: { stylePendingDelete != nil },
+            set: { if !$0 { stylePendingDelete = nil } }
+        ), presenting: stylePendingDelete) { name in
+            Button("Удалить", role: .destructive) { onRemoveStyle(name) }
+            Button("Отмена", role: .cancel) {}
+        } message: { _ in
+            Text("Элементы, музыка и хореографии перейдут в «Без стиля». Материалы сохранятся.")
+        }
+    }
+
+    private func styleNameForm(_ dialog: StyleDialog) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(dialog.title)
+                .font(MdType.titleLarge)
+                .foregroundStyle(.white)
+                .accessibilityAddTraits(.isHeader)
+            TextField("Имя стиля", text: $styleName)
+                .font(MdType.brandedBody)
+                .foregroundStyle(.white)
+                .textFieldStyle(.plain)
+                .padding(12)
+                .modifier(SettingsChrome.Row())
+                .submitLabel(.done)
+                .onSubmit { commitStyleName(dialog) }
+                .accessibilityIdentifier("settings.style.name")
+            detail("До \(styleNameLimit) символов.")
+            Spacer(minLength: 0)
+            HStack {
+                Button("Отмена", role: .cancel) { styleDialog = nil }
+                    .foregroundStyle(MdColor.textSecondary)
+                Spacer()
+                Button(dialog == .add ? "Добавить" : "Сохранить") { commitStyleName(dialog) }
+                    .disabled(!isValidStyleName(dialog))
+                    .accessibilityIdentifier("settings.style.confirm")
             }
-            Button("Отмена", role: .cancel) { stylePendingDelete = nil }
-        } message: {
-            Text(
-                "Элементы, музыка и хореографии перейдут в «Без стиля». Материалы сохранятся."
-            )
+            .font(MdType.brandedControl)
+            .tint(MdColor.neonOrange)
         }
+        .padding(20)
+        .background(MdColor.oledTrueBlack.ignoresSafeArea())
     }
 
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 10) {
             Button(action: onBack) {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                    Text("Назад")
-                }
-                .font(MdType.bodyLarge.weight(.semibold))
-                .foregroundStyle(MdColor.neonOrange)
-                .frame(minHeight: MdChrome.minTouchTarget)
+                Image(systemName: "arrow.left")
+                    .font(.system(size: 23, weight: .medium))
+                    .foregroundStyle(MdColor.neonOrange)
+                    .frame(width: 44, height: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Назад")
             .accessibilityIdentifier("settings.close")
-            Spacer()
             Text(snapshot.title.isEmpty ? "Настройки" : snapshot.title)
                 .font(MdType.titleLarge)
-                .foregroundStyle(MdColor.textPrimary)
-            Spacer()
-            Color.clear.frame(width: 72, height: MdChrome.minTouchTarget)
+                .foregroundStyle(.white)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, MdChrome.contentHorizontalPadding)
-        .frame(height: MdChrome.topAppBarHeight)
-        .background(MdColor.oledTrueBlack.opacity(0.92))
+        .frame(minHeight: MdChrome.topAppBarHeight)
+        .background(MdColor.oledTrueBlack)
     }
 
     private var languageBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Язык")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(MdColor.textSecondary)
-            Button {
-                withAnimation(MdSpring.interactiveUnderdamped) {
-                    languageExpanded.toggle()
+        let name = languages.first(where: { $0.code == snapshot.languageCode })?.name
+            ?? snapshot.languageCode.uppercased()
+        return HStack(alignment: .center, spacing: 8) {
+            title("Язык интерфейса")
+            Spacer(minLength: 0)
+            Menu {
+                ForEach(languages, id: \.code) { option in
+                    Button {
+                        onSetLanguage(option.code)
+                    } label: {
+                        if snapshot.languageCode == option.code {
+                            Label(option.name, systemImage: "checkmark")
+                        } else {
+                            Text(option.name)
+                        }
+                    }
                 }
             } label: {
-                HStack {
-                    Text(languages.first(where: { $0.0 == snapshot.languageCode })?.1
-                          ?? snapshot.languageCode.uppercased())
-                        .foregroundStyle(MdColor.textPrimary)
-                    Spacer()
-                    Image(systemName: "arrowtriangle.down.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(MdColor.neonOrange)
+                HStack(spacing: 8) {
+                    Text(name)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated))
+                .font(MdType.brandedControl)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .background(SettingsChrome.hot, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.23)))
             }
-            .buttonStyle(.plain)
-            if languageExpanded {
-                ForEach(languages, id: \.0) { code, name in
-                    Button {
-                        onSetLanguage(code)
-                        languageExpanded = false
-                    } label: {
-                        Text(name)
-                            .foregroundStyle(code == snapshot.languageCode
-                                             ? MdColor.neonOrange : MdColor.textPrimary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated))
-            }
+            .accessibilityLabel("Язык интерфейса")
+            .accessibilityValue(name)
+            .accessibilityIdentifier("settings.language")
         }
+        .modifier(SettingsChrome.Card())
     }
 
     private var reminderBlock: some View {
-        Toggle(isOn: Binding(
-            get: { snapshot.reminderEnabled },
-            set: onSetReminder
-        )) {
-            Text("Напоминание о тренировке")
-                .foregroundStyle(MdColor.textPrimary)
+        Toggle(isOn: Binding(get: { snapshot.reminderEnabled }, set: onSetReminder)) {
+            VStack(alignment: .leading, spacing: 5) {
+                title("Напоминание о танце")
+                detail(snapshot.reminderEnabled ? "Включено" : "Выключено")
+            }
         }
         .tint(MdColor.neonOrange)
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated))
+        .accessibilityIdentifier("settings.reminder")
+        .modifier(SettingsChrome.Card())
     }
 
     private var stylesBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Стили танца")
-                .font(MdType.bodyLarge.weight(.semibold))
-                .foregroundStyle(MdColor.textPrimary)
-            ForEach(snapshot.danceStyles, id: \.self) { style in
-                HStack {
-                    Text(style).foregroundStyle(MdColor.textPrimary)
-                    Spacer()
-                    if style != "Без стиля" {
-                        Button {
-                            stylePendingDelete = style
-                        } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(MdColor.danger)
-                                .frame(width: 44, height: 44)
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    title("Стили")
+                    detail("Стили появляются в переключателе на экране «Элементы».")
+                }
+                Spacer(minLength: 3)
+                Button {
+                    styleName = snapshot.newStyleDraft
+                    styleDialog = .add
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(MdColor.neonOrange, in: RoundedRectangle(cornerRadius: 13))
+                }
+                .buttonStyle(.plain)
+                .disabled(stylesBusy)
+                .accessibilityLabel("Добавить стиль")
+                .accessibilityIdentifier("settings.style.add")
+            }
+            if stylesBusy {
+                ProgressView("Обновление стилей…")
+                    .font(MdType.brandedBody)
+                    .tint(MdColor.neonOrange)
+            }
+            if let stylesError {
+                Text(stylesError)
+                    .font(MdType.brandedBody)
+                    .foregroundStyle(MdColor.danger)
+                    .accessibilityIdentifier("settings.style.error")
+            }
+            if !snapshot.danceStyles.isEmpty {
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(snapshot.danceStyles, id: \.self) { style in
+                            styleRow(style)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Удалить стиль \(style)")
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 10).fill(MdColor.surfaceElevated))
-            }
-            HStack {
-                TextField("Новый стиль", text: Binding(
-                    get: { snapshot.newStyleDraft },
-                    set: onSetStyleDraft
-                ))
-                .textFieldStyle(.roundedBorder)
-                Button("Добавить", action: onAddStyle)
-                    .foregroundStyle(MdColor.neonOrange)
+                .frame(maxHeight: 255)
             }
         }
+        .modifier(SettingsChrome.Card())
+    }
+
+    private func styleRow(_ style: String) -> some View {
+        HStack(spacing: 0) {
+            Text(style)
+                .font(MdType.brandedBody)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+            if style == permanentStyle {
+                Text("Постоянный")
+                    .font(.caption)
+                    .foregroundStyle(MdColor.textSecondary)
+                    .padding(.trailing, 10)
+            } else {
+                if onRenameStyle != nil {
+                    rowAction("pencil", label: "Переименовать стиль \(style)") {
+                        styleName = style
+                        styleDialog = .rename(style)
+                    }
+                    .disabled(stylesBusy)
+                    .accessibilityIdentifier("settings.style.rename.\(style)")
+                }
+                rowAction("xmark", label: "Удалить стиль \(style)") {
+                    stylePendingDelete = style
+                }
+                .disabled(stylesBusy)
+                .accessibilityIdentifier("settings.style.delete.\(style)")
+            }
+        }
+        .padding(.leading, 12)
+        .frame(minHeight: style == permanentStyle ? 36 : 49)
+        .modifier(SettingsChrome.Row())
+    }
+
+    private var mediaBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            title("Хранение медиа")
+            detail("Импортированные видео и музыка сохраняются отдельными копиями в Midnight Dancer. Удаление исходника из «Фото» или «Файлов» на эти копии не влияет.")
+            detail("Копии занимают место на iPhone.")
+        }
+        .modifier(SettingsChrome.Card())
     }
 
     private var tagsBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Теги элементов")
-                .font(MdType.bodyLarge.weight(.semibold))
-                .foregroundStyle(MdColor.textPrimary)
+        VStack(alignment: .leading, spacing: 8) {
+            title("Теги элементов")
             ForEach(snapshot.elementCategories, id: \.self) { tag in
                 HStack {
-                    Text(tag).foregroundStyle(MdColor.textPrimary)
+                    Text(tag)
+                        .font(MdType.brandedBody)
+                        .foregroundStyle(.white)
                     Spacer()
-                    Button {
-                        onRemoveCategory(tag)
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(MdColor.danger)
-                            .frame(width: 40, height: 40)
-                    }
-                    .buttonStyle(.plain)
+                    rowAction("trash", label: "Удалить тег \(tag)") { onRemoveCategory(tag) }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 10).fill(MdColor.surfaceElevated))
+                .padding(.leading, 12)
+                .modifier(SettingsChrome.Row())
             }
-            HStack {
+            HStack(spacing: 8) {
                 TextField("Новый тег", text: Binding(
                     get: { snapshot.newCategoryDraft },
                     set: onSetCategoryDraft
                 ))
-                .textFieldStyle(.roundedBorder)
+                .foregroundStyle(.white)
+                .font(MdType.brandedBody)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .modifier(SettingsChrome.Row())
+                .accessibilityIdentifier("settings.tag.name")
                 Button("Добавить", action: onAddCategory)
+                    .font(MdType.brandedControl)
                     .foregroundStyle(MdColor.neonOrange)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("settings.tag.add")
             }
         }
+        .modifier(SettingsChrome.Card())
     }
 
     private var lowDiskBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle(isOn: Binding(
-                get: { snapshot.lowDiskWarnEnabled },
-                set: onSetLowDiskEnabled
-            )) {
-                Text("Предупреждение о месте")
-                    .foregroundStyle(MdColor.textPrimary)
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: Binding(get: { snapshot.lowDiskWarnEnabled }, set: onSetLowDiskEnabled)) {
+                title("Предупреждение о месте")
             }
             .tint(MdColor.neonOrange)
-            Text("Порог: \(snapshot.lowDiskWarnGib) ГБ")
-                .font(MdType.bodyMedium)
-                .foregroundStyle(MdColor.textSecondary)
-            HStack {
+            .accessibilityIdentifier("settings.disk.warning")
+            detail("Порог: \(snapshot.lowDiskWarnGib) ГБ")
+            HStack(spacing: 5) {
                 ForEach(snapshot.lowDiskPresetsGib, id: \.self) { gib in
+                    let selected = gib == snapshot.lowDiskWarnGib
                     Button {
                         onSetLowDiskGib(gib)
                     } label: {
                         Text("\(gib)")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(
-                                gib == snapshot.lowDiskWarnGib
-                                ? MdColor.oledTrueBlack : MdColor.textPrimary
-                            )
-                            .frame(width: 44, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(gib == snapshot.lowDiskWarnGib
-                                          ? MdColor.neonOrange : MdColor.surfaceElevated)
-                            )
+                            .foregroundStyle(selected ? .black : .white)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(selected ? MdColor.neonOrange : SettingsChrome.row,
+                                        in: RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(gib) ГБ")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated.opacity(0.6)))
+        .modifier(SettingsChrome.Card())
+    }
+
+    private func title(_ text: String) -> some View {
+        Text(text)
+            .font(cardTitle)
+            .foregroundStyle(.white)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func detail(_ text: String) -> some View {
+        Text(text)
+            .font(MdType.brandedBody)
+            .foregroundStyle(MdColor.textSecondary)
+    }
+
+    private func rowAction(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(MdColor.neonOrange)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func isValidStyleName(_ dialog: StyleDialog) -> Bool {
+        let name = styleName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !stylesBusy, !name.isEmpty, name.utf16.count <= styleNameLimit else { return false }
+        if case .rename(let current) = dialog { return current != name }
+        return true
+    }
+
+    private func commitStyleName(_ dialog: StyleDialog) {
+        guard isValidStyleName(dialog) else { return }
+        let name = styleName.trimmingCharacters(in: .whitespacesAndNewlines)
+        styleDialog = nil
+        switch dialog {
+        case .add:
+            onSetStyleDraft(name)
+            onAddStyle()
+        case .rename(let current):
+            onRenameStyle?(current, name)
+        }
+    }
+
+    private enum StyleDialog: Equatable, Identifiable {
+        case add
+        case rename(String)
+
+        var id: String {
+            switch self {
+            case .add: "add"
+            case .rename(let name): "rename-" + name
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .add: "Добавить стиль"
+            case .rename: "Переименовать стиль"
+            }
+        }
+    }
+}
+
+private enum SettingsChrome {
+    static let card = Color(white: 0.047)
+    static let row = Color(white: 0.075)
+    static let hot = Color(red: 1, green: 85.0 / 255, blue: 0)
+
+    struct Card: ViewModifier {
+        func body(content: Content) -> some View {
+            let shape = RoundedRectangle(cornerRadius: 17)
+            content
+                .padding(15)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(card, in: shape)
+                .overlay {
+                    shape.strokeBorder(LinearGradient(
+                        colors: [MdColor.neonOrange.opacity(0.52), .white.opacity(0.09), MdColor.neonOrange.opacity(0.27)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .allowsHitTesting(false)
+                }
+        }
+    }
+
+    struct Row: ViewModifier {
+        func body(content: Content) -> some View {
+            let shape = RoundedRectangle(cornerRadius: 12)
+            content
+                .background(row, in: shape)
+                .overlay { shape.strokeBorder(.white.opacity(0.08)).allowsHitTesting(false) }
+        }
     }
 }

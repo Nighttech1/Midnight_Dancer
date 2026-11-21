@@ -52,12 +52,16 @@ struct TabShellView: View {
                     snapshot: snap,
                     onSearch: actions.vaultSearch,
                     onCreate: actions.vaultCreate,
+                    onDismissCreationMessage: actions.vaultDismissCreationMessage,
                     onOpen: actions.vaultOpen,
                     onDelete: actions.vaultDelete
                 )
             }
         case .trainer(let snap):
-            if let session = snap.session {
+            if let ordinary = snap.choreography.ordinary {
+                TrainerChoreographySessionView(snapshot: ordinary, action: actions.trainerChoreography.ordinary)
+                    .id(ordinary.id)
+            } else if let session = snap.session {
                 TrainerSessionView(snapshot: session, onTogglePause: actions.trainerSessionTogglePause,
                     onPause: actions.trainerSessionPause, onSeek: actions.trainerSessionSeek,
                     onVolume: actions.trainerSessionVolume, onFinish: actions.trainerSessionFinish)
@@ -68,20 +72,13 @@ struct TabShellView: View {
                     onStartDance: actions.trainerStartDance, onSetStep: actions.trainerSetStep,
                     onSetStyle: actions.trainerSetStyle, onSetTrack: actions.trainerSetTrack,
                     onSetTag: actions.trainerSetTag, onSetInterval: actions.trainerSetInterval,
-                    onSetElementTiming: actions.trainerSetElementTiming)
+                    onSetElementTiming: actions.trainerSetElementTiming,
+                    choreographyActions: actions.trainerChoreography)
             }
         case .exchange(let snap):
-            SyncDeckView(
-                snapshot: snap,
-                onOpenExport: actions.exchangeOpenExport,
-                onDismissExport: actions.exchangeDismissExport,
-                onSelectExportStyle: actions.exchangeSelectStyle,
-                onConfirmExport: actions.exchangeConfirmExport,
-                onOpenImport: actions.exchangeOpenImport,
-                onDismissImport: actions.exchangeDismissImport,
-                onSetImportStyle: actions.exchangeSetImportStyle,
-                onConfirmImport: actions.exchangeConfirmImport
-            )
+            if let sets = actions.sets {
+                SetsHubView(snapshot: snap, actions: sets)
+            }
         }
     }
 }
@@ -111,6 +108,7 @@ struct TabFeatureActions {
 
     var vaultSearch: (String) -> Void = { _ in }
     var vaultCreate: () -> Void = {}
+    var vaultDismissCreationMessage: () -> Void = {}
     var vaultOpen: (String) -> Void = { _ in }
     var vaultDelete: (String) -> Void = { _ in }
     var vaultEditorBack: () -> Void = {}
@@ -122,6 +120,7 @@ struct TabFeatureActions {
     var vaultEditorAddElement: (String) -> Void = { _ in }
     var vaultTimelineActions: ProEditorTimelineActions? = nil
 
+    var trainerChoreography = TrainerChoreographyActions()
     var trainerSelectVoice: (Int) -> Void = { _ in }
     var trainerSpeak: () -> Void = {}
     var trainerStartDance: () -> Void = {}
@@ -137,12 +136,5 @@ struct TabFeatureActions {
     var trainerSessionVolume: (Float) -> Void = { _ in }
     var trainerSessionFinish: () -> Void = {}
 
-    var exchangeOpenExport: () -> Void = {}
-    var exchangeDismissExport: () -> Void = {}
-    var exchangeSelectStyle: (String) -> Void = { _ in }
-    var exchangeConfirmExport: () -> Void = {}
-    var exchangeOpenImport: () -> Void = {}
-    var exchangeDismissImport: () -> Void = {}
-    var exchangeSetImportStyle: (String) -> Void = { _ in }
-    var exchangeConfirmImport: () -> Void = {}
+    var sets: SetsHubActions? = nil
 }

@@ -49,6 +49,36 @@ class CreateFeedbackTest {
     }
     private fun assertOriginals(disk: Disk) { assertEquals(originals, disk.rows.filter { it.id.startsWith("keep-") }) }
 
+    @Test
+    fun local_set_can_use_catalog_without_zip_and_preserves_other_styles_and_archives() = runBlocking {
+        val disk = Disk(originals)
+        val life = LifecycleRegistry().also { it.resume(); lifecycles += it }
+        val component = DefaultExchangeComponent(
+            DefaultComponentContext(life),
+            savedSetsPersister = disk,
+            localSetCatalog = LocalSetCatalogLoader { normal },
+        )
+        open(component)
+        component.onIntent(ExchangeIntent.OpenExportPick(ExportPickKind.Songs))
+        component.onIntent(ExchangeIntent.ToggleExportPickItem("foreign"))
+        component.onIntent(ExchangeIntent.ToggleExportPickItem("song"))
+        component.onIntent(ExchangeIntent.ConfirmExportPick)
+        component.onIntent(ExchangeIntent.SetExportSetName("Local set"))
+        component.onIntent(ExchangeIntent.ConfirmLocalSet)
+
+        val saved = disk.rows.single { it.origin == SavedSetOrigin.Mine }
+        assertEquals("Local set", saved.name)
+        assertEquals(listOf("song"), saved.songIds)
+        assertFalse(component.uiState.value.showExportDialog)
+        assertNull(component.uiState.value.operationError)
+        assertOriginals(disk)
+
+        component.onIntent(ExchangeIntent.EditSavedSet(saved.id))
+        await { component.uiState.value.exportCatalogLoaded }
+        component.onIntent(ExchangeIntent.SelectExportStyle("b"))
+        assertEquals("s", component.uiState.value.exportStyleId)
+    }
+
     @Test fun empty_create_and_repeated_identical_click_keep_visible_inline_error_without_extra_writes_or_exports() = runBlocking {
         val disk = Disk(originals); val zip = Zip(normal); val c = component(disk, zip); open(c)
         val draft = disk.rows.first(); val writes = disk.writes

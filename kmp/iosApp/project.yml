@@ -14,6 +14,10 @@ settings:
   SWIFT_VERSION: "5.0"
   IPHONEOS_DEPLOYMENT_TARGET: "16.0"
   ENABLE_BITCODE: "NO"
+packages:
+  CryptoSwift:
+    url: https://github.com/krzyzanowskim/CryptoSwift.git
+    exactVersion: 1.10.0
 targets:
   iosApp:
     type: application
@@ -45,12 +49,14 @@ targets:
       LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
       VALIDATE_PRODUCT: "NO"
     # Static KMP framework (isStatic=true): link only — do not embed.
-    dependencies: []
+    dependencies:
+      - package: CryptoSwift
     info:
       path: iosApp/Info.plist
       properties:
         CFBundleDisplayName: Midnight Dancer
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIAppFonts:
           - noto_serif_regular.ttf
           - noto_serif_bold.ttf
@@ -73,6 +79,19 @@ targets:
       GENERATE_INFOPLIST_FILE: YES
       TEST_TARGET_NAME: iosApp
       TARGETED_DEVICE_FAMILY: "1"
+  iosAppCryptoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: iosAppCryptoTests
+    dependencies:
+      - target: iosApp
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.midnightdancer.app.cryptotests
+      GENERATE_INFOPLIST_FILE: YES
+      TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MidnightDancer.app/MidnightDancer"
+      BUNDLE_LOADER: "$(TEST_HOST)"
+      TARGETED_DEVICE_FAMILY: "1"
 schemes:
   iosApp:
     build:
@@ -84,5 +103,6 @@ schemes:
       config: Debug
       targets:
         - iosAppUITests
+        - iosAppCryptoTests
     archive:
       config: Release

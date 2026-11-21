@@ -87,6 +87,7 @@ fun sharedCommonModule(): Module = module {
                     componentContext = ctx,
                     exchangeZip = getOrNull<ExchangeZipUseCase>(),
                     savedSetsPersister = getOrNull<com.midnightdancer.feature.exchange.logic.SavedSetsPersister>(),
+                    localSetCatalog = getOrNull<com.midnightdancer.feature.exchange.logic.LocalSetCatalogLoader>(),
                     deviceStorage = getOrNull(),
                     danceStyles = getOrNull<ManageDanceStyles>(),
                 )
@@ -149,6 +150,7 @@ fun sharedCommonModule(): Module = module {
             componentContext = componentContext,
             exchangeZip = getOrNull<ExchangeZipUseCase>(),
             savedSetsPersister = getOrNull<com.midnightdancer.feature.exchange.logic.SavedSetsPersister>(),
+            localSetCatalog = getOrNull<com.midnightdancer.feature.exchange.logic.LocalSetCatalogLoader>(),
             deviceStorage = getOrNull(),
             danceStyles = getOrNull<ManageDanceStyles>(),
         )

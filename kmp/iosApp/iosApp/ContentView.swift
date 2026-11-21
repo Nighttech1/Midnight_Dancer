@@ -58,6 +58,7 @@ struct ContentView: View {
             musicSeek: { bridge.musicSeek($0, $1) },
             vaultSearch: { bridge.vaultSearch($0) },
             vaultCreate: { bridge.vaultCreate() },
+            vaultDismissCreationMessage: { bridge.vaultDismissCreationMessage() },
             vaultOpen: { bridge.vaultOpen($0) },
             vaultDelete: { bridge.vaultDelete($0) },
             vaultEditorBack: { bridge.vaultEditorBack() },
@@ -68,6 +69,7 @@ struct ContentView: View {
             vaultEditorElementChoices: { bridge.vaultEditorElementChoices() },
             vaultEditorAddElement: { bridge.vaultEditorAddElement($0) },
             vaultTimelineActions: bridge.vaultTimelineActions(),
+            trainerChoreography: bridge.trainerChoreographyActions,
             trainerSelectVoice: { bridge.trainerSelectVoice(index: $0) },
             trainerSpeak: { bridge.trainerSpeak() },
             trainerStartDance: { bridge.trainerStartDance() },
@@ -82,14 +84,7 @@ struct ContentView: View {
             trainerSessionSeek: { bridge.trainerSessionSeek($0, $1) },
             trainerSessionVolume: { bridge.trainerSessionVolume($0) },
             trainerSessionFinish: { bridge.trainerSessionFinish() },
-            exchangeOpenExport: { bridge.exchangeOpenExport() },
-            exchangeDismissExport: { bridge.exchangeDismissExport() },
-            exchangeSelectStyle: { bridge.exchangeSelectStyle($0) },
-            exchangeConfirmExport: { bridge.exchangeConfirmExport() },
-            exchangeOpenImport: { bridge.exchangeOpenImport() },
-            exchangeDismissImport: { bridge.exchangeDismissImport() },
-            exchangeSetImportStyle: { bridge.exchangeSetImportStyle($0) },
-            exchangeConfirmImport: { bridge.exchangeConfirmImport() }
+            sets: bridge.setsActions()
         )
     }
 
@@ -99,6 +94,7 @@ struct ContentView: View {
             setReminder: { bridge.settingsSetReminder($0) },
             setStyleDraft: { bridge.settingsSetStyleDraft($0) },
             addStyle: { bridge.settingsAddStyle() },
+            renameStyle: { bridge.settingsRenameStyle($0, $1) },
             removeStyle: { bridge.settingsRemoveStyle($0) },
             setCategoryDraft: { bridge.settingsSetCategoryDraft($0) },
             addCategory: { bridge.settingsAddCategory() },

@@ -3,15 +3,16 @@ package com.midnightdancer.core.data.zip
 import com.midnightdancer.core.data.files.platformDocumentsDirectoryPath
 import com.midnightdancer.core.domain.storage.DeviceStorage
 import com.midnightdancer.core.domain.storage.DiskSpaceGate
-import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.*
 import okio.Buffer
+import okio.BufferedSource
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
-import okio.openZip
 import okio.use
 import platform.Foundation.NSUUID
+import platform.zlib.*
 
 /** ZIP32 only; names are validated before Okio may normalize them. No ZIP encryption or ZIP64. */
 data class IosZipMember(val name: String, val size: Long, val compressedSize: Long,
@@ -198,18 +199,95 @@ class IosSecureZipArchive(privateRoot: String = platformDocumentsDirectoryPath()
     }
 
     private fun copyMember(archivePath: String, entry: IosZipMember, check: () -> Unit, consume: (ByteArray, Int) -> Unit) {
-        val zip = fs.openZip(archivePath.toPath())
-        try {
-            zip.source(("/" + entry.name).toPath()).buffer().use { input ->
-                val block = ByteArray(65536); val crc = ZipCrc32(); var total = 0L
-                while (true) {
-                    check(); val count = input.read(block); if (count == -1) break
-                    total += count; require(total <= entry.size && total <= MAX_ARCHIVE_BYTES) { "zip_expanded_size_limit" }
-                    crc.update(block, count); consume(block, count)
+        val crc = ZipCrc32(); var total = 0L
+        val verifiedConsume: (ByteArray, Int) -> Unit = { block, count ->
+            total += count
+            require(total <= entry.size && total <= MAX_ARCHIVE_BYTES) { "zip_expanded_size_limit" }
+            crc.update(block, count); consume(block, count)
+        }
+        fs.openReadOnly(archivePath.toPath()).use { file ->
+            file.source(entry.localOffset).buffer().use { input ->
+                // inspect() already checked the raw local name/flags/method and complete bounds.
+                require(input.readIntLe() == 0x04034b50) { "zip_local_header" }
+                input.skip(22)
+                val nameSize = input.readShortLe().toInt() and 65535
+                val extraSize = input.readShortLe().toInt() and 65535
+                require(input.readUtf8(nameSize.toLong()) == entry.name) { "zip_source_changed" }
+                input.skip(extraSize.toLong())
+                if (entry.method == 0) {
+                    var remaining = entry.compressedSize
+                    val block = ByteArray(65536)
+                    while (remaining > 0) {
+                        check()
+                        val count = input.read(block, 0, minOf(block.size.toLong(), remaining).toInt())
+                        require(count > 0) { "zip_truncated_payload" }
+                        remaining -= count
+                        verifiedConsume(block, count)
+                    }
+                } else {
+                    inflateRaw(input, entry.compressedSize, check, verifiedConsume)
                 }
-                require(total == entry.size && crc.value == entry.crc32) { "zip_crc_or_size_mismatch" }
             }
-        } finally { zip.close() }
+        }
+        require(total == entry.size && crc.value == entry.crc32) { "zip_crc_or_size_mismatch" }
+    }
+
+    /** Public Apple libz through Kotlin's supplied platform.zlib; no new binary or private API. */
+    private fun inflateRaw(input: BufferedSource, compressedSize: Long, check: () -> Unit, consume: (ByteArray, Int) -> Unit) = memScoped {
+        val stream = alloc<z_stream>()
+        stream.zalloc = null; stream.zfree = null; stream.opaque = null
+        stream.next_in = null; stream.avail_in = 0u
+        stream.next_out = null; stream.avail_out = 0u
+        require(inflateInit2(stream.ptr, -15) == Z_OK) { "zip_inflate_initialization" } // Raw ZIP DEFLATE, no zlib wrapper.
+        val incoming = ByteArray(65536); val outgoing = ByteArray(65536)
+        var remaining = compressedSize
+        var ended = false
+        try {
+            outgoing.usePinned { outputPin ->
+                while (remaining > 0 && !ended) {
+                    check()
+                    val count = input.read(incoming, 0, minOf(incoming.size.toLong(), remaining).toInt())
+                    require(count > 0) { "zip_truncated_payload" }
+                    remaining -= count
+                    incoming.usePinned { inputPin ->
+                        stream.next_in = inputPin.addressOf(0).reinterpret()
+                        stream.avail_in = count.toUInt()
+                        do {
+                            check()
+                            stream.next_out = outputPin.addressOf(0).reinterpret()
+                            stream.avail_out = outgoing.size.toUInt()
+                            val previousInput = stream.avail_in
+                            val status = inflate(stream.ptr, Z_NO_FLUSH)
+                            val produced = outgoing.size - stream.avail_out.toInt()
+                            if (produced > 0) consume(outgoing, produced)
+                            require(status == Z_OK || status == Z_STREAM_END || status == Z_BUF_ERROR) { "zip_invalid_deflate" }
+                            if (status == Z_STREAM_END) {
+                                ended = true
+                                require(remaining == 0L && stream.avail_in == 0u) { "zip_deflate_trailing_payload" }
+                                break
+                            }
+                            if (produced == 0 && stream.avail_in == previousInput) {
+                                require(stream.avail_in == 0u) { "zip_inflate_no_progress" }
+                                break // Needs another compressed input block.
+                            }
+                        } while (stream.avail_in > 0u || stream.avail_out == 0u)
+                        stream.next_in = null
+                    }
+                }
+                while (!ended) {
+                    check()
+                    stream.next_in = null; stream.avail_in = 0u
+                    stream.next_out = outputPin.addressOf(0).reinterpret()
+                    stream.avail_out = outgoing.size.toUInt()
+                    val status = inflate(stream.ptr, Z_FINISH)
+                    val produced = outgoing.size - stream.avail_out.toInt()
+                    if (produced > 0) consume(outgoing, produced)
+                    if (status == Z_STREAM_END) ended = true
+                    else require(produced > 0 && (status == Z_OK || status == Z_BUF_ERROR)) { "zip_truncated_deflate" }
+                }
+                stream.next_out = null
+            }
+        } finally { inflateEnd(stream.ptr) }
     }
     private fun crcOf(path: Path, check: () -> Unit): Long {
         val crc = ZipCrc32(); var read = 0L

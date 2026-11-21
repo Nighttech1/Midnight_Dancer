@@ -9,9 +9,12 @@ package com.midnightdancer.core.data.exchange
  * Work with bounded buffers up to 300 MiB, check cancellation during I/O, authenticate before
  * publishing plaintext, atomically publish to a private destination, preserve existing output
  * on failure and delete only implementation-owned temporary files. No key/payload diagnostics.
+ * Cancellation callback is a nonthrowing flag: throwing a Kotlin exception through a Swift block is unsafe.
  * CryptoKit's one-shot Data API alone does not establish that bounded-memory contract.
  */
 interface IosArchiveContainerCodec {
-    fun decryptToPrivateZip(containerPath: String, destinationPath: String, bundleId: String, checkCancellation: () -> Unit)
-    fun encryptPrivateZip(zipPath: String, destinationPath: String, bundleId: String, checkCancellation: () -> Unit)
+    @Throws(Exception::class)
+    fun decryptToPrivateZip(containerPath: String, destinationPath: String, bundleId: String, shouldCancel: () -> Boolean)
+    @Throws(Exception::class)
+    fun encryptPrivateZip(zipPath: String, destinationPath: String, bundleId: String, shouldCancel: () -> Boolean)
 }

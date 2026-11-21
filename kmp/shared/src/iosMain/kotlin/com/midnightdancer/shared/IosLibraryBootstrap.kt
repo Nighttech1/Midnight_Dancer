@@ -11,6 +11,7 @@ import com.midnightdancer.core.data.migrate.migrateIosLegacyCatalog
 import com.midnightdancer.core.data.prefs.USER_PREFS_DATA_STORE_FILE_NAME
 import com.midnightdancer.core.data.prefs.di.prefsKoinModule
 import com.midnightdancer.core.data.storage.createDeviceStorage
+import com.midnightdancer.core.domain.settings.CreationAccessPolicy
 import com.midnightdancer.core.domain.storage.DeviceStorage
 import com.midnightdancer.core.domain.styles.ManageDanceStyles
 import com.midnightdancer.core.domain.usecase.ReadWriteUserPrefs
@@ -46,9 +47,11 @@ object IosLibraryBootstrap {
                         catalogDatabaseModule { catalogDatabaseBuilder() },
                         prefsKoinModule { "$documents/$USER_PREFS_DATA_STORE_FILE_NAME" },
                         module {
+                            single<CreationAccessPolicy> { IosFreeCreationPolicy }
                             single<ChoreographyVaultPersister> { IosChoreographyVaultPersister(get()) }
                             single<SavedSetsPersister> { IosSavedSetsPersister(get()) }
                             single<DeviceStorage> { createDeviceStorage() }
+                            single<LocalSetCatalogLoader> { IosLocalSetCatalogLoader(get(), get(), get()) }
                         },
                     ))
                     modulesLoaded = true

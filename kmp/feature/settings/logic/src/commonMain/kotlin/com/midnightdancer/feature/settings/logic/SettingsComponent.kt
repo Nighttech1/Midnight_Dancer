@@ -31,6 +31,7 @@ interface SettingsComponent {
         onIntent(SettingsIntent.SetReminderEnabledStub(enabled))
     fun setStyleDraft(text: String) = onIntent(SettingsIntent.SetStyleDraft(text))
     fun addStyle() = onIntent(SettingsIntent.AddStyle)
+    fun renameStyle(oldName: String, newName: String) = onIntent(SettingsIntent.RenameStyle(oldName, newName))
     fun removeStyle(name: String) = onIntent(SettingsIntent.RemoveStyle(name))
     fun setCategoryDraft(text: String) = onIntent(SettingsIntent.SetCategoryDraft(text))
     fun addCategory() = onIntent(SettingsIntent.AddCategory)

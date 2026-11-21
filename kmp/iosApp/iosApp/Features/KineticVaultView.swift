@@ -5,6 +5,7 @@ struct KineticVaultView: View {
     let snapshot: ChoreographyFeatureSnapshot
     var onSearch: (String) -> Void
     var onCreate: () -> Void
+    var onDismissCreationMessage: () -> Void
     var onOpen: (String) -> Void
     var onDelete: (String) -> Void
 
@@ -16,6 +17,22 @@ struct KineticVaultView: View {
                     .accessibilityIdentifier("choreo.add")
                     .padding(.horizontal, MdChrome.contentHorizontalPadding)
                     .padding(.top, 8)
+
+                if let message = snapshot.creationBlockedMessage {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(message)
+                            .font(MdType.bodyMedium)
+                            .foregroundStyle(MdColor.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("choreo.creation-message")
+                        Button("Закрыть", action: onDismissCreationMessage)
+                            .foregroundStyle(MdColor.neonOrange)
+                    }
+                    .padding(12)
+                    .background(MdColor.surfaceElevated, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, MdChrome.contentHorizontalPadding)
+                    .padding(.top, 8)
+                }
 
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(MdColor.textSecondary)

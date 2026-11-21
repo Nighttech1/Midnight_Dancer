@@ -61,6 +61,22 @@ final class VisualSmokeTests: XCTestCase {
         app.buttons["element.cancel"].tap()
         XCTAssertTrue(add.waitForExistence(timeout: 5))
 
+        app.buttons["tab.exchange"].tap()
+        XCTAssertTrue(element("screen.exchange", app: app).waitForExistence(timeout: 5))
+        let createSet = app.buttons["sets.create"]
+        XCTAssertTrue(createSet.waitForExistence(timeout: 5))
+        createSet.tap()
+        let saveSet = app.buttons["sets.save"]
+        XCTAssertTrue(saveSet.waitForExistence(timeout: 10))
+        let readyToValidate = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: saveSet)
+        wait(for: [readyToValidate], timeout: 10)
+        capture("13-set-editor", app: app)
+        saveSet.tap()
+        XCTAssertTrue(element("sets.editor.error", app: app).waitForExistence(timeout: 10))
+        capture("14-set-empty-validation", app: app)
+        app.buttons["sets.closeEditor"].tap()
+        XCTAssertTrue(createSet.waitForExistence(timeout: 5))
+
         app.buttons["tab.choreography"].tap()
         let create = app.buttons["choreo.add"]
         XCTAssertTrue(create.waitForExistence(timeout: 5))

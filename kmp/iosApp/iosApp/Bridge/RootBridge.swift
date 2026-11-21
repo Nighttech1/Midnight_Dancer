@@ -42,6 +42,7 @@ final class RootBridge: ObservableObject {
     private var choreographyHubTitle: String = ShellTabKind.choreography.defaultTitle
     private var choreographyHubSearch: String = ""
     private var choreographyHubItems: [VaultItemSnapshot] = []
+    private var choreographyCreationBlockedMessage: String?
     private var choreographyEditorSnapshot: SequenceEditorSnapshot?
     private weak var trainerRef: TrainerComponent?
     private weak var trainerSessionRef: TrainerSessionStubComponent?
@@ -50,11 +51,19 @@ final class RootBridge: ObservableObject {
     private var trainerSessionSnapshot: TrainerSessionSnapshot?
     private var trainerSessionID = UUID().uuidString
     private var trainerTabIndex = ShellTabKind.trainer.rawValue
+    private let trainerAccessProvider: IosRehearsalAccessProvider
+    private lazy var trainerChoreography = TrainerChoreographyCoordinator(access: trainerAccessProvider)
+
     private weak var exchangeRef: ExchangeComponent?
     private weak var settingsRef: SettingsComponent?
 
     @Published private(set) var startupError: String?
     private var starting = false
+
+    init(trainerAccessProvider: IosRehearsalAccessProvider = IosUnavailableRehearsalAccess.shared) {
+        self.trainerAccessProvider = trainerAccessProvider
+    }
+
 
     func start() {
         guard root == nil, !starting else { return }
@@ -106,7 +115,11 @@ final class RootBridge: ObservableObject {
         mainRef?.onTabSelected(index: Int32(index))
     }
 
-    func openSettings() { mainRef?.openSettings() }
+    func openSettings() {
+        trainerChoreography.pause()
+        trainerSessionPause()
+        mainRef?.openSettings()
+    }
 
     func closeSettingsOrBack() {
         if mainRef?.onBack() == true { return }
@@ -183,6 +196,7 @@ final class RootBridge: ObservableObject {
 
     func vaultSearch(_ q: String) { choreographyRef?.setSearchQuery(query: q) }
     func vaultCreate() { choreographyRef?.createChoreography() }
+    func vaultDismissCreationMessage() { choreographyRef?.dismissAccessMessage() }
     func vaultOpen(_ id: String) { choreographyRef?.openEditor(id: id) }
     func vaultDelete(_ id: String) { choreographyRef?.deleteItem(id: id) }
     func vaultEditorBack() { _ = choreographyRef?.onBack() }
@@ -248,9 +262,27 @@ final class RootBridge: ObservableObject {
 
     // MARK: - Trainer
 
-    func trainerSelectVoice(index: Int) { trainerRef?.selectVoiceByIndex(index: Int32(index)) }
+    func trainerSelectVoice(index: Int) {
+        trainerRef?.selectVoiceByIndex(index: Int32(index))
+        trainerChoreography.setVoice(index)
+    }
     func trainerSpeak() { trainerRef?.requestSpeak() }
-    func trainerStartDance() { trainerRef?.startDance() }
+    func trainerStartDance() {
+        if trainerChoreography.snapshot.enabled { trainerChoreography.startOrdinary() }
+        else { trainerRef?.startDance() }
+    }
+    var trainerChoreographyActions: TrainerChoreographyActions {
+        TrainerChoreographyActions(
+            setMode: { [weak self] in self?.trainerChoreography.setMode($0) },
+            select: { [weak self] in self?.trainerChoreography.select($0) },
+            part: { [weak self] in self?.trainerChoreography.part($0) },
+            field: { [weak self] in self?.trainerChoreography.field($0, $1) },
+            ordinary: { [weak self] in self?.trainerChoreography.ordinary($0, $1) })
+    }
+    private func applyTrainerChoreography(_ snapshot: inout TrainerFeatureSnapshot) {
+        snapshot.choreography = trainerChoreography.snapshot
+        if snapshot.choreography.enabled { snapshot.modeLabel = "Хореография" }
+    }
     func trainerSetStep(_ step: Int) { trainerRef?.setExpandedStep(step: Int32(step)) }
     func trainerSetStyle(_ s: String) { trainerRef?.setStyle(style: s) }
     func trainerSetTrack(_ t: String) { trainerRef?.setTrack(track: t) }
@@ -318,20 +350,68 @@ final class RootBridge: ObservableObject {
     private func publishTrainerSession() {
         guard case .trainer(var snapshot) = tabSnapshots[trainerTabIndex].feature else { return }
         snapshot.session = trainerSessionSnapshot
+        applyTrainerChoreography(&snapshot)
         replaceTab(index: trainerTabIndex, title: snapshot.title, feature: .trainer(snapshot))
     }
 
 
     // MARK: - Exchange
 
-    func exchangeOpenExport() { exchangeRef?.openExport() }
-    func exchangeDismissExport() { exchangeRef?.dismissExport() }
-    func exchangeSelectStyle(_ id: String) { exchangeRef?.selectExportStyle(styleId: id) }
-    func exchangeConfirmExport() { exchangeRef?.confirmExport() }
-    func exchangeOpenImport() { exchangeRef?.openImport() }
-    func exchangeDismissImport() { exchangeRef?.dismissImport() }
-    func exchangeSetImportStyle(_ id: String) { exchangeRef?.setImportTargetStyle(localStyleId: id) }
-    func exchangeConfirmImport() { exchangeRef?.confirmImport() }
+    func setsActions() -> SetsHubActions {
+        let actions = IosSetsActions.shared
+        return SetsHubActions(
+            selectTab: { [weak self] tab in
+                if let c = self?.exchangeRef { actions.selectTab(component: c, imported: tab == .imported) }
+            },
+            search: { [weak self] q in
+                if let c = self?.exchangeRef { actions.search(component: c, query: q) }
+            },
+            filter: { [weak self] tag in
+                if let c = self?.exchangeRef { actions.filter(component: c, tag: tag) }
+            },
+            sortAlphabetical: { [weak self] alphabetical in
+                if let c = self?.exchangeRef { actions.sort(component: c, alphabetical: alphabetical) }
+            },
+            create: { [weak self] in self?.exchangeRef?.openExport() },
+            open: { [weak self] id in
+                if let c = self?.exchangeRef { actions.open(component: c, id: id) }
+            },
+            delete: { [weak self] id in
+                if let c = self?.exchangeRef { actions.delete(component: c, id: id) }
+            },
+            closeEditor: { [weak self] in self?.exchangeRef?.dismissExport() },
+            setName: { [weak self] name in
+                if let c = self?.exchangeRef { actions.name(component: c, value: name) }
+            },
+            selectStyle: { [weak self] id in self?.exchangeRef?.selectExportStyle(styleId: id) },
+            openSection: { [weak self] section in
+                guard let c = self?.exchangeRef else { return }
+                switch section {
+                case .elements: actions.openSection(component: c, kind: .elements)
+                case .music: actions.openSection(component: c, kind: .songs)
+                case .choreographies: actions.openSection(component: c, kind: .choreographies)
+                }
+            },
+            closeSection: { [weak self] in
+                if let c = self?.exchangeRef { actions.closeSection(component: c) }
+            },
+            toggleItem: { [weak self] id in
+                if let c = self?.exchangeRef { actions.toggle(component: c, id: id) }
+            },
+            confirmSection: { [weak self] in
+                if let c = self?.exchangeRef { actions.apply(component: c) }
+            },
+            save: { [weak self] in
+                if let c = self?.exchangeRef { actions.save(component: c) }
+            },
+            retryArchive: { [weak self] in
+                if let c = self?.exchangeRef { actions.retryArchive(component: c) }
+            },
+            removeInvalidSelection: { [weak self] in
+                if let c = self?.exchangeRef { actions.removeInvalid(component: c) }
+            }
+        )
+    }
 
     // MARK: - Settings
 
@@ -339,6 +419,9 @@ final class RootBridge: ObservableObject {
     func settingsSetReminder(_ on: Bool) { settingsRef?.setReminderEnabled(enabled: on) }
     func settingsSetStyleDraft(_ t: String) { settingsRef?.setStyleDraft(text: t) }
     func settingsAddStyle() { settingsRef?.addStyle() }
+    func settingsRenameStyle(_ oldName: String, _ newName: String) {
+        settingsRef?.renameStyle(oldName: oldName, newName: newName)
+    }
     func settingsRemoveStyle(_ name: String) { settingsRef?.removeStyle(name: name) }
     func settingsSetCategoryDraft(_ t: String) { settingsRef?.setCategoryDraft(text: t) }
     func settingsAddCategory() { settingsRef?.addCategory() }
@@ -457,18 +540,22 @@ final class RootBridge: ObservableObject {
                     self?.choreographyHubTitle = state.title
                     self?.choreographyHubSearch = state.searchQuery
                     self?.choreographyHubItems = Self.mapVaultItems(state)
+                    self?.choreographyCreationBlockedMessage = state.creationBlockedMessage
                     self?.publishChoreographyTab()
                 }
             })
         case .trainer(let c):
             trainerRef = c.component
             trainerTabIndex = index
+            trainerChoreography.onChange = { [weak self] in self?.publishTrainerSession() }
+            trainerChoreography.begin()
             bindTrainerStack(c.component)
             tabCollectTasks.append(Task { @MainActor [weak self] in
                 for await state in c.component.uiState {
                     guard let self else { return }
                     var snapshot = Self.mapTrainer(state)
                     snapshot.session = self.trainerSessionSnapshot
+                    self.applyTrainerChoreography(&snapshot)
                     self.replaceTab(index: index, title: state.title, feature: .trainer(snapshot))
                 }
             })
@@ -546,6 +633,8 @@ final class RootBridge: ObservableObject {
         trainerSessionTask?.cancel()
         trainerSessionTask = nil
         trainerSessionSnapshot = nil
+        trainerChoreography.close()
+        trainerChoreography.onChange = nil
         exchangeRef = nil
         settingsRef = nil
     }
@@ -600,19 +689,8 @@ final class RootBridge: ObservableObject {
             )
         case .exchange:
             return .exchange(
-                ExchangeFeatureSnapshot(
-                    title: kind.defaultTitle, lastActionLabel: nil, busy: false,
-                    importEnabled: false, freeLabel: "—", requiredLabel: "—",
-                    showExportDialog: false, showImportParams: false,
-                    exportStyleId: "", exportStyleName: "",
-                    exportLimitsText:
-                        "Один стиль. Не больше пяти элементов, двух треков и одной хореографии. "
-                        + "Жёсткий лимит размера пакета — пятьсот мегабайт.",
-                    exportStyles: [], exportSelectedMoveCount: 0,
-                    exportSelectedSongCount: 0, exportSelectedChoreoCount: 0,
-                    importLocalStyles: [], importTargetStyleId: "",
-                    lastImportName: ""
-                )
+                SetsHubSnapshot(tab: .mine, cards: [], searchQuery: "", filter: "", tags: [],
+                                alphabetical: false, busy: false, error: nil, editor: nil)
             )
         }
     }
@@ -729,7 +807,8 @@ final class RootBridge: ObservableObject {
                     title: choreographyHubTitle,
                     searchQuery: choreographyHubSearch,
                     items: choreographyHubItems,
-                    editor: choreographyEditorSnapshot
+                    editor: choreographyEditorSnapshot,
+                    creationBlockedMessage: choreographyCreationBlockedMessage
                 )
             )
         )
@@ -830,31 +909,55 @@ final class RootBridge: ObservableObject {
         )
     }
 
-    private static func mapExchange(_ state: ExchangeUiState) -> ExchangeFeatureSnapshot {
-        ExchangeFeatureSnapshot(
-            title: state.title,
-            lastActionLabel: state.lastActionLabel,
-            busy: state.busy,
-            importEnabled: state.importEnabled,
-            freeLabel: state.freeLabel,
-            requiredLabel: state.requiredLabel,
-            showExportDialog: state.showExportDialog,
-            showImportParams: state.showImportParams,
-            exportStyleId: state.exportStyleId,
-            exportStyleName: state.exportStyleName,
-            exportLimitsText: state.exportLimitsText,
-            exportStyles: state.exportCatalog.styles.map {
-                StyleRefSnapshot(id: $0.id, name: $0.name)
-            },
-            exportSelectedMoveCount: Array(state.exportSelectedMoveIds).count,
-            exportSelectedSongCount: Array(state.exportSelectedSongIds).count,
-            exportSelectedChoreoCount: Array(state.exportSelectedChoreoIds).count,
-            importLocalStyles: state.importLocalStyles.map {
-                StyleRefSnapshot(id: $0.id, name: $0.name)
-            },
-            importTargetStyleId: state.importTargetStyleId,
-            lastImportName: state.lastImportName
-        )
+    private static func mapExchange(_ state: ExchangeUiState) -> SetsHubSnapshot {
+        let cards = state.visibleSets.map { item in
+            SetsCardSnapshot(id: item.id, name: item.name,
+                style: item.styleName.isEmpty ? item.styleId : item.styleName, tags: item.tags,
+                estimatedBytes: item.estimatedBytes, elements: item.moveIds.count, music: item.songIds.count,
+                choreographies: item.choreoIds.count, isArchiveOnly: item.isArchiveOnlyImported)
+        }
+        let editor = state.showExportDialog || state.exportPickKind != nil ? mapSetEditor(state) : nil
+        return SetsHubSnapshot(tab: state.hubTab == .imported ? .imported : .mine,
+            cards: cards, searchQuery: state.searchQuery, filter: state.selectedFilter,
+            tags: state.tagCatalog, alphabetical: state.sortMode == .alphabetical,
+            busy: state.busy, error: state.operationError, editor: editor)
+    }
+
+    private static func mapSetEditor(_ state: ExchangeUiState) -> SetsEditorSnapshot {
+        let archive = state.viewingImportedSet
+        let catalog = state.archiveInspectionCatalog
+        let picker: SetsPickerSnapshot? = state.exportPickKind.flatMap { kind in
+            let section: SetsSection
+            let archiveRows: [CatalogPickItem]?
+            switch kind {
+            case .elements: section = .elements; archiveRows = catalog?.elements
+            case .songs: section = .music; archiveRows = catalog?.songs
+            case .choreographies: section = .choreographies; archiveRows = catalog?.choreographies
+            default: return nil
+            }
+            let rows = archive ? (archiveRows ?? []) : state.allowedExportRows(kind: kind)
+            return SetsPickerSnapshot(kind: section, rows: rows.map {
+                SetsChoiceSnapshot(id: $0.id, title: $0.title, subtitle: $0.subtitle)
+            }, selectedIDs: Set(state.exportPickDraftIds))
+        }
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB]
+        formatter.countStyle = .binary
+        return SetsEditorSnapshot(name: state.exportSetName, styleID: state.exportStyleId,
+            styleName: state.exportStyleName,
+            styles: state.exportCatalog.styles.map { SetsChoiceSnapshot(id: $0.id, title: $0.name) },
+            mode: archive ? .archive : (state.isCreateSetFlow ? .create : .edit),
+            elements: archive ? (catalog?.elements.count ?? 0) : state.exportSelectedMoveIds.count,
+            music: archive ? (catalog?.songs.count ?? 0) : state.exportSelectedSongIds.count,
+            choreographies: archive ? (catalog?.choreographies.count ?? 0) : state.exportSelectedChoreoIds.count,
+            weight: formatter.string(fromByteCount: state.exportEstimatedBytes),
+            loading: archive ? state.archiveInspectionLoading : state.exportCatalogLoading,
+            error: archive ? state.archiveInspectionError : state.exportValidationError,
+            invalidSelection: state.hasInvalidExportSelection, picker: picker,
+            canOpenSections: archive ? catalog != nil && state.archiveInspectionError == nil
+                : state.exportCatalogLoaded && !state.exportStyleId.isEmpty,
+            overweight: state.exportOverWeight,
+            limits: archive ? nil : state.exportLimitsText)
     }
 
     private static func mapSettings(_ state: SettingsUiState) -> SettingsShellSnapshot {
@@ -866,6 +969,8 @@ final class RootBridge: ObservableObject {
             reminderMinute: Int(state.reminderMinute),
             prefsLoaded: state.prefsLoaded,
             danceStyles: Array(state.danceStyles),
+            stylesBusy: state.stylesLoading || state.stylesBusy,
+            stylesError: state.stylesError,
             newStyleDraft: state.newStyleDraft,
             elementCategories: Array(state.elementCategories),
             newCategoryDraft: state.newCategoryDraft,

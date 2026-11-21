@@ -12,6 +12,13 @@ struct TrainerHubView: View {
     var onSetTag: (String) -> Void
     var onSetInterval: (Float) -> Void
     var onSetElementTiming: (Bool) -> Void
+    var choreographyActions: TrainerChoreographyActions
+    @Environment(\.scenePhase) private var scenePhase
+    private var ready: Bool {
+        snapshot.choreography.enabled
+            ? !snapshot.choreography.selectedID.isEmpty && !snapshot.choreography.loading && !snapshot.choreography.active
+            : snapshot.readyPercent >= 100
+    }
 
     var body: some View {
         ZStack {
@@ -23,6 +30,18 @@ struct TrainerHubView: View {
                             .font(MdType.eyebrow)
                             .foregroundStyle(MdColor.textSecondary)
 
+                        Picker("Режим", selection: Binding(get: { snapshot.choreography.enabled }, set: choreographyActions.setMode)) {
+                            Text("Свободная").tag(false)
+                            Text("Хореография").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityIdentifier("trainer.mode")
+                        if snapshot.choreography.enabled {
+                            TrainerChoreographyPanel(snapshot: snapshot.choreography, actions: choreographyActions)
+                            MdSpeakZoneView(speakLabel: snapshot.speakLabel, accent: MdColor.accentGold,
+                                selectedVoiceIndex: snapshot.selectedVoiceIndex, onSelectVoice: onSelectVoice, onSpeak: onSpeak)
+                                .disabled(snapshot.choreography.active)
+                        } else {
                         ForEach(Array(snapshot.storylineTitles.enumerated()), id: \.offset) { idx, title in
                             let step = idx + 1
                             let filled = stepGlow(step)
@@ -66,7 +85,9 @@ struct TrainerHubView: View {
                             }
                         }
 
-                        Text("Готовность \(snapshot.readyPercent)%")
+                        }
+
+                        Text(snapshot.choreography.enabled ? snapshot.choreography.selectedTitle : "Готовность \(snapshot.readyPercent)%")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(MdColor.textSecondary)
                     }
@@ -82,19 +103,21 @@ struct TrainerHubView: View {
                         .padding(.vertical, 16)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(snapshot.readyPercent >= 100
+                                .fill(ready
                                       ? MdColor.neonOrange
                                       : MdColor.neonOrange.opacity(0.35))
                         )
                         .foregroundStyle(MdColor.oledTrueBlack)
                 }
                 .buttonStyle(.plain)
-                .disabled(snapshot.readyPercent < 100 || snapshot.modeLabel != "Свободная")
+                .disabled(!ready)
                 .accessibilityIdentifier("trainer.start")
                 .padding(.horizontal, MdChrome.contentHorizontalPadding)
                 .padding(.bottom, 12)
             }
         }
+        .onDisappear { choreographyActions.part("pause") }
+        .onChange(of: scenePhase) { if $0 != .active { choreographyActions.part("pause") } }
     }
 
     private func stepGlow(_ step: Int) -> Bool {

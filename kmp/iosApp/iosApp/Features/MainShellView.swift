@@ -34,7 +34,10 @@ struct MainShellView: View {
                     onAddCategory: settingsActions.addCategory,
                     onRemoveCategory: settingsActions.removeCategory,
                     onSetLowDiskGib: settingsActions.setLowDiskGib,
-                    onSetLowDiskEnabled: settingsActions.setLowDiskEnabled
+                    onSetLowDiskEnabled: settingsActions.setLowDiskEnabled,
+                    onRenameStyle: settingsActions.renameStyle,
+                    stylesBusy: settings.stylesBusy,
+                    stylesError: settings.stylesError
                 )
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("screen.settings")
@@ -104,6 +107,7 @@ struct SettingsFeatureActions {
     var setReminder: (Bool) -> Void = { _ in }
     var setStyleDraft: (String) -> Void = { _ in }
     var addStyle: () -> Void = {}
+    var renameStyle: (String, String) -> Void = { _, _ in }
     var removeStyle: (String) -> Void = { _ in }
     var setCategoryDraft: (String) -> Void = { _ in }
     var addCategory: () -> Void = {}

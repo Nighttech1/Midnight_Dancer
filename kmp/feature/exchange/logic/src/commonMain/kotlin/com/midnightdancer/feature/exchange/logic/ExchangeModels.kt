@@ -211,6 +211,7 @@ sealed interface ExchangeIntent {
     data object DismissExportDialog : ExchangeIntent
 
     data object ConfirmExport : ExchangeIntent
+    data object ConfirmLocalSet : ExchangeIntent
 
     data class OpenExportPick(val kind: ExportPickKind) : ExchangeIntent
 

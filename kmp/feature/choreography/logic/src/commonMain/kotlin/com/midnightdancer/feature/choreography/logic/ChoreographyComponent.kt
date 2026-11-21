@@ -634,6 +634,7 @@ interface ChoreographyComponent {
 
     /** SKIE-friendly aliases for SwiftUI bridge (C-124 / C-126). */
     fun setSearchQuery(query: String) = onIntent(ChoreographyIntent.SetSearchQuery(query))
+    fun dismissAccessMessage() = onIntent(ChoreographyIntent.DismissAccessMessage)
     fun createChoreography() = onIntent(ChoreographyIntent.CreateChoreography)
     fun createChoreography(name: String, style: String) =
         onIntent(ChoreographyIntent.CreateNamed(name, style))

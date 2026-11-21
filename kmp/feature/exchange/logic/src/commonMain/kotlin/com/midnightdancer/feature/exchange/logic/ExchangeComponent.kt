@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.collect
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.doOnDestroy
+import com.midnightdancer.core.domain.exchange.ExportCatalogSnapshot
 import com.midnightdancer.core.domain.exchange.ExportPackageSelection
 import com.midnightdancer.core.domain.exchange.ExportPickKind
 import com.midnightdancer.core.domain.exchange.PackageExportLimits
@@ -44,12 +45,17 @@ interface ExchangeComponent {
     fun refreshDiskGate() = onIntent(ExchangeIntent.RefreshDiskGate)
 }
 
+fun interface LocalSetCatalogLoader {
+    suspend fun load(): ExportCatalogSnapshot
+}
+
 class DefaultExchangeComponent(
     componentContext: ComponentContext,
     private val exchangeZip: ExchangeZipUseCase? = null,
     private val deviceStorage: DeviceStorage? = null,
     private val savedSetsPersister: SavedSetsPersister? = null,
     private val danceStyles: ManageDanceStyles? = null,
+    private val localSetCatalog: LocalSetCatalogLoader? = null,
 ) : ExchangeComponent, ComponentContext by componentContext {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -155,6 +161,7 @@ class DefaultExchangeComponent(
             is ExchangeIntent.SelectExportStyle -> performSelectExportStyle(intent.styleId)
             ExchangeIntent.DismissExportDialog -> dismissExportDialog()
             ExchangeIntent.ConfirmExport -> performConfirmExport()
+            ExchangeIntent.ConfirmLocalSet -> performConfirmExport(exportArchive = false)
             is ExchangeIntent.OpenExportPick -> openExportPick(intent.kind)
             ExchangeIntent.DismissExportPick ->
                 _uiState.update {
@@ -305,14 +312,14 @@ class DefaultExchangeComponent(
 
     private fun loadExportCatalog() {
         val useCase = exchangeZip
-        if (useCase == null) {
+        if (useCase == null && localSetCatalog == null) {
             _uiState.update { it.copy(exportCatalogLoading = false, exportValidationError = "Материалы сета сейчас недоступны") }
             return
         }
         _uiState.update { it.copy(exportCatalogLoading = true) }
         val generation = formGeneration
         scope.launch {
-            val catalog = try { useCase.loadExportCatalog().let { raw ->
+            val catalog = try { (useCase?.loadExportCatalog() ?: checkNotNull(localSetCatalog).load()).let { raw ->
                 danceStyles?.state?.value?.let { raw.normalizeLocalCatalog(it) } ?: raw
             } } catch (e: CancellationException) { throw e }
                 catch (_: Exception) {
@@ -797,7 +804,7 @@ class DefaultExchangeComponent(
         _uiState.update { it.copy(exportValidationError = message, lastActionLabel = message) }
     }
 
-    private fun performConfirmExport() {
+    private fun performConfirmExport(exportArchive: Boolean = true) {
         val state = _uiState.value.withExportWeight()
         if (state.viewingImportedSet || !state.showExportDialog) return
         if (state.busy) {
@@ -837,6 +844,7 @@ class DefaultExchangeComponent(
             it.copy(showExportDialog = false, editingSetId = null, isCreateSetFlow = false,
                 exportSetName = "", exportValidationError = null, returnToMySets = false, hubTab = SetHubTab.Mine)
         }
+        if (!exportArchive) return
         runZip {
             val r = exchangeZip?.export(selection)
             performRefreshDiskGate()

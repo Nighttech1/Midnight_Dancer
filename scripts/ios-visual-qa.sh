@@ -76,6 +76,7 @@ set +e
 xcodebuild -project "$PROJECT" -scheme iosApp -configuration Debug \
   -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$DERIVED" \
   -resultBundlePath "$OUT/VisualSmoke.xcresult" -parallel-testing-enabled NO \
+  -only-testing:iosAppCryptoTests/MdanceV1CodecTests \
   -only-testing:iosAppUITests/VisualSmokeTests/testColdSplashTransitionAndFiveTabsAndSettings \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   test-without-building 2>&1 | tee "$OUT/tests.log"
@@ -90,9 +91,33 @@ if [[ -d "$OUT/VisualSmoke.xcresult" ]]; then
   fi
 fi
 if [[ "$TEST_STATUS" -eq 0 ]]; then
-  PNG_COUNT="$(find "$OUT/screenshots" -type f -iname '*.png' | wc -l | tr -d ' ')"
-  if [[ "$PNG_COUNT" -lt 12 ]]; then
-    echo "Expected twelve named screenshots; only $PNG_COUNT PNG attachments exported." | tee -a "$OUT/attachment-export.log"
+  if ! python3 - "$OUT" <<'PY'
+import json, sys
+from pathlib import Path
+
+out = Path(sys.argv[1])
+screens = out / "screenshots"
+expected = {
+    "01-cold-splash-ready", "02-after-splash-transition",
+    "03-tab-elements", "04-tab-music", "05-tab-choreography",
+    "06-tab-trainer", "07-tab-exchange", "08-settings-top",
+    "09-settings-scrolled", "10-settings-closed", "11-element-editor",
+    "12-choreography-editor", "13-set-editor", "14-set-empty-validation",
+}
+groups = json.loads((screens / "manifest.json").read_text())
+attachments = {
+    item["suggestedHumanReadableName"].split("_", 1)[0]
+    for group in groups for item in group["attachments"]
+    if item["exportedFileName"].endswith(".png") and (screens / item["exportedFileName"]).is_file()
+}
+missing = expected - attachments
+if missing:
+    raise SystemExit(f"Missing named screenshot attachments: {', '.join(sorted(missing))}")
+recording = out / "cold-and-navigation.mp4"
+if not recording.is_file() or recording.stat().st_size == 0:
+    raise SystemExit("Cold-launch recording is missing or empty")
+PY
+  then
     TEST_STATUS=65
   fi
 fi
