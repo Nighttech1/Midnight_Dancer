@@ -186,7 +186,7 @@ final class VisualSmokeTests: XCTestCase {
             let tree = XCTAttachment(string: app.debugDescription)
             tree.name = "Photos picker accessibility on timeout"
             tree.lifetime = .keepAlways
-            add(tree)
+            self.add(tree)
         }
         XCTAssertEqual(waiting, .completed, "The disposable video must appear in the system Photos picker")
         (collectionItem.isHittable ? collectionItem : accessibleItem).tap()
