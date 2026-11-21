@@ -58,6 +58,7 @@ struct SetsEditorView: View {
                 .padding(.vertical, 10)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sets.editor")
     }
 
@@ -393,6 +394,7 @@ private struct SetsSectionPickerView: View {
             }
         }
         .padding(.horizontal, MdChrome.contentHorizontalPadding)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sets.picker.\(picker.kind.rawValue)")
     }
 

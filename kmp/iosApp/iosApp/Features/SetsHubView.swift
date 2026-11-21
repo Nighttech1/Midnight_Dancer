@@ -170,15 +170,6 @@ struct SetsHubView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(MdColor.oledTrueBlack)
         .accessibilityIdentifier("sets.hub")
-        .fullScreenCover(isPresented: Binding(
-            get: { snapshot.editor != nil },
-            set: { if !$0 && snapshot.editor != nil { actions.closeEditor() } }
-        )) {
-            if let editor = snapshot.editor {
-                SetsEditorView(snapshot: editor, actions: actions, busy: snapshot.busy)
-                    .interactiveDismissDisabled()
-            }
-        }
         .sheet(item: Binding<SetShareFile?>(
             get: { snapshot.sharePath.map(SetShareFile.init) },
             set: { if $0 == nil { actions.dismissShare() } }

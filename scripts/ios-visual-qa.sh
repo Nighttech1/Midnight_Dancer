@@ -65,7 +65,10 @@ CONFIGURATION=Debug PREPARE_ONLY=1 ./scripts/build-kmp-ios-ipa.sh iphonesimulato
 PROJECT="$ROOT/kmp/iosApp/MidnightDancerIos.xcodeproj"
 DERIVED="$(mktemp -d "${TMPDIR:-/tmp}/midnight-visual-qa.XXXXXXXX")"
 FIXTURE="$ROOT/kmp/iosApp/iosApp/Resources/video/splash_boot.mp4"
+# Initialize the system Photos library on this disposable simulator before seeding it.
+xcrun simctl launch "$SIM_ID" com.apple.mobileslideshow
 xcrun simctl addmedia "$SIM_ID" "$FIXTURE"
+xcrun simctl terminate "$SIM_ID" com.apple.mobileslideshow
 xcodebuild -project "$PROJECT" -scheme iosApp -configuration Debug \
   -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$DERIVED" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \

@@ -116,9 +116,21 @@ final class VisualSmokeTests: XCTestCase {
         XCTAssertTrue(photo.isHittable)
         photo.tap()
 
-        let media = app.collectionViews.cells.firstMatch
-        XCTAssertTrue(media.waitForExistence(timeout: 20), "The disposable video must appear in Photos")
-        media.tap()
+        let collectionItem = app.collectionViews.cells.firstMatch
+        let videoLabel = NSPredicate(format: "label BEGINSWITH[c] %@ OR identifier CONTAINS[c] %@", "Video", "VideoCell")
+        let accessibleItem = app.descendants(matching: .any).matching(videoLabel).firstMatch
+        let loaded = NSPredicate { _, _ in collectionItem.isHittable || accessibleItem.isHittable }
+        let pickerReady = XCTNSPredicateExpectation(predicate: loaded, object: nil)
+        let waiting = XCTWaiter.wait(for: [pickerReady], timeout: 40)
+        capture("18-photos-picker", app: app)
+        if waiting != .completed {
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.name = "Photos picker accessibility on timeout"
+            tree.lifetime = .keepAlways
+            add(tree)
+        }
+        XCTAssertEqual(waiting, .completed, "The disposable video must appear in the system Photos picker")
+        (collectionItem.isHittable ? collectionItem : accessibleItem).tap()
         let confirmPhoto = app.navigationBars.buttons["Add"]
         if confirmPhoto.exists && confirmPhoto.isHittable { confirmPhoto.tap() }
 

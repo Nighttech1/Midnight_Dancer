@@ -17,9 +17,13 @@ struct MainShellView: View {
 
     var body: some View {
         ZStack {
-            tabScaffold
-                .opacity(chrome.settings == nil ? 1 : 0.35)
-                .allowsHitTesting(chrome.settings == nil)
+            if let sets = activeSets, let editor = sets.editor, let actions = tabActions.sets {
+                SetsEditorView(snapshot: editor, actions: actions, busy: sets.busy)
+            } else {
+                tabScaffold
+                    .opacity(chrome.settings == nil ? 1 : 0.35)
+                    .allowsHitTesting(chrome.settings == nil)
+            }
 
             if let settings = chrome.settings {
                 SettingsScreenView(
@@ -47,6 +51,12 @@ struct MainShellView: View {
         }
         .animation(navAnimation, value: chrome.settings != nil)
         .onAppear { MdHaptics.prepare() }
+    }
+
+    private var activeSets: SetsHubSnapshot? {
+        guard let tab = chrome.tabs.first(where: { $0.id == chrome.selectedTabIndex }),
+              case .exchange(let sets) = tab.feature else { return nil }
+        return sets
     }
 
     private var tabScaffold: some View {
