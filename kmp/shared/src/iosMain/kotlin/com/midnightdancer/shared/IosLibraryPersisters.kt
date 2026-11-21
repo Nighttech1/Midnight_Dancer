@@ -39,7 +39,7 @@ internal class IosSavedSetsPersister(private val styles: ManageDanceStyles) : Sa
                 moveIds = row.strings("moveIds"), songIds = row.strings("songIds"), choreoIds = row.strings("choreoIds"),
                 estimatedBytes = row.number("estimatedBytes"), updatedAt = row.number("updatedAt"),
                 origin = SavedSetOrigin.valueOf(row.text("origin") ?: "Mine"),
-                tags = row.strings("tags"), archivePath = row.text("archivePath"),
+                tags = row.strings("tags"), archivePath = row.text("archivePath")?.let(::resolveArchivePath),
             )
         }
     } }
@@ -58,7 +58,7 @@ internal class IosSavedSetsPersister(private val styles: ManageDanceStyles) : Sa
                 put("moveIds", set.moveIds.json()); put("songIds", set.songIds.json()); put("choreoIds", set.choreoIds.json())
                 put("estimatedBytes", JsonPrimitive(set.estimatedBytes)); put("updatedAt", JsonPrimitive(set.updatedAt))
                 put("origin", JsonPrimitive(set.origin.name)); put("tags", set.tags.json())
-                if (set.archivePath == null) remove("archivePath") else put("archivePath", JsonPrimitive(set.archivePath))
+                if (set.archivePath == null) remove("archivePath") else put("archivePath", JsonPrimitive(portableArchivePath(set.archivePath)))
             })
         }
         val root = JsonObject(previous.orEmpty().toMutableMap().apply {
@@ -75,7 +75,24 @@ internal class IosSavedSetsPersister(private val styles: ManageDanceStyles) : Sa
 
     override fun retainArchive(sourcePath: String, setId: String): String {
         require(setId.matches(Regex("[a-zA-Z0-9_-]+"))) { "invalid_set_id" }
-        return IosDurableTextFile("saved_set_archives/$setId.dance").retainCopy(sourcePath)
+        val extension = if (sourcePath.substringAfterLast('.').equals("zip", ignoreCase = true)) "zip" else "dance"
+        return IosDurableTextFile("saved_set_archives/$setId.$extension").retainCopy(sourcePath)
+    }
+
+    // Older versions stored an absolute path inside Documents. Convert only our owned archive names.
+    private fun portableArchivePath(path: String): String {
+        val name = path.substringAfterLast('/')
+        if (!name.matches(Regex("[a-zA-Z0-9_-]+\\.(dance|zip)"))) return path
+        return if (path == "saved_set_archives/$name" ||
+            path.startsWith('/') && path.endsWith("/Documents/saved_set_archives/$name")) "saved_set_archives/$name"
+        else path
+    }
+
+    private fun resolveArchivePath(path: String): String {
+        val stored = portableArchivePath(path)
+        return if (stored.startsWith("saved_set_archives/") &&
+            stored.substringAfter('/').matches(Regex("[a-zA-Z0-9_-]+\\.(dance|zip)"))) IosDurableTextFile(stored).absolutePath
+        else stored
     }
 
     private fun JsonObject.text(key: String): String? {

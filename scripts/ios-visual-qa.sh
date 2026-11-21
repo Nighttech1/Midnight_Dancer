@@ -126,4 +126,14 @@ PY
   fi
 fi
 printf 'XCUITest exit status: %s\n' "$TEST_STATUS" | tee "$OUT/status.txt"
-exit "$TEST_STATUS"
+set +e
+(
+  cd "$ROOT/kmp"
+  ./gradlew :core:data:iosSimulatorArm64Test :shared:iosSimulatorArm64Test --continue --no-daemon --console=plain
+) 2>&1 | tee "$OUT/kotlin-ios-tests.log"
+KOTLIN_TEST_STATUS=$?
+set -e
+printf 'Kotlin iOS test exit status: %s\n' "$KOTLIN_TEST_STATUS" | tee -a "$OUT/status.txt"
+if [[ "$TEST_STATUS" -ne 0 ]]; then exit "$TEST_STATUS"; fi
+exit "$KOTLIN_TEST_STATUS"
+

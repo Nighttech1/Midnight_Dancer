@@ -96,7 +96,7 @@ object IosLibraryBootstrap {
                 val preserveCreationAccess = when (recorded) {
                     "legacy" -> true
                     "free" -> false
-                    null -> ownChoreographyCount(readyItems) > 0
+                    null -> repository.isIosLegacyCatalogMigrated() || ownChoreographyCount(readyItems) > 0
                     else -> error("invalid_creation_access_flag")
                 }
                 if (recorded == null) accessFlag.write(if (preserveCreationAccess) "legacy" else "free")

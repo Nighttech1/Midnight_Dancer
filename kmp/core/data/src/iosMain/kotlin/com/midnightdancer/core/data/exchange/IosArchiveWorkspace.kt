@@ -33,8 +33,9 @@ internal class IosArchiveWorkspace(privateRoot: String, private val storage: Dev
     }
     fun source(raw: String): Path {
         // Paths are provided by the native owned-media resolver/picker. Never guess alternate files.
-        require(raw.startsWith('/') && !raw.contains("://")) { "archive_requires_local_absolute_path" }
-        val path = raw.toPath()
+        val effective = if (raw.startsWith(IosImportedMediaReference.PREFIX)) IosImportedMediaReference.resolve(root.toString(), raw) else raw
+        require(effective.startsWith('/') && !effective.contains("://")) { "archive_requires_local_absolute_path" }
+        val path = effective.toPath()
         require(fs.metadata(path).isRegularFile && fs.metadata(path).symlinkTarget == null) { "archive_source_unavailable" }
         return fs.canonicalize(path)
     }

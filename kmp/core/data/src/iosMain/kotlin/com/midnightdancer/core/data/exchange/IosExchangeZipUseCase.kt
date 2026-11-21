@@ -21,7 +21,7 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import platform.Foundation.NSUUID
 
-/** Operational export/inspection only. Import is fail-closed until a catalog+vault+media transaction is supplied. */
+/** Operational archive exchange; import remains fail-closed without the mandatory exclusive writer integration. */
 @OptIn(ExperimentalForeignApi::class)
 class IosExchangeZipUseCase(
     private val library: LoadLibrary,
@@ -31,6 +31,7 @@ class IosExchangeZipUseCase(
     private val mediaReferenceResolver: (String) -> String = { it },
     private val privateRoot: String = platformDocumentsDirectoryPath(),
     private val bundleId: String = "com.midnightdancer.app",
+    private val importLibraryAccess: IosImportLibraryAccess? = null,
 ) : ExchangeZipUseCase {
     private val mutex = Mutex()
     private val inspector = IosArchiveInspector(storage, containerCodec, privateRoot, bundleId)
@@ -59,8 +60,14 @@ class IosExchangeZipUseCase(
             }
         }
     }
-    override suspend fun import(preferredPath: String?, contentFilter: ImportContentFilter, stylePlan: StyleImportPlan): ExchangeZipResult =
-        ExchangeZipResult.Failed("Импорт на iOS ещё не подключён: существующие данные сохранены", listOf("ios_import_transaction_unavailable"))
+    override suspend fun import(preferredPath: String?, contentFilter: ImportContentFilter, stylePlan: StyleImportPlan): ExchangeZipResult {
+        val access = importLibraryAccess ?: return ExchangeZipResult.Failed("Импорт на iOS ещё не подключён: существующие данные сохранены", listOf("ios_import_transaction_unavailable"))
+        if (preferredPath.isNullOrBlank()) return ExchangeZipResult.Failed("Выберите архив для импорта", listOf("archive_missing"))
+        return mutex.withLock {
+            IosArchiveImportTransaction(access, storage, containerCodec, privateRoot, bundleId, choreographyBridge, mediaReferenceResolver)
+                .importArchive(preferredPath, contentFilter, stylePlan)
+        }
+    }
 
     override suspend fun peekImport(preferredPath: String?): ImportPeek? = withContext(Dispatchers.IO) {
         if (preferredPath.isNullOrBlank()) return@withContext null
@@ -72,7 +79,8 @@ class IosExchangeZipUseCase(
         val styles = data.danceStyles.map { StyleRef(it.id, it.name.ifBlank { it.id }) }.toMutableList()
         fun canonical(value: String): String = styles.firstOrNull { it.id == value || it.id.equals(value, true) || it.name.equals(value, true) }?.id ?: value
         fun bytes(reference: String): Long = runCatching {
-            val raw = mediaReferenceResolver(reference)
+            val resolved = mediaReferenceResolver(reference)
+            val raw = if (resolved.startsWith(IosImportedMediaReference.PREFIX)) IosImportedMediaReference.resolve(privateRoot, resolved) else resolved
             require(raw.startsWith('/') && !raw.contains("://"))
             FileSystem.SYSTEM.metadata(raw.toPath()).size ?: 0L
         }.getOrDefault(0L)

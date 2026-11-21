@@ -1,7 +1,6 @@
 package com.midnightdancer.shared
 
 import com.midnightdancer.core.domain.entity.AppData
-import com.midnightdancer.core.domain.entity.Choreography
 import com.midnightdancer.core.domain.styles.projectVaultStyleJson
 import com.midnightdancer.core.domain.timeline.ChoreographyTimelineRef
 import com.midnightdancer.feature.choreography.logic.ChoreographyVaultItem
@@ -91,7 +90,7 @@ internal class IosChoreographyExportBridge(
             val mapped = resolvedMedia[reference] ?: error("editor_media_missing")
             val local = archive.resolveMedia(mapped) ?: error("editor_media_unavailable")
             require(local.startsWith('/') && '\u0000' !in local && archive.mediaSize(local) > 0) { "editor_media_unavailable" }
-            return value.copy(mediaUri = local)
+            return value.copy(mediaUri = mapped)
         }
         val resolved = incoming.map { item ->
             require(item.id.isNotBlank() && item.songPlaybackSpeed.isFinite() && item.songPlaybackSpeed in 0.1..10.0) { "invalid_editor_item" }
@@ -112,6 +111,7 @@ internal class IosChoreographyExportBridge(
             override fun commit() = withImportLock {
                 check(!rolledBack) { "editor_import_already_rolled_back" }
                 if (committed) return@withImportLock
+                check(written.isEmpty()) { "editor_import_failed_write_requires_rollback" }
                 val beforeRaw = vault.readRaw()
                 val before = document(beforeRaw)
                 val previous = before.getValue("items").jsonArray
@@ -204,8 +204,15 @@ internal class IosChoreographyExportBridge(
                         reference.isBlank() -> null
                         scoped != null -> data.danceStyles.singleOrNull { it.id == scoped.styleId }?.moves?.singleOrNull { it.id == scoped.moveId }
                         "::" in reference -> null
-                        else -> own.singleOrNull { it.id == reference } ?: own.singleOrNull { it.name == reference }
-                            ?: all.singleOrNull { it.id == reference }
+                        else -> {
+                            val ownIds = own.filter { it.id == reference }
+                            val ownNames = own.filter { it.name == reference }
+                            when {
+                                ownIds.isNotEmpty() -> ownIds.singleOrNull()
+                                ownNames.isNotEmpty() -> ownNames.singleOrNull()
+                                else -> all.singleOrNull { it.id == reference }
+                            }
+                        }
                     }
                     require(reference.isBlank() || move != null) { "legacy_move_missing_or_ambiguous" }
                     val video = move?.let {
