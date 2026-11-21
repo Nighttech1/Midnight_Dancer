@@ -50,7 +50,8 @@ targets:
       path: iosApp/Info.plist
       properties:
         CFBundleDisplayName: Midnight Dancer
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIAppFonts:
           - noto_serif_regular.ttf
           - noto_serif_bold.ttf
