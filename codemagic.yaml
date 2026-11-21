@@ -363,3 +363,28 @@ workflows:
       - ios-build/visual-qa/**/*.json
       - ios-build/visual-qa/**/*.tsv
       - ios-build/visual-qa/**/*.mp4
+
+  ios-kmp-native-storage-qa:
+    name: KMP iOS native storage QA
+    instance_type: mac_mini_m2
+    max_build_duration: 40
+    environment:
+      xcode: latest
+      java: 17
+    cache:
+      cache_paths:
+        - ~/.gradle/caches
+    scripts:
+      - name: Import, archive and shared iOS unit tests
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          mkdir -p ios-build/native-qa
+          git rev-parse HEAD > ios-build/native-qa/revision.txt
+          chmod +x kmp/gradlew
+          cd kmp
+          ./gradlew :core:data:iosSimulatorArm64Test :shared:iosSimulatorArm64Test --continue --no-daemon --console=plain 2>&1 | tee "$CM_BUILD_DIR/ios-build/native-qa/tests.log"
+    artifacts:
+      - ios-build/native-qa/**
+      - kmp/core/data/build/test-results/iosSimulatorArm64Test/**
+      - kmp/shared/build/test-results/iosSimulatorArm64Test/**

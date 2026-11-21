@@ -146,6 +146,7 @@ class IosSecureZipArchive(privateRoot: String = platformDocumentsDirectoryPath()
         sources.forEach { validateName(it.archivePath, false) }
         privateDirectory(checkNotNull(output.parent))
         if (fs.exists(output)) confined(output)
+        val outputIdentity = if (fs.exists(output)) fs.canonicalize(output) else fs.canonicalize(checkNotNull(output.parent)) / output.name
         val temporary = checkNotNull(output.parent) / (".zip-" + NSUUID().UUIDString + ".tmp")
         val entries = mutableListOf<IosZipMember>()
         var position = 0L
@@ -155,7 +156,7 @@ class IosSecureZipArchive(privateRoot: String = platformDocumentsDirectoryPath()
                     for (source in sources) {
                         checkCancellation()
                         val path = source.sourcePath.toPath()
-                        require(fs.metadata(path).isRegularFile && fs.canonicalize(path) != output) { "zip_invalid_source" }
+                        require(fs.metadata(path).isRegularFile && fs.canonicalize(path) != outputIdentity) { "zip_invalid_source" }
                         val size = fs.metadata(path).size ?: error("zip_unknown_source_size")
                         require(size in 0..MAX_ARCHIVE_BYTES && position + size <= MAX_ARCHIVE_BYTES) { "zip_size_limit" }
                         if (source.archivePath == "metadata.json") require(size <= SecureZipMetadataLimits.MAX_METADATA_JSON_BYTES) { "zip_metadata_size_limit" }
@@ -298,13 +299,16 @@ class IosSecureZipArchive(privateRoot: String = platformDocumentsDirectoryPath()
         return crc.value
     }
     private fun privateDirectory(path: Path) {
-        require(path.isAbsolute && path.toString().split('/').none { it == "." || it == ".." } &&
-            (path == root || path.toString().startsWith(root.toString() + "/"))) { "zip_output_outside_private_root" }
+        require(path.isAbsolute && path.toString().split('/').none { it == "." || it == ".." }) { "zip_output_outside_private_root" }
         var existing = path
         while (!fs.exists(existing)) existing = checkNotNull(existing.parent)
-        confined(existing) // Check before mkdirs, including an existing ancestor symlink.
-        fs.createDirectories(path)
+        // Foundation may return /var/... while realpath(root) is /private/var/....
+        // Authorize the actual existing ancestor, not an installation-specific lexical prefix.
+        confined(existing) // Still rejects a symlink leading outside the private root BEFORE mkdirs.
+        require(fs.metadata(fs.canonicalize(existing)).isDirectory) { "zip_output_parent_not_directory" }
+        if (!fs.exists(path)) fs.createDirectories(path)
         confined(path)
+        require(fs.metadata(fs.canonicalize(path)).isDirectory) { "zip_output_parent_not_directory" }
     }
     private fun confined(path: Path) {
         val canonical = fs.canonicalize(path).toString()

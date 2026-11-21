@@ -105,6 +105,31 @@ class IosSecureZipArchiveTest {
         assertFalse(fs.exists(root / "exchange"))
     }
 
+    @Test fun canonical_equivalent_root_alias_can_write_and_cannot_overwrite_its_own_source() = fixture { _, root ->
+        val actual = root / "private-directory"; fs.createDirectory(actual, mustCreate = true)
+        val alias = root / "root-alias"; fs.createSymlink(alias, actual)
+        val archive = IosSecureZipArchive(actual.toString())
+        val metadataSource = root / "metadata-source"; write(metadataSource, metadata.encodeToByteArray())
+        val output = alias / "export.zip"
+        archive.writeStoredArchive(output.toString(), listOf(IosZipSource("metadata.json", metadataSource.toString())))
+        assertEquals(metadata, archive.metadata((actual / "export.zip").toString()))
+        assertEquals(metadata, read(metadataSource).decodeToString())
+        val sourceAndOutput = actual / "same.zip"; write(sourceAndOutput, metadata.encodeToByteArray())
+        assertFails { archive.writeStoredArchive((alias / "same.zip").toString(), listOf(IosZipSource("metadata.json", sourceAndOutput.toString()))) }
+        assertEquals(metadata, read(sourceAndOutput).decodeToString())
+    }
+
+    @Test fun canonical_ancestor_outside_private_root_still_fails_before_creating_any_directory() = fixture { _, root ->
+        val actual = root / "private-directory"; fs.createDirectory(actual, mustCreate = true)
+        val outside = root / "outside-directory"; fs.createDirectory(outside, mustCreate = true)
+        fs.createSymlink(actual / "escape", outside)
+        val source = root / "metadata-source"; write(source, metadata.encodeToByteArray())
+        val requested = actual / "escape" / "must-not-be-created" / "export.zip"
+        assertFails { IosSecureZipArchive(actual.toString()).writeStoredArchive(requested.toString(), listOf(IosZipSource("metadata.json", source.toString()))) }
+        assertFalse(fs.exists(outside / "must-not-be-created"))
+        assertEquals(metadata, read(source).decodeToString())
+    }
+
     private companion object {
         const val DEFLATE_DESCRIPTOR = "UEsDBBQACAAIAPKMdV0AAAAAAAAAAAAAAAANAAAAbWV0YWRhdGEuanNvbqtWSknMS04NLqnMSS1WsoqO1VEqzs9LhzKTM/KLUvPTixILMjLh0qklJZlgFdW1tQBQSwcI0DQABDEAAAA/AAAAUEsDBBQACAAIAPKMdV0AAAAAAAAAAAAAAAAMAAAAdmlkZW9zL2EubXA0S8usKCktStXNTU3JTNRNqixJ1U3OzytJzSsBAFBLBwh7K0lVHAAAABoAAABQSwECFAAUAAgACADyjHVd0DQABDEAAAA/AAAADQAAAAAAAAAAAAAAgAEAAAAAbWV0YWRhdGEuanNvblBLAQIUABQACAAIAPKMdV17K0lVHAAAABoAAAAMAAAAAAAAAAAAAACAAWwAAAB2aWRlb3MvYS5tcDRQSwUGAAAAAAIAAgB1AAAAwgAAAAAA"
         const val ZIP_SLIP = "UEsDBBQACAAIAPKMdV0AAAAAAAAAAAAAAAANAAAAbWV0YWRhdGEuanNvbqtWSknMS04NLqnMSS1WsoqO1VEqzs9LhzKTM/KLUvPTixILMjLh0qklJZlgFdW1tQBQSwcI0DQABDEAAAA/AAAAUEsDBBQACAAIAPKMdV0AAAAAAAAAAAAAAAANAAAALi4vZXNjYXBlLm1wNEvLrCgpLUrVzU1NyUzUTaosSdVNzs8rSc0rAQBQSwcIeytJVRwAAAAaAAAAUEsBAhQAFAAIAAgA8ox1XdA0AAQxAAAAPwAAAA0AAAAAAAAAAAAAAIABAAAAAG1ldGFkYXRhLmpzb25QSwECFAAUAAgACADyjHVdeytJVRwAAAAaAAAADQAAAAAAAAAAAAAAgAFsAAAALi4vZXNjYXBlLm1wNFBLBQYAAAAAAgACAHYAAADDAAAAAAA="

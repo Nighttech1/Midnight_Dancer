@@ -135,6 +135,7 @@ struct ElementEditSheet: View {
             ElementVideoPreview(url: url, tint: flame, suspended: busy || choosingFile)
                 .id(url)
                 .accessibilityElement(children: .contain)
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("element.player")
         } else if draft.videoUri != nil {
             Label("Видео недоступно", systemImage: "exclamationmark.triangle")

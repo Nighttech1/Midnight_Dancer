@@ -175,31 +175,46 @@ final class VisualSmokeTests: XCTestCase {
         XCTAssertTrue(photo.isHittable)
         photo.tap()
 
-        let collectionItem = app.collectionViews.cells.firstMatch
-        let videoLabel = NSPredicate(format: "label BEGINSWITH[c] %@ OR identifier CONTAINS[c] %@", "Video", "VideoCell")
-        let accessibleItem = app.descendants(matching: .any).matching(videoLabel).firstMatch
-        let loaded = NSPredicate { _, _ in collectionItem.isHittable || accessibleItem.isHittable }
+        let videos = app.segmentedControls["Videos"]
+        let cells = app.cells.firstMatch
+        let mediaLabel = NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR identifier CONTAINS[c] %@",
+                                     "0:05", "5 seconds", "VideoCell")
+        let accessibleItem = app.descendants(matching: .any).matching(mediaLabel).firstMatch
+        let loaded = NSPredicate { _, _ in cells.isHittable || accessibleItem.isHittable || videos.exists }
         let pickerReady = XCTNSPredicateExpectation(predicate: loaded, object: nil)
         let waiting = XCTWaiter.wait(for: [pickerReady], timeout: 40)
         capture("18-photos-picker", app: app)
-        if waiting != .completed {
-            let tree = XCTAttachment(string: app.debugDescription)
-            tree.name = "Photos picker accessibility on timeout"
-            tree.lifetime = .keepAlways
-            self.add(tree)
+        XCTAssertEqual(waiting, .completed, "The system Photos picker must finish loading")
+
+        if cells.isHittable {
+            cells.tap()
+        } else if accessibleItem.isHittable {
+            accessibleItem.tap()
+        } else {
+            // The remote Photos view can hide thumbnail accessibility. The fresh simulator
+            // contains one seeded video, in the first tile of the Videos tab.
+            XCTAssertTrue(videos.exists)
+            let showsAccessNotice = app.staticTexts["Private Access to Photos"].exists
+            let y = showsAccessNotice ? 0.43 : 0.24
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: CGFloat(y))).tap()
         }
-        XCTAssertEqual(waiting, .completed, "The disposable video must appear in the system Photos picker")
-        (collectionItem.isHittable ? collectionItem : accessibleItem).tap()
         let confirmPhoto = app.navigationBars.buttons["Add"]
         if confirmPhoto.exists && confirmPhoto.isHittable { confirmPhoto.tap() }
-
-        for _ in 0..<3 where !element("element.player", app: app).isHittable { app.swipeDown() }
-        XCTAssertTrue(element("element.player", app: app).waitForExistence(timeout: 25))
+        let play = app.buttons["element.preview.play"]
+        guard play.waitForExistence(timeout: 25) else {
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.name = "Photos selection and preview accessibility"
+            tree.lifetime = .keepAlways
+            self.add(tree)
+            capture("photo-selection-failure", app: app)
+            XCTFail("The selected video must open in the element player")
+            return
+        }
         capture("15-photo-imported-preview", app: app)
         for _ in 0..<3 where !name.isHittable { app.swipeDown() }
         XCTAssertTrue(name.isHittable)
         name.tap()
-        let title = "QA media parity"
+        let title = "QA Media"
         name.typeText(title)
         let save = app.buttons["element.save"]
         if !save.isHittable { app.swipeUp() }
@@ -214,7 +229,7 @@ final class VisualSmokeTests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 12))
         capture("16-photo-library-after-restart", app: app)
         card.tap()
-        XCTAssertTrue(element("element.player", app: app).waitForExistence(timeout: 12))
+        XCTAssertTrue(play.waitForExistence(timeout: 12))
         capture("17-photo-reopened-after-restart", app: app)
     }
 

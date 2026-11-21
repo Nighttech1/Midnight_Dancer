@@ -10,6 +10,7 @@ import com.midnightdancer.core.navigation.RootComponent
 import com.midnightdancer.feature.splash.logic.SplashIntent
 import org.koin.core.context.stopKoin
 import org.koin.core.parameter.parametersOf
+import org.koin.mp.KoinPlatform
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -50,7 +51,7 @@ class SharedSmokeTest {
         val lifecycle = LifecycleRegistry()
         val context = DefaultComponentContext(lifecycle = lifecycle)
         val root: RootComponent =
-            org.koin.core.context.GlobalContext.get().get(parameters = { parametersOf(context) })
+            KoinPlatform.getKoin().get { parametersOf(context) }
         lifecycle.resume()
         val splash = root.stack.value.active.instance
         if (splash is RootComponent.Child.Splash) {
