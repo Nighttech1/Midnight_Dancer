@@ -16,7 +16,7 @@ struct CyberAcousticDockView: View {
                     MdHaptics.perform(.selection)
                 } label: {
                     Image(systemName: tab.systemImage)
-                        .font(.system(size: 30, weight: selected ? .semibold : .regular))
+                        .font(.system(size: MdChrome.tabIconSize, weight: selected ? .semibold : .regular))
                         .foregroundStyle(selected ? MdColor.neonOrange : Color.white.opacity(0.45))
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)

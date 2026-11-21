@@ -14,36 +14,51 @@ struct TrainerChoreographyPanel: View {
             }
             .disabled(snapshot.active)
             .accessibilityIdentifier("trainer.choreography.choice")
+            HStack {
+                Text("Часть хореографии").font(MdType.brandedBody)
+                Spacer()
+                if !snapshot.accessGranted {
+                    Button("PRO") { actions.part("offer") }
+                        .font(MdType.brandedControl)
+                        .accessibilityIdentifier("trainer.part.offer")
+                }
+            }
             Button { actions.part("toggle") } label: {
                 HStack {
-                    Text("Часть хореографии")
+                    Text(snapshot.accessGranted ? "Начало — конец" : "Доступно в Pro")
                     Spacer()
-                    Text("Pro").font(.caption.bold())
                     Image(systemName: snapshot.partExpanded ? "chevron.up" : "chevron.down")
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .padding(12)
+                .font(MdType.brandedBody)
+                .foregroundStyle(snapshot.accessGranted ? MdColor.textPrimary : MdColor.textSecondary)
+                .padding(.horizontal, 12)
                 .frame(minHeight: 44)
                 .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(MdColor.neonOrange.opacity(0.5))))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(snapshot.accessGranted && snapshot.partExpanded
+                        ? MdColor.neonOrange.opacity(0.5) : MdColor.surfaceBorder)))
             }
+            .buttonStyle(.plain)
+            .disabled(!snapshot.accessGranted || snapshot.selectedID.isEmpty)
             .accessibilityIdentifier("trainer.part.open")
-            if snapshot.partExpanded {
+            if snapshot.partExpanded && snapshot.accessGranted {
                 VStack(spacing: 10) {
                     HStack(spacing: 10) {
                         field("Начало", key: "start", value: snapshot.start)
                         field("Конец", key: "end", value: snapshot.end)
+                            .contextMenu {
+                                if editable {
+                                    Button("До конца") { actions.part("end") }
+                                }
+                            }
+                            .accessibilityAction(named: Text("До конца")) {
+                                if editable { actions.part("end") }
+                            }
                     }
                     HStack(spacing: 10) {
-                        field("Проходы", key: "passes", value: snapshot.passes)
+                        field("Количество проходов", key: "passes", value: snapshot.passes)
                         field("Отдых, с", key: "rest", value: snapshot.rest)
                     }
                     .opacity(editable ? 1 : 0.45)
-                    HStack {
-                        Button("До конца") { actions.part("end") }.disabled(!editable)
-                        Spacer()
-                        Text("1–99 проходов · отдых 0–120 с").font(.caption2)
-                    }
                     if snapshot.revisionNeedsConfirmation {
                         Text("Постановка изменена. Проверьте границы участка.").font(.footnote)
                         Button("Границы проверены") { actions.part("confirm") }.disabled(!editable)
@@ -68,10 +83,6 @@ struct TrainerChoreographyPanel: View {
                             Button("Сбросить") { actions.part("reset") }
                                 .disabled(!editable || snapshot.selectedID.isEmpty)
                         }
-                    }
-                    if !snapshot.accessGranted {
-                        Text(snapshot.accessLabel).font(.footnote).foregroundStyle(MdColor.textSecondary)
-                        Button("О подписке") { actions.part("offer") }
                     }
                 }
                 .padding(12)

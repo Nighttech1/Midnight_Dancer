@@ -214,6 +214,8 @@ struct SettingsScreenView: View {
                     }
                 }
                 .frame(maxHeight: 255)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("settings.styles.list")
             }
         }
         .modifier(SettingsChrome.Card())
@@ -224,12 +226,14 @@ struct SettingsScreenView: View {
             Text(style)
                 .font(MdType.brandedBody)
                 .foregroundStyle(.white)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
             if style == permanentStyle {
                 Text("Постоянный")
                     .font(.caption)
                     .foregroundStyle(MdColor.textSecondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.trailing, 10)
             } else {
                 if onRenameStyle != nil {

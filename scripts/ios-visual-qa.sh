@@ -109,7 +109,8 @@ expected = {
     "09-settings-scrolled", "10-settings-closed", "11-element-editor",
     "12-choreography-editor", "13-set-editor", "14-set-empty-validation",
     "15-photo-imported-preview", "16-photo-library-after-restart",
-    "17-photo-reopened-after-restart",
+    "17-photo-reopened-after-restart", "18-photos-picker",
+    "19-settings-style-in-elements", "20-trainer-choreography-free",
 }
 groups = json.loads((screens / "manifest.json").read_text())
 attachments = {

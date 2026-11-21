@@ -1,4 +1,5 @@
-import AVKit
+import AVFoundation
+import UIKit
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
@@ -131,8 +132,9 @@ struct ElementEditSheet: View {
 
     @ViewBuilder private var videoPreview: some View {
         if let media = draft.videoUri, let url = OwnedElementVideo.resolve(media) {
-            ElementVideoPreview(url: url)
+            ElementVideoPreview(url: url, tint: flame, suspended: busy || choosingFile)
                 .id(url)
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("element.player")
         } else if draft.videoUri != nil {
             Label("Видео недоступно", systemImage: "exclamationmark.triangle")
@@ -325,14 +327,290 @@ struct ElementEditSheet: View {
 }
 
 private struct ElementVideoPreview: View {
-    @State private var player: AVPlayer
+    let url: URL
+    let tint: Color
+    let suspended: Bool
 
-    init(url: URL) {
-        _player = State(initialValue: AVPlayer(url: url))
-    }
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var playback = ElementPreviewPlayback()
+
+    private let speeds: [(rate: Float, title: String)] = [
+        (0.5, "0.5×"), (0.75, "0.75×"), (1, "1×"), (1.25, "1.25×"), (1.5, "1.5×")
+    ]
 
     var body: some View {
-        VideoPlayer(player: player)
-            .onDisappear { player.pause() }
+        ZStack(alignment: .bottom) {
+            ElementPreviewSurface(player: playback.player)
+                .accessibilityHidden(true)
+            if playback.failed {
+                Label("Видео недоступно", systemImage: "exclamationmark.triangle")
+                    .font(MdType.bodyMedium)
+                    .foregroundStyle(MdColor.textSecondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
+            } else {
+                Button {
+                    playback.toggle()
+                } label: {
+                    Image(systemName: playback.wantsToPlay ? "pause.fill" : "play.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 62, height: 62)
+                        .background(.black.opacity(0.52), in: Circle())
+                        .overlay { Circle().strokeBorder(tint.opacity(0.72)).allowsHitTesting(false) }
+                }
+                .buttonStyle(.plain)
+                .disabled(!playback.ready || suspended || scenePhase != .active)
+                .accessibilityLabel(playback.wantsToPlay ? "Пауза" : "Воспроизвести видео")
+                .accessibilityIdentifier("element.preview.play")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                controls
+            }
+        }
+        .onAppear { playback.load(url) }
+        .onChange(of: scenePhase) { if $0 != .active { playback.pause() } }
+        .onChange(of: suspended) { if $0 { playback.pause() } }
+        .onDisappear { playback.unload() }
     }
+
+    private var controls: some View {
+        VStack(spacing: 1) {
+            HStack(spacing: 6) {
+                Text(timeLabel(playback.position))
+                Slider(
+                    value: Binding(get: { playback.position }, set: playback.seek),
+                    in: 0...max(playback.duration, 0.001),
+                    onEditingChanged: playback.setScrubbing
+                )
+                .tint(.white)
+                .disabled(playback.duration <= 0)
+                .accessibilityLabel("Позиция видео")
+                .accessibilityValue(timeLabel(playback.position))
+                .accessibilityIdentifier("element.preview.seek")
+                Text(timeLabel(playback.duration))
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.white.opacity(0.85))
+
+            HStack(spacing: 5) {
+                ForEach(speeds.indices, id: \.self) { index in
+                    let speed = speeds[index]
+                    let selected = playback.speed == speed.rate
+                    Button {
+                        playback.setSpeed(speed.rate)
+                    } label: {
+                        Text(speed.title)
+                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity, minHeight: 27)
+                            .background(selected ? tint : .black.opacity(0.65), in: Capsule())
+                            .overlay { Capsule().strokeBorder(.white.opacity(selected ? 0 : 0.24)).allowsHitTesting(false) }
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Скорость \(speed.title)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                    .accessibilityIdentifier("element.preview.speed.\(index)")
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 3)
+        .background {
+            LinearGradient(colors: [.clear, .black.opacity(0.92)], startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func timeLabel(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds >= 0, seconds < Double(Int.max) else { return "00:00" }
+        let whole = Int64(seconds)
+        return String(format: "%02lld:%02lld", whole / 60, whole % 60)
+    }
+}
+
+@MainActor
+private final class ElementPreviewPlayback: ObservableObject {
+    let player = AVPlayer()
+    @Published private(set) var ready = false
+    @Published private(set) var failed = false
+    @Published private(set) var wantsToPlay = false
+    @Published private(set) var duration = 0.0
+    @Published private(set) var position = 0.0
+    @Published private(set) var speed: Float = 1
+
+    private var timeObserver: Any?
+    private var statusObserver: NSKeyValueObservation?
+    private var endObserver: NSObjectProtocol?
+    private var failureObserver: NSObjectProtocol?
+    private var scrubbing = false
+    private var seeking = false
+    private var seekGeneration = 0
+    private var ended = false
+
+    func load(_ url: URL) {
+        unload()
+        let item = AVPlayerItem(url: url)
+        item.audioTimePitchAlgorithm = .spectral
+        player.actionAtItemEnd = .pause
+        player.replaceCurrentItem(with: item)
+        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+            Task { @MainActor in
+                guard let self, self.player.currentItem === item else { return }
+                if item.status == .failed { self.fail() }
+                else if item.status == .readyToPlay {
+                    self.updateDuration(from: item)
+                    self.ready = true
+                }
+            }
+        }
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(value: 1, timescale: 10), queue: .main
+        ) { [weak self, weak item] time in
+            Task { @MainActor in
+                guard let self, let item, self.player.currentItem === item,
+                      !self.scrubbing, !self.seeking, !self.ended else { return }
+                self.updateDuration(from: item)
+                let seconds = time.seconds
+                if seconds.isFinite && seconds >= 0 { self.position = min(seconds, self.duration) }
+            }
+        }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main
+        ) { [weak self, weak item] _ in
+            Task { @MainActor in
+                guard let self, let item, self.player.currentItem === item,
+                      !self.scrubbing, !self.seeking else { return }
+                self.pause()
+                self.ended = true
+                self.position = self.duration
+            }
+        }
+        failureObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main
+        ) { [weak self, weak item] _ in
+            Task { @MainActor in
+                guard let self, let item, self.player.currentItem === item else { return }
+                self.fail()
+            }
+        }
+    }
+
+    func toggle() {
+        guard ready else { return }
+        if wantsToPlay {
+            pause()
+        } else {
+            wantsToPlay = true
+            if ended || (duration > 0 && position >= duration) { seek(0) }
+            else { playIfReady() }
+        }
+    }
+
+    func pause() {
+        wantsToPlay = false
+        player.pause()
+    }
+
+    func setSpeed(_ value: Float) {
+        speed = value
+        playIfReady()
+    }
+
+    func setScrubbing(_ editing: Bool) {
+        scrubbing = editing
+        if editing {
+            player.pause()
+        } else {
+            playIfReady()
+        }
+    }
+
+    func seek(_ seconds: Double) {
+        guard ready, seconds.isFinite, duration > 0, let item = player.currentItem else { return }
+        position = min(max(seconds, 0), duration)
+        ended = position >= duration
+        if ended { pause() }
+        seeking = true
+        seekGeneration += 1
+        let generation = seekGeneration
+        player.pause()
+        item.cancelPendingSeeks()
+        player.seek(to: CMTime(seconds: position, preferredTimescale: 600),
+                    toleranceBefore: .zero, toleranceAfter: .zero) { [weak self, weak item] completed in
+            Task { @MainActor in
+                guard let self, let item, self.player.currentItem === item,
+                      self.seekGeneration == generation else { return }
+                self.seeking = false
+                if completed { self.playIfReady() }
+            }
+        }
+    }
+
+    func unload() {
+        pause()
+        if let timeObserver { player.removeTimeObserver(timeObserver) }
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        if let failureObserver { NotificationCenter.default.removeObserver(failureObserver) }
+        timeObserver = nil
+        endObserver = nil
+        failureObserver = nil
+        statusObserver?.invalidate()
+        statusObserver = nil
+        player.currentItem?.cancelPendingSeeks()
+        player.replaceCurrentItem(with: nil)
+        ready = false
+        failed = false
+        ended = false
+        seeking = false
+        scrubbing = false
+        position = 0
+        duration = 0
+    }
+
+    private func playIfReady() {
+        guard wantsToPlay, ready, !scrubbing, !seeking else { return }
+        player.playImmediately(atRate: speed)
+    }
+
+    private func updateDuration(from item: AVPlayerItem) {
+        let length = item.duration.seconds
+        if length.isFinite && length > 0 && length != duration { duration = length }
+    }
+
+    private func fail() {
+        pause()
+        ready = false
+        failed = true
+    }
+}
+
+private struct ElementPreviewSurface: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> ElementPreviewPlayerView {
+        let view = ElementPreviewPlayerView()
+        view.playerLayer.videoGravity = .resizeAspect
+        view.playerLayer.player = player
+        return view
+    }
+
+    func updateUIView(_ view: ElementPreviewPlayerView, context: Context) {
+        if view.playerLayer.player !== player { view.playerLayer.player = player }
+    }
+
+    static func dismantleUIView(_ view: ElementPreviewPlayerView, coordinator: ()) {
+        view.playerLayer.player = nil
+    }
+}
+
+private final class ElementPreviewPlayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }

@@ -37,6 +37,18 @@ final class VisualSmokeTests: XCTestCase {
                           "Tap must show the corresponding content, not merely retain the dock")
             capture(String(format: "%02d-tab-%@", index + 3, tab), app: app)
         }
+        app.buttons["tab.trainer"].tap()
+        let choreoMode = app.buttons["trainer.mode.choreography"]
+        XCTAssertTrue(choreoMode.waitForExistence(timeout: 8))
+        choreoMode.tap()
+        let chooseStep = app.buttons["trainer.step.2"]
+        XCTAssertTrue(chooseStep.waitForExistence(timeout: 8))
+        chooseStep.tap()
+        let gatedPart = app.buttons["trainer.part.open"]
+        XCTAssertTrue(gatedPart.waitForExistence(timeout: 8))
+        XCTAssertFalse(gatedPart.isEnabled, "The part of a choreography is locked without Pro")
+        capture("20-trainer-choreography-free", app: app)
+
         let settings = app.buttons["settings.open"]
         XCTAssertTrue(settings.isHittable)
         settings.tap()
@@ -85,6 +97,53 @@ final class VisualSmokeTests: XCTestCase {
         XCTAssertTrue(element("choreo.timeline.ruler", app: app).exists)
         capture("12-choreography-editor", app: app)
 
+    }
+
+    func testSettingsStyleAppearsInElementsAndCanBeRetired() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        defer { app.terminate() }
+        let settings = app.buttons["settings.open"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 35))
+        settings.tap()
+        let newStyle = app.buttons["settings.style.add"]
+        XCTAssertTrue(newStyle.waitForExistence(timeout: 8))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: newStyle)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
+        newStyle.tap()
+        let field = app.textFields["settings.style.name"]
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        field.tap()
+        let name = "QA Style"
+        field.typeText(name)
+        app.buttons["settings.style.confirm"].tap()
+        XCTAssertTrue(app.buttons["settings.close"].waitForExistence(timeout: 8))
+        app.buttons["settings.close"].tap()
+
+        let next = app.buttons["Следующий стиль"]
+        XCTAssertTrue(next.waitForExistence(timeout: 8))
+        for _ in 0..<18 where !app.staticTexts[name].exists { next.tap() }
+        XCTAssertTrue(app.staticTexts[name].exists, "Elements must see the style saved by Settings")
+        capture("19-settings-style-in-elements", app: app)
+
+        settings.tap()
+        let found = app.buttons["settings.style.delete.\(name)"]
+        let list = element("settings.styles.list", app: app)
+        XCTAssertTrue(list.waitForExistence(timeout: 8))
+        for _ in 0..<8 where !found.isHittable { list.swipeUp() }
+        XCTAssertTrue(found.isHittable)
+        found.tap()
+        let confirmation = app.alerts.buttons["Удалить"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 8))
+        confirmation.tap()
+        app.buttons["settings.close"].tap()
+        let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.staticTexts[name])
+        XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 8), .completed)
+        for _ in 0..<18 {
+            XCTAssertFalse(app.staticTexts[name].exists)
+            next.tap()
+        }
     }
 
     func testPhotoImportAndCatalogControlsAfterRestart() {

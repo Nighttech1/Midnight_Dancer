@@ -139,7 +139,7 @@ final class TrainerChoreographyCoordinator {
     func part(_ action: String) {
         switch action {
         case "toggle": snapshot.partExpanded.toggle()
-        case "offer": snapshot.message = "Отработка участка доступна по подписке. Проверка и покупка подписки пока не подключены на iOS."
+        case "offer": snapshot.message = "Часть хореографии доступна в Pro. Подписку в этой сборке оформить нельзя."
         case "confirm": if !snapshot.active { snapshot.revisionNeedsConfirmation = false }
         case "end": if snapshot.accessGranted && !snapshot.active { snapshot.end = "Конец" }
         case "pause": runtime?.pause()

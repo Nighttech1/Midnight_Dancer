@@ -20,94 +20,53 @@ struct TrainerHubView: View {
             : snapshot.readyPercent >= 100
     }
 
+    private var styleTrackSubtitle: String {
+        let selected = [snapshot.styleName, snapshot.trackTitle].filter { !$0.isEmpty }.joined(separator: " · ")
+        return selected.isEmpty ? "Стиль · Трек" : selected
+    }
+
     var body: some View {
         ZStack {
             MdNeonAtmosphere(accent: MdColor.accentGold)
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Режим · \(snapshot.modeLabel)")
-                            .font(MdType.eyebrow)
-                            .foregroundStyle(MdColor.textSecondary)
-
-                        Picker("Режим", selection: Binding(get: { snapshot.choreography.enabled }, set: choreographyActions.setMode)) {
-                            Text("Свободная").tag(false)
-                            Text("Хореография").tag(true)
+                    VStack(spacing: 10) {
+                        stepCard(1, title: "Режим сессии", subtitle: snapshot.choreography.enabled ? "Хореография" : "Фристайл") {
+                            modeControl
                         }
-                        .pickerStyle(.segmented)
-                        .accessibilityIdentifier("trainer.mode")
                         if snapshot.choreography.enabled {
-                            TrainerChoreographyPanel(snapshot: snapshot.choreography, actions: choreographyActions)
-                            MdSpeakZoneView(speakLabel: snapshot.speakLabel, accent: MdColor.accentGold,
-                                selectedVoiceIndex: snapshot.selectedVoiceIndex, onSelectVoice: onSelectVoice, onSpeak: onSpeak)
-                                .disabled(snapshot.choreography.active)
+                            stepCard(2, title: "Выбор хореографии", subtitle: snapshot.choreography.selectedTitle.isEmpty ? "Часть хореографии" : snapshot.choreography.selectedTitle) {
+                                TrainerChoreographyPanel(snapshot: snapshot.choreography, actions: choreographyActions)
+                                MdSpeakZoneView(speakLabel: snapshot.speakLabel, accent: MdColor.accentGold,
+                                    selectedVoiceIndex: snapshot.selectedVoiceIndex, onSelectVoice: onSelectVoice, onSpeak: onSpeak)
+                                    .disabled(snapshot.choreography.active)
+                            }
                         } else {
-                        ForEach(Array(snapshot.storylineTitles.enumerated()), id: \.offset) { idx, title in
-                            let step = idx + 1
-                            let filled = stepGlow(step)
-                            Button {
-                                onSetStep(step)
-                            } label: {
-                                HStack {
-                                    Text(String(format: "%02d", step))
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(MdColor.neonOrange)
-                                    Text(title)
-                                        .font(MdType.bodyLarge.weight(.semibold))
-                                        .foregroundStyle(MdColor.textPrimary)
-                                    Spacer()
-                                    if snapshot.expandedStep == step {
-                                        Image(systemName: "chevron.up")
-                                            .foregroundStyle(MdColor.textSecondary)
-                                    }
-                                }
-                                .padding(14)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .fill(MdColor.surfaceElevated)
-                                        .shadow(
-                                            color: filled ? MdColor.neonOrange.opacity(0.45) : .clear,
-                                            radius: filled ? 10 : 0
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .stroke(
-                                                    filled ? MdColor.neonOrange : MdColor.surfaceBorder,
-                                                    lineWidth: filled ? 1.5 : 1
-                                                )
-                                        )
-                                )
+                            stepCard(2, title: "Стиль и трек", subtitle: styleTrackSubtitle) {
+                                stepEditor(2)
                             }
-                            .buttonStyle(.plain)
-
-                            if snapshot.expandedStep == step {
-                                stepEditor(step)
+                            stepCard(3, title: "Выбор элементов и интервала", subtitle: snapshot.elementTag.isEmpty ? "Тег · Интервал" : "\(snapshot.elementTag) · \(Int(snapshot.intervalSec)) с") {
+                                stepEditor(3)
+                            }
+                            stepCard(4, title: "Голосовой тренер", subtitle: ["Руслан", "Ирина", "Камила"][min(max(snapshot.selectedVoiceIndex, 0), 2)]) {
+                                stepEditor(4)
                             }
                         }
-
-                        }
-
-                        Text(snapshot.choreography.enabled ? snapshot.choreography.selectedTitle : "Готовность \(snapshot.readyPercent)%")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(MdColor.textSecondary)
                     }
                     .padding(.horizontal, MdChrome.contentHorizontalPadding)
                     .padding(.top, 8)
-                    .padding(.bottom, 120)
+                    .padding(.bottom, 28)
                 }
-
                 Button(action: onStartDance) {
-                    Text("Танцуем")
-                        .font(.system(size: 17, weight: .bold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(ready
-                                      ? MdColor.neonOrange
-                                      : MdColor.neonOrange.opacity(0.35))
-                        )
-                        .foregroundStyle(MdColor.oledTrueBlack)
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill").font(.system(size: 10, weight: .bold))
+                        Text("Танцуем!").font(.system(size: 16, weight: .bold, design: .serif))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(RoundedRectangle(cornerRadius: 12)
+                        .fill(ready ? MdColor.neonOrange : Color.white.opacity(0.16)))
+                    .foregroundStyle(ready ? MdColor.oledTrueBlack : MdColor.textSecondary.opacity(0.65))
                 }
                 .buttonStyle(.plain)
                 .disabled(!ready)
@@ -120,10 +79,81 @@ struct TrainerHubView: View {
         .onChange(of: scenePhase) { if $0 != .active { choreographyActions.part("pause") } }
     }
 
+    private var modeControl: some View {
+        HStack(spacing: 4) {
+            modeButton("Фристайл", selected: !snapshot.choreography.enabled, enabled: false)
+            modeButton("Хореография", selected: snapshot.choreography.enabled, enabled: true)
+        }
+        .padding(4)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.25))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(MdColor.surfaceBorder)))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("trainer.mode")
+    }
+
+    private func modeButton(_ title: String, selected: Bool, enabled: Bool) -> some View {
+        Button { choreographyActions.setMode(enabled) } label: {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .serif))
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 40)
+                .foregroundStyle(selected ? Color.white : MdColor.textPrimary)
+                .background(RoundedRectangle(cornerRadius: 9).fill(selected ? MdColor.neonOrange : .clear))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(enabled ? "trainer.mode.choreography" : "trainer.mode.freestyle")
+    }
+
+    private func stepCard<Content: View>(_ step: Int, title: String, subtitle: String,
+                                         @ViewBuilder content: () -> Content) -> some View {
+        let expanded = snapshot.expandedStep == step
+        let filled = stepGlow(step)
+        return VStack(spacing: 0) {
+            Button { onSetStep(step) } label: {
+                HStack(alignment: .center, spacing: 10) {
+                    Text(String(format: "%02d", step))
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(step == 1 ? Color.white : MdColor.textSecondary)
+                        .frame(width: 24, height: 24)
+                        .background(RoundedRectangle(cornerRadius: 6)
+                            .fill(step == 1 ? MdColor.neonOrange : Color.white.opacity(0.08)))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title)
+                            .font(.system(size: 14, weight: .semibold, design: .serif))
+                            .foregroundStyle(MdColor.textPrimary)
+                        Text("› \(subtitle)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(MdColor.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 2)
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MdColor.textSecondary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("trainer.step.\(step)")
+            if expanded {
+                VStack(alignment: .leading, spacing: 10, content: content)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 16).fill(MdColor.surfaceElevated))
+        .overlay(RoundedRectangle(cornerRadius: 16)
+            .stroke(filled ? MdColor.neonOrange.opacity(0.85) : MdColor.surfaceBorder, lineWidth: 1))
+        .shadow(color: filled ? MdColor.neonOrange.opacity(0.16) : .clear, radius: 8, y: 3)
+    }
+
     private func stepGlow(_ step: Int) -> Bool {
         switch step {
-        case 1: return snapshot.modeLabel == "Свободная"
-        case 2: return !snapshot.styleName.isEmpty && !snapshot.trackTitle.isEmpty
+        case 1: return true
+        case 2: return snapshot.choreography.enabled ? !snapshot.choreography.selectedID.isEmpty : !snapshot.styleName.isEmpty && !snapshot.trackTitle.isEmpty
         case 3: return !snapshot.elementTag.isEmpty && snapshot.intervalSec >= 2
         case 4: return true
         default: return false
@@ -134,11 +164,6 @@ struct TrainerHubView: View {
     private func stepEditor(_ step: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             switch step {
-            case 1:
-                Text("Свободная тренировка")
-                    .foregroundStyle(MdColor.textPrimary)
-                Text("Отработка по подписке пока не подключена на iOS.")
-                    .font(.footnote).foregroundStyle(MdColor.textSecondary)
             case 2:
                 choice("Стиль", selected: snapshot.styleName, values: snapshot.styleOptions, change: onSetStyle)
                 choice("Трек", selected: snapshot.trackTitle, values: snapshot.trackOptions, change: onSetTrack)
