@@ -338,3 +338,25 @@ workflows:
       - kmp/feature/choreography/logic/build/test-results/**
       - kmp/androidApp/build/reports/androidTests/**
       - kmp/androidApp/build/outputs/**/androidTest-results/**
+
+  ios-kmp-simulator-visual-qa:
+    name: KMP iPhone Simulator visual QA (screenshots, not TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      xcode: latest
+      java: 17
+    scripts:
+      - name: Cold splash, five tabs and Settings on disposable iPhone Simulator
+        script: |
+          set -euo pipefail
+          cd "$CM_BUILD_DIR"
+          bash scripts/ios-visual-qa.sh
+    artifacts:
+      - ios-build/visual-qa/**/VisualSmoke.xcresult
+      - ios-build/visual-qa/**/screenshots/**
+      - ios-build/visual-qa/**/*.log
+      - ios-build/visual-qa/**/*.txt
+      - ios-build/visual-qa/**/*.json
+      - ios-build/visual-qa/**/*.tsv
+      - ios-build/visual-qa/**/*.mp4

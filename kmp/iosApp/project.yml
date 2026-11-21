@@ -54,6 +54,18 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+  iosAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: iosAppUITests
+    dependencies:
+      - target: iosApp
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.midnightdancer.app.uitests
+      GENERATE_INFOPLIST_FILE: YES
+      TEST_TARGET_NAME: iosApp
+      TARGETED_DEVICE_FAMILY: "1"
 schemes:
   iosApp:
     build:
@@ -61,5 +73,9 @@ schemes:
         iosApp: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - iosAppUITests
     archive:
       config: Release

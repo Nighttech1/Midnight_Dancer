@@ -76,6 +76,7 @@ struct SettingsScreenView: View {
                 .frame(minHeight: MdChrome.minTouchTarget)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.close")
             Spacer()
             Text(snapshot.title.isEmpty ? "Настройки" : snapshot.title)
                 .font(MdType.titleLarge)

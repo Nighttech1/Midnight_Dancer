@@ -36,6 +36,8 @@ struct MainShellView: View {
                     onSetLowDiskGib: settingsActions.setLowDiskGib,
                     onSetLowDiskEnabled: settingsActions.setLowDiskEnabled
                 )
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("screen.settings")
                 .transition(.move(edge: .trailing).combined(with: .opacity))
                 .zIndex(1)
             }
@@ -50,6 +52,8 @@ struct MainShellView: View {
             ZStack {
                 if let tab = chrome.tabs.first(where: { $0.id == chrome.selectedTabIndex }) {
                     TabShellView(tab: tab, actions: tabActions)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("screen.\(ShellTabKind(rawValue: tab.id)?.automationName ?? String(tab.id))")
                         .id(tab.id)
                         .transition(.opacity)
                 } else {
@@ -80,6 +84,7 @@ struct MainShellView: View {
                     .background(Circle().fill(MdColor.neonOrange.opacity(0.12)))
             }
             .accessibilityLabel("Настройки")
+            .accessibilityIdentifier("settings.open")
         }
         .padding(.horizontal, MdChrome.contentHorizontalPadding)
         .frame(height: 44)

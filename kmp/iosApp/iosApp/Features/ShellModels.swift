@@ -221,13 +221,33 @@ enum ShellTabKind: Int, CaseIterable, Identifiable {
         }
     }
 
+    var automationName: String {
+        switch self {
+        case .elements: return "elements"
+        case .music: return "music"
+        case .choreography: return "choreography"
+        case .trainer: return "trainer"
+        case .exchange: return "exchange"
+        }
+    }
+
+    var dockLabel: String {
+        switch self {
+        case .elements: return "Каталог"
+        case .music: return "Музыка"
+        case .choreography: return "Связки"
+        case .trainer: return "Тренинг"
+        case .exchange: return "Сеты"
+        }
+    }
+
     var systemImage: String {
         switch self {
-        case .elements: return "figure.dance"
-        case .music: return "music.note.list"
-        case .choreography: return "list.bullet.rectangle"
-        case .trainer: return "person.badge.clock"
-        case .exchange: return "arrow.left.arrow.right.circle"
+        case .elements: return "list.bullet"
+        case .music: return "music.note"
+        case .choreography: return "person.3.fill"
+        case .trainer: return "bolt.fill"
+        case .exchange: return "arrow.left.arrow.right"
         }
     }
 }

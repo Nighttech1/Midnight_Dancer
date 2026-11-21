@@ -1,0 +1,56 @@
+import XCTest
+
+/// Simulator evidence on a fresh installation; no private device data or seeded product changes.
+final class VisualSmokeTests: XCTestCase {
+    private func capture(_ name: String, app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func element(_ identifier: String, app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    func testColdSplashTransitionAndFiveTabsAndSettings() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        defer { app.terminate() }
+        let splash = element("splash.video", app: app)
+        XCTAssertTrue(splash.waitForExistence(timeout: 10), "Cold launch must expose the real splash video")
+        let ready = expectation(for: NSPredicate(format: "value == %@", "ready"), evaluatedWith: splash)
+        wait(for: [ready], timeout: 10)
+        capture("01-cold-splash-ready", app: app)
+        // The real five-second media controls its transition. No skip/fast-forward launch argument.
+        let firstTab = app.buttons["tab.elements"]
+        XCTAssertTrue(firstTab.waitForExistence(timeout: 30), "Splash must transition to the main dock")
+        capture("02-after-splash-transition", app: app)
+        let tabs = ["elements", "music", "choreography", "trainer", "exchange"]
+        for (index, tab) in tabs.enumerated() {
+            let button = app.buttons["tab.\(tab)"]
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
+            XCTAssertTrue(button.isHittable, "Tab \(tab) must be reachable")
+            button.tap()
+            XCTAssertTrue(element("screen.\(tab)", app: app).waitForExistence(timeout: 10),
+                          "Tap must show the corresponding content, not merely retain the dock")
+            capture(String(format: "%02d-tab-%@", index + 3, tab), app: app)
+        }
+        let settings = app.buttons["settings.open"]
+        XCTAssertTrue(settings.isHittable)
+        settings.tap()
+        XCTAssertTrue(element("screen.settings", app: app).waitForExistence(timeout: 10))
+        capture("08-settings-top", app: app)
+        app.swipeUp()
+        capture("09-settings-scrolled", app: app)
+        let close = app.buttons["settings.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        if !close.isHittable { app.swipeDown() }
+        XCTAssertTrue(close.isHittable)
+        close.tap()
+        XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["settings.open"].isHittable)
+        capture("10-settings-closed", app: app)
+    }
+}

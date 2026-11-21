@@ -10,36 +10,42 @@ struct CyberAcousticDockView: View {
         HStack(spacing: 0) {
             ForEach(tabs) { tab in
                 let selected = tab.id == selectedIndex
+                let kind = ShellTabKind(rawValue: tab.id)
                 Button {
                     onSelect(tab.id)
                     MdHaptics.perform(.selection)
                 } label: {
                     Image(systemName: tab.systemImage)
                         .font(.system(size: 30, weight: selected ? .semibold : .regular))
-                        .foregroundStyle(selected ? MdColor.neonOrange : MdColor.textSecondary)
+                        .foregroundStyle(selected ? MdColor.neonOrange : Color.white.opacity(0.45))
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(MdColor.neonOrange.opacity(0.16))
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(tab.title)
+                .accessibilityLabel(kind?.dockLabel ?? tab.title)
+                .accessibilityIdentifier("tab.\(kind?.automationName ?? String(tab.id))")
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 6)
-        .padding(.bottom, 4)
-        .background(
-            ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .environment(\.colorScheme, .dark)
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(MdColor.oledTrueBlack.opacity(0.55))
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(MdColor.neonOrange.opacity(0.22), lineWidth: 1)
-            }
-            .padding(.horizontal, 10)
-            .shadow(color: MdColor.neonOrange.opacity(0.12), radius: 16, y: -2)
-        )
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background {
+            RoundedRectangle(cornerRadius: 26)
+                .fill(Color(red: 12.0 / 255, green: 13.0 / 255, blue: 18.0 / 255).opacity(0.90))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                }
+                .shadow(color: .black, radius: 16)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 }

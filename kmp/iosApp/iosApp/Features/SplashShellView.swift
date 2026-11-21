@@ -1,66 +1,152 @@
+import AVFoundation
 import SwiftUI
+import UIKit
 
 struct SplashShellView: View {
     let snapshot: SplashShellSnapshot
     var onContinue: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var glow = false
+    @StateObject private var playback = SplashPlayback()
+    @State private var advanced = false
+
+    private let aspectRatio: CGFloat = 9.0 / 16.0
 
     var body: some View {
-        ZStack {
-            MdNeonAtmosphere(accent: MdColor.neonOrange)
-            VStack(spacing: 20) {
-                ZStack {
-                    Circle()
-                        .fill(MdColor.neonOrange.opacity(glow ? 0.22 : 0.1))
-                        .frame(width: 120, height: 120)
-                        .blur(radius: 18)
-                    Image(systemName: "figure.dance")
-                        .font(.system(size: 44, weight: .light))
-                        .foregroundStyle(MdColor.neonOrange)
-                        .shadow(color: MdColor.neonOrange.opacity(0.55), radius: glow ? 16 : 6)
-                        .scaleEffect(glow && !reduceMotion ? 1.06 : 1)
-                }
-                Text(snapshot.title)
-                    .font(MdType.titleLarge)
-                    .foregroundStyle(MdColor.textPrimary)
-                Text(snapshot.prepareFailed
-                     ? "Голос: системный запасной"
-                     : (snapshot.bootReady ? "Готово" : "Загрузка голоса…"))
-                    .font(MdType.bodyMedium)
-                    .foregroundStyle(MdColor.textSecondary)
-
-                if !snapshot.bootReady {
-                    ProgressView()
-                        .tint(MdColor.neonOrange)
-                }
-
-                MdNeonEqualizerBars(accent: MdColor.neonCyan, barCount: 5)
-                    .padding(.top, 8)
-
-                if snapshot.bootReady {
-                    Button(action: onContinue) {
-                        Text("Пропустить")
-                            .font(.system(size: 16, weight: .bold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(MdColor.neonOrange))
-                            .foregroundStyle(MdColor.oledTrueBlack)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 12)
-                    .accessibilityLabel("Пропустить заставку")
-                }
+        GeometryReader { geometry in
+            let width = min(geometry.size.width / 1.5, geometry.size.height * aspectRatio)
+            ZStack {
+                Color.black
+                SplashVideoLayer(player: playback.player)
+                    .frame(width: width, height: width / aspectRatio)
             }
-            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                glow = true
+        .ignoresSafeArea()
+        .onAppear { playback.start() }
+        .onDisappear { playback.stop() }
+        .onChange(of: playback.finished) { _ in advanceIfReady() }
+        .onChange(of: snapshot.bootReady) { _ in advanceIfReady() }
+    }
+
+    private func advanceIfReady() {
+        // The view can finish playing before the library bootstrap attaches the root.
+        guard playback.finished, snapshot.bootReady, !advanced else { return }
+        advanced = true
+        onContinue()
+    }
+}
+
+@MainActor
+private final class SplashPlayback: ObservableObject {
+    let player = AVPlayer()
+    @Published private(set) var finished = false
+
+    private var started = false
+    private var statusObservation: NSKeyValueObservation?
+    private var notifications: [NSObjectProtocol] = []
+    private var timeout: Task<Void, Never>?
+
+    func start() {
+        guard !started else { return }
+        started = true
+
+        guard let url = Bundle.main.url(forResource: "splash_boot", withExtension: "mp4")
+                ?? Bundle.main.url(forResource: "splash_boot", withExtension: "mp4", subdirectory: "video")
+                ?? Bundle.main.url(forResource: "splash_boot", withExtension: "mp4", subdirectory: "Resources/video")
+        else {
+            finish()
+            return
+        }
+
+        player.isMuted = true
+        player.actionAtItemEnd = .pause
+        let item = AVPlayerItem(url: url)
+        statusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
+            guard item.status == .failed else { return }
+            Task { @MainActor [weak self] in self?.finish() }
+        }
+        notifications = [
+            AVPlayerItem.didPlayToEndTimeNotification,
+            AVPlayerItem.failedToPlayToEndTimeNotification,
+        ].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: item, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.finish() }
             }
+        }
+        timeout = Task { [weak self] in
+            // Prevent a stalled decoder from trapping the user at launch.
+            do { try await Task.sleep(nanoseconds: 8_000_000_000) }
+            catch { return }
+            self?.finish()
+        }
+        player.replaceCurrentItem(with: item)
+        player.play()
+    }
+
+    func stop() {
+        timeout?.cancel()
+        timeout = nil
+        statusObservation?.invalidate()
+        statusObservation = nil
+        for observation in notifications {
+            NotificationCenter.default.removeObserver(observation)
+        }
+        notifications.removeAll()
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+    }
+
+    private func finish() {
+        guard !finished else { return }
+        stop()
+        finished = true
+    }
+}
+
+private struct SplashVideoLayer: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> Surface {
+        let surface = Surface()
+        surface.bind(player)
+        return surface
+    }
+
+    func updateUIView(_ surface: Surface, context: Context) {
+        surface.bind(player)
+    }
+
+    static func dismantleUIView(_ surface: Surface, coordinator: ()) {
+        surface.unbind()
+    }
+
+    final class Surface: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+
+        private var videoLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        private var frameObservation: NSKeyValueObservation?
+
+        func bind(_ player: AVPlayer) {
+            guard videoLayer.player !== player else { return }
+            backgroundColor = .black
+            videoLayer.videoGravity = .resizeAspect
+            videoLayer.player = player
+            isAccessibilityElement = true
+            accessibilityIdentifier = "splash.video"
+            accessibilityLabel = "Заставка Midnight Dancer"
+            accessibilityValue = "loading"
+            frameObservation = videoLayer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] layer, _ in
+                let ready = layer.isReadyForDisplay
+                Task { @MainActor [weak self] in
+                    self?.accessibilityValue = ready ? "ready" : "loading"
+                }
+            }
+        }
+
+        func unbind() {
+            frameObservation?.invalidate()
+            frameObservation = nil
+            videoLayer.player = nil
         }
     }
 }

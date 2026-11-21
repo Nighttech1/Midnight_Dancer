@@ -1,0 +1,2 @@
+# iOS parity with accepted Android
+Use the accepted 0.5.0 styles-media-startup Android APK as the product reference. Match the intro, tab structure, design language, navigation, editor and playback behavior, and visible Free/Pro workflows in iOS, retaining the iOS app identity and migration from Flutter. Check Android and iOS under equal test fixtures. Build and verify on a simulator before the next signed TestFlight candidate. Physical-device migration and real-device media playback remain separate acceptance cases.
