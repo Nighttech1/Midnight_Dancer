@@ -6,6 +6,7 @@ import com.midnightdancer.core.data.db.catalogDatabaseBuilder
 import com.midnightdancer.core.data.db.di.catalogDatabaseModule
 import com.midnightdancer.core.data.files.platformDocumentsDirectoryPath
 import com.midnightdancer.core.data.files.IosLegacyMetadataReader
+import com.midnightdancer.core.data.files.IosDurableTextFile
 import com.midnightdancer.core.data.migrate.PrefsMigrator
 import com.midnightdancer.core.data.migrate.migrateIosLegacyCatalog
 import com.midnightdancer.core.data.prefs.USER_PREFS_DATA_STORE_FILE_NAME
@@ -33,6 +34,7 @@ object IosLibraryBootstrap {
     private val lock = Mutex()
     private val prepared = MutableStateFlow(false)
     private var modulesLoaded = false
+    private var creationPolicy: IosCreationPolicy? = null
 
     @Throws(CancellationException::class)
     suspend fun prepare(): IosLibraryBootstrapResult = withContext(Dispatchers.Default) {
@@ -47,7 +49,7 @@ object IosLibraryBootstrap {
                         catalogDatabaseModule { catalogDatabaseBuilder() },
                         prefsKoinModule { "$documents/$USER_PREFS_DATA_STORE_FILE_NAME" },
                         module {
-                            single<CreationAccessPolicy> { IosFreeCreationPolicy }
+                            single<CreationAccessPolicy> { checkNotNull(creationPolicy) }
                             single<ChoreographyVaultPersister> { IosChoreographyVaultPersister(get()) }
                             single<SavedSetsPersister> { IosSavedSetsPersister(get()) }
                             single<DeviceStorage> { createDeviceStorage() }
@@ -79,6 +81,17 @@ object IosLibraryBootstrap {
                 val catalog = repository.load()
                 val readyItems = vault.readRaw()?.let(::decodeVaultItems).orEmpty()
                 val readyCards = sets.read().orEmpty()
+                // Establish rollout eligibility once, before any newly created iOS choreography.
+                val accessFlag = IosDurableTextFile("creation_access_rollout_v1.txt")
+                val recorded = accessFlag.readOrNull()
+                val preserveCreationAccess = when (recorded) {
+                    "legacy" -> true
+                    "free" -> false
+                    null -> ownChoreographyCount(readyItems) > 0
+                    else -> error("invalid_creation_access_flag")
+                }
+                if (recorded == null) accessFlag.write(if (preserveCreationAccess) "legacy" else "free")
+                creationPolicy = IosCreationPolicy(preserveCreationAccess)
                 withContext(Dispatchers.Main) {
                     ChoreoCatalog.replaceStyleCatalog(checkNotNull(styles.state.value))
                     ChoreoCatalog.replaceFromAppData(catalog)

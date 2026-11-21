@@ -8,7 +8,7 @@ import Shared
 /// V1 wire-compatible streaming adapter. Not installed in the app's exchange flow yet.
 /// CryptoSwift source dependency is pinned to 1.10.0. Keep its license/acknowledgement in distribution.
 /// This class uses no private Apple APIs and never publishes plaintext before GCM final verification.
-final class MdanceV1Codec: NSObject, IosArchiveContainerCodec {
+final class MdanceV1Codec: NSObject, IosArchiveDriver {
     static let maximumPlainBytes: UInt64 = 300 * 1024 * 1024
     private static let blockBytes = 64 * 1024
     private static let magic = Data("MDANCE1".utf8)

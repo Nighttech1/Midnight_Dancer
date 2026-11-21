@@ -8,6 +8,7 @@ struct ElementsAtelierView: View {
     var onAdd: () -> Void
     var onSearch: (String) -> Void
     var onFilter: (String?) -> Void
+    var onSort: (Bool) -> Void
     var onPlay: (String) -> Void
     var onOpenDetail: (String) -> Void
     var onCloseDetail: () -> Void
@@ -23,8 +24,12 @@ struct ElementsAtelierView: View {
             MdNeonAtmosphere(accent: MdColor.neonOrange)
             VStack(spacing: 0) {
                 styleBar
-                searchBar
-                categoryRow
+                MdCatalogToolbar(
+                    prefix: "element", searchPlaceholder: "Поиск элементов…", query: snapshot.searchQuery,
+                    tags: snapshot.categories, selectedTag: snapshot.filterCategory,
+                    alphabetical: snapshot.sortAlphabetically, tagTint: .white,
+                    onSearch: onSearch, onFilter: onFilter, onSort: onSort
+                )
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(snapshot.cards) { card in
@@ -100,54 +105,6 @@ struct ElementsAtelierView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
-    }
-
-    private var searchBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(MdColor.textSecondary)
-            TextField("Поиск элементов…", text: Binding(
-                get: { snapshot.searchQuery },
-                set: onSearch
-            ))
-            .font(MdType.brandedBody)
-            .foregroundStyle(MdColor.textPrimary)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated))
-        .padding(.horizontal, MdChrome.contentHorizontalPadding)
-        .padding(.top, 8)
-    }
-
-    private var categoryRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                filterChip("Все", selected: snapshot.filterCategory == nil) {
-                    onFilter(nil)
-                }
-                ForEach(snapshot.categories, id: \.self) { cat in
-                    filterChip(cat, selected: snapshot.filterCategory == cat) {
-                        onFilter(cat)
-                    }
-                }
-            }
-            .padding(.horizontal, MdChrome.contentHorizontalPadding)
-            .padding(.vertical, 10)
-        }
-    }
-
-    private func filterChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(selected ? MdColor.oledTrueBlack : MdColor.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule().fill(selected ? MdColor.neonOrange : MdColor.surfaceElevated)
-                )
-        }
-        .buttonStyle(.plain)
     }
 
     private func elementCard(_ card: ElementCardSnapshot) -> some View {

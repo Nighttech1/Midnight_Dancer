@@ -86,4 +86,65 @@ final class VisualSmokeTests: XCTestCase {
         capture("12-choreography-editor", app: app)
 
     }
+
+    func testPhotoImportAndCatalogControlsAfterRestart() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launch()
+        defer { app.terminate() }
+        let add = app.buttons["element.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 35))
+
+        for (tab, prefix) in [("elements", "element"), ("music", "music"), ("choreography", "choreo")] {
+            app.buttons["tab.\(tab)"].tap()
+            XCTAssertTrue(app.buttons["\(prefix).filter"].waitForExistence(timeout: 8))
+            let sort = app.buttons["\(prefix).sort"]
+            XCTAssertTrue(sort.isHittable)
+            sort.tap()
+            let alpha = app.buttons["По алфавиту"]
+            XCTAssertTrue(alpha.waitForExistence(timeout: 6))
+            alpha.tap()
+            XCTAssertTrue(app.textFields["\(prefix).search"].exists)
+        }
+
+        app.buttons["tab.elements"].tap()
+        add.tap()
+        XCTAssertTrue(app.buttons["element.save"].waitForExistence(timeout: 8))
+        let name = app.textFields["element.name"]
+        let photo = app.buttons["element.choosePhoto"]
+        for _ in 0..<4 where !photo.isHittable { app.swipeUp() }
+        XCTAssertTrue(photo.isHittable)
+        photo.tap()
+
+        let media = app.collectionViews.cells.firstMatch
+        XCTAssertTrue(media.waitForExistence(timeout: 20), "The disposable video must appear in Photos")
+        media.tap()
+        let confirmPhoto = app.navigationBars.buttons["Add"]
+        if confirmPhoto.exists && confirmPhoto.isHittable { confirmPhoto.tap() }
+
+        for _ in 0..<3 where !element("element.player", app: app).isHittable { app.swipeDown() }
+        XCTAssertTrue(element("element.player", app: app).waitForExistence(timeout: 25))
+        capture("15-photo-imported-preview", app: app)
+        for _ in 0..<3 where !name.isHittable { app.swipeDown() }
+        XCTAssertTrue(name.isHittable)
+        name.tap()
+        let title = "QA media parity"
+        name.typeText(title)
+        let save = app.buttons["element.save"]
+        if !save.isHittable { app.swipeUp() }
+        XCTAssertTrue(save.isHittable)
+        save.tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 12))
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(add.waitForExistence(timeout: 35))
+        let card = app.staticTexts[title]
+        XCTAssertTrue(card.waitForExistence(timeout: 12))
+        capture("16-photo-library-after-restart", app: app)
+        card.tap()
+        XCTAssertTrue(element("element.player", app: app).waitForExistence(timeout: 12))
+        capture("17-photo-reopened-after-restart", app: app)
+    }
+
 }

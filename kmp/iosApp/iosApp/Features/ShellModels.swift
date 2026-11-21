@@ -70,6 +70,7 @@ struct ElementsFeatureSnapshot: Equatable {
     var editor: ElementEditorSnapshot? = nil
     var saving = false
     var saveError: String? = nil
+    var sortAlphabetically = false
 }
 
 struct MusicTrackSnapshot: Equatable, Identifiable {
@@ -100,6 +101,8 @@ struct MusicFeatureSnapshot: Equatable {
     var tags: [String] = []
     var saving: Bool = false
     var error: String? = nil
+    var selectedTag: String? = nil
+    var sortAlphabetically = false
 }
 
 struct MusicEditDraft {
@@ -190,6 +193,9 @@ struct ChoreographyFeatureSnapshot: Equatable {
     /// Non-nil when nested stack shows Pro Editor (mirrors Android TabScreens).
     var editor: SequenceEditorSnapshot?
     var creationBlockedMessage: String? = nil
+    var tags: [String] = []
+    var selectedTag: String? = nil
+    var sortAlphabetically = false
 }
 
 struct TrainerFeatureSnapshot: Equatable {

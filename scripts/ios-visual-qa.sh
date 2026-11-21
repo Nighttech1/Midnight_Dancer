@@ -64,6 +64,8 @@ chmod +x scripts/build-kmp-ios-ipa.sh kmp/gradlew
 CONFIGURATION=Debug PREPARE_ONLY=1 ./scripts/build-kmp-ios-ipa.sh iphonesimulator 2>&1 | tee "$OUT/prepare.log"
 PROJECT="$ROOT/kmp/iosApp/MidnightDancerIos.xcodeproj"
 DERIVED="$OUT/DerivedData"
+FIXTURE="$ROOT/kmp/iosApp/iosApp/Resources/video/splash_boot.mp4"
+xcrun simctl addmedia "$SIM_ID" "$FIXTURE"
 xcodebuild -project "$PROJECT" -scheme iosApp -configuration Debug \
   -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$DERIVED" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
@@ -77,7 +79,7 @@ xcodebuild -project "$PROJECT" -scheme iosApp -configuration Debug \
   -destination "platform=iOS Simulator,id=$SIM_ID" -derivedDataPath "$DERIVED" \
   -resultBundlePath "$OUT/VisualSmoke.xcresult" -parallel-testing-enabled NO \
   -only-testing:iosAppCryptoTests/MdanceV1CodecTests \
-  -only-testing:iosAppUITests/VisualSmokeTests/testColdSplashTransitionAndFiveTabsAndSettings \
+  -only-testing:iosAppUITests/VisualSmokeTests \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   test-without-building 2>&1 | tee "$OUT/tests.log"
 TEST_STATUS=$?
@@ -103,6 +105,8 @@ expected = {
     "06-tab-trainer", "07-tab-exchange", "08-settings-top",
     "09-settings-scrolled", "10-settings-closed", "11-element-editor",
     "12-choreography-editor", "13-set-editor", "14-set-empty-validation",
+    "15-photo-imported-preview", "16-photo-library-after-restart",
+    "17-photo-reopened-after-restart",
 }
 groups = json.loads((screens / "manifest.json").read_text())
 attachments = {

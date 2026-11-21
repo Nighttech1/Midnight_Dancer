@@ -40,9 +40,9 @@ object IosUnavailableRehearsalAccess : IosRehearsalAccessProvider {
     override suspend fun access() = RehearsalAccess.Unavailable
 }
 
-/** New Free creation only; existing editing, import and restore do not invoke this policy. */
-object IosFreeCreationPolicy : CreationAccessPolicy {
-    override fun canCreate(existingOwnChoreographies: Int) = existingOwnChoreographies < 1
+/** Pre-existing libraries retain creation access; a fresh Free install has one editable choreography. */
+internal class IosCreationPolicy(private val legacyProtected: Boolean) : CreationAccessPolicy {
+    override fun canCreate(existingOwnChoreographies: Int) = legacyProtected || existingOwnChoreographies < 1
 }
 
 data class IosChoreographyChoice(val id: String, val title: String, val displayTitle: String)

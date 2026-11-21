@@ -15,6 +15,7 @@ struct TabShellView: View {
                 onAdd: actions.elementsAdd,
                 onSearch: actions.elementsSearch,
                 onFilter: actions.elementsFilter,
+                onSort: actions.elementsSort,
                 onPlay: actions.elementsPlay,
                 onOpenDetail: actions.elementsOpenDetail,
                 onCloseDetail: actions.elementsCloseDetail,
@@ -25,6 +26,8 @@ struct TabShellView: View {
                 snapshot: snap,
                 onSelect: actions.musicSelect,
                 onSearch: actions.musicSearch,
+                onFilter: actions.musicFilter,
+                onSort: actions.musicSort,
                 onUpload: actions.musicBeginUpload,
                 onEdit: actions.musicEdit,
                 onDelete: actions.musicDelete,
@@ -51,6 +54,8 @@ struct TabShellView: View {
                 KineticVaultView(
                     snapshot: snap,
                     onSearch: actions.vaultSearch,
+                    onFilter: actions.vaultFilter,
+                    onSort: actions.vaultSort,
                     onCreate: actions.vaultCreate,
                     onDismissCreationMessage: actions.vaultDismissCreationMessage,
                     onOpen: actions.vaultOpen,
@@ -90,6 +95,7 @@ struct TabFeatureActions {
     var elementsAdd: () -> Void = {}
     var elementsSearch: (String) -> Void = { _ in }
     var elementsFilter: (String?) -> Void = { _ in }
+    var elementsSort: (Bool) -> Void = { _ in }
     var elementsPlay: (String) -> Void = { _ in }
     var elementsOpenDetail: (String) -> Void = { _ in }
     var elementsCloseDetail: () -> Void = {}
@@ -97,6 +103,8 @@ struct TabFeatureActions {
 
     var musicSelect: (String) -> Void = { _ in }
     var musicSearch: (String) -> Void = { _ in }
+    var musicFilter: (String?) -> Void = { _ in }
+    var musicSort: (Bool) -> Void = { _ in }
     var musicBeginUpload: () -> Void = {}
     var musicEdit: (String) -> Void = { _ in }
     var musicDelete: (String) -> Void = { _ in }
@@ -107,6 +115,8 @@ struct TabFeatureActions {
     var musicSeek: (String, Float) -> Void = { _, _ in }
 
     var vaultSearch: (String) -> Void = { _ in }
+    var vaultFilter: (String?) -> Void = { _ in }
+    var vaultSort: (Bool) -> Void = { _ in }
     var vaultCreate: () -> Void = {}
     var vaultDismissCreationMessage: () -> Void = {}
     var vaultOpen: (String) -> Void = { _ in }

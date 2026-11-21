@@ -6,6 +6,8 @@ struct MotionDeckView: View {
     let snapshot: MusicFeatureSnapshot
     var onSelect: (String) -> Void
     var onSearch: (String) -> Void
+    var onFilter: (String?) -> Void
+    var onSort: (Bool) -> Void
     var onUpload: () -> Void
     var onEdit: (String) -> Void
     var onDelete: (String) -> Void
@@ -59,18 +61,12 @@ struct MotionDeckView: View {
                     .padding(.horizontal, MdChrome.contentHorizontalPadding)
                     .padding(.top, 8)
 
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(MdColor.textSecondary)
-                    TextField("Поиск трека", text: Binding(
-                        get: { snapshot.searchQuery },
-                        set: onSearch
-                    ))
-                    .foregroundStyle(MdColor.textPrimary)
-                }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated))
-                .padding(.horizontal, MdChrome.contentHorizontalPadding)
-                .padding(.vertical, 8)
+                MdCatalogToolbar(
+                    prefix: "music", searchPlaceholder: "Поиск треков…", query: snapshot.searchQuery,
+                    tags: snapshot.tags, selectedTag: snapshot.selectedTag,
+                    alphabetical: snapshot.sortAlphabetically,
+                    onSearch: onSearch, onFilter: onFilter, onSort: onSort
+                )
 
                 if let playing = snapshot.tracks.first(where: { $0.isPlaying }) {
                     MusicPulseVisualizer(isPlaying: true, height: 56, bpm: Double(playing.bpm))
@@ -91,9 +87,6 @@ struct MotionDeckView: View {
                             importing = false
                         }
                     }
-                }
-                if snapshot.tracks.isEmpty {
-                    Text("Добавьте музыку кнопкой +").foregroundStyle(MdColor.textSecondary).padding()
                 }
                 ScrollView {
                     LazyVStack(spacing: 10) {

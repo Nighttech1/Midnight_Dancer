@@ -4,6 +4,8 @@ import SwiftUI
 struct KineticVaultView: View {
     let snapshot: ChoreographyFeatureSnapshot
     var onSearch: (String) -> Void
+    var onFilter: (String?) -> Void
+    var onSort: (Bool) -> Void
     var onCreate: () -> Void
     var onDismissCreationMessage: () -> Void
     var onOpen: (String) -> Void
@@ -34,21 +36,22 @@ struct KineticVaultView: View {
                     .padding(.top, 8)
                 }
 
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(MdColor.textSecondary)
-                    TextField("Поиск хореографий…", text: Binding(
-                        get: { snapshot.searchQuery },
-                        set: onSearch
-                    ))
-                    .foregroundStyle(MdColor.textPrimary)
-                }
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 12).fill(MdColor.surfaceElevated))
-                .padding(.horizontal, MdChrome.contentHorizontalPadding)
-                .padding(.vertical, 8)
+                MdCatalogToolbar(
+                    prefix: "choreo", searchPlaceholder: "Поиск хореографий…", query: snapshot.searchQuery,
+                    tags: snapshot.tags, selectedTag: snapshot.selectedTag,
+                    alphabetical: snapshot.sortAlphabetically,
+                    onSearch: onSearch, onFilter: onFilter, onSort: onSort
+                )
 
                 ScrollView {
                     LazyVStack(spacing: 10) {
+                        if snapshot.items.isEmpty {
+                            Text("Нет хореографий по фильтру")
+                                .font(MdType.brandedBody)
+                                .foregroundStyle(MdColor.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 16)
+                        }
                         ForEach(snapshot.items) { item in
                             Button {
                                 onOpen(item.id)

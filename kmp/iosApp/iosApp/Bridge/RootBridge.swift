@@ -41,6 +41,9 @@ final class RootBridge: ObservableObject {
     private var choreographyTabIndex: Int = ShellTabKind.choreography.rawValue
     private var choreographyHubTitle: String = ShellTabKind.choreography.defaultTitle
     private var choreographyHubSearch: String = ""
+    private var choreographyHubTags: [String] = []
+    private var choreographyHubSelectedTag: String?
+    private var choreographyHubSortAlphabetically = false
     private var choreographyHubItems: [VaultItemSnapshot] = []
     private var choreographyCreationBlockedMessage: String?
     private var choreographyEditorSnapshot: SequenceEditorSnapshot?
@@ -135,6 +138,10 @@ final class RootBridge: ObservableObject {
     func elementsAdd() { elementsRef?.addNewElement() }
     func elementsSearch(_ q: String) { elementsRef?.setSearchQuery(query: q) }
     func elementsFilter(_ cat: String?) { elementsRef?.setFilterCategory(category: cat) }
+    func elementsSort(_ alphabetical: Bool) {
+        guard let elementsRef else { return }
+        IosCatalogActions.shared.sortElements(component: elementsRef, alphabetical: alphabetical)
+    }
     func elementsPlay(_ id: String) { elementsRef?.playCard(cardId: id) }
     func elementsOpenDetail(_ id: String) { elementsRef?.openDetail(cardId: id) }
     func elementsCloseDetail() { elementsRef?.closeEditor() }
@@ -159,6 +166,14 @@ final class RootBridge: ObservableObject {
     func musicSelect(_ id: String) { musicRef?.selectTrack(id: id) }
     func musicStop(_ id: String) { musicRef?.stopTrack(id: id) }
     func musicSearch(_ q: String) { musicRef?.setSearchQuery(query: q) }
+    func musicFilter(_ tag: String?) {
+        guard let musicRef else { return }
+        IosCatalogActions.shared.filterMusic(component: musicRef, tag: tag)
+    }
+    func musicSort(_ alphabetical: Bool) {
+        guard let musicRef else { return }
+        IosCatalogActions.shared.sortMusic(component: musicRef, alphabetical: alphabetical)
+    }
     func musicBeginUpload() { musicRef?.beginUpload() }
     func musicEdit(_ id: String) { musicRef?.editTrack(id: id) }
     func musicDelete(_ id: String) { musicRef?.deleteTrack(id: id) }
@@ -195,6 +210,14 @@ final class RootBridge: ObservableObject {
     // MARK: - Vault
 
     func vaultSearch(_ q: String) { choreographyRef?.setSearchQuery(query: q) }
+    func vaultFilter(_ tag: String?) {
+        guard let choreographyRef else { return }
+        IosCatalogActions.shared.filterChoreography(component: choreographyRef, tag: tag)
+    }
+    func vaultSort(_ alphabetical: Bool) {
+        guard let choreographyRef else { return }
+        IosCatalogActions.shared.sortChoreography(component: choreographyRef, alphabetical: alphabetical)
+    }
     func vaultCreate() { choreographyRef?.createChoreography() }
     func vaultDismissCreationMessage() { choreographyRef?.dismissAccessMessage() }
     func vaultOpen(_ id: String) { choreographyRef?.openEditor(id: id) }
@@ -539,6 +562,9 @@ final class RootBridge: ObservableObject {
                 for await state in c.component.uiState {
                     self?.choreographyHubTitle = state.title
                     self?.choreographyHubSearch = state.searchQuery
+                    self?.choreographyHubTags = state.tagCatalog
+                    self?.choreographyHubSelectedTag = Self.catalogFilter(state.selectedTag)
+                    self?.choreographyHubSortAlphabetically = state.sortMode == .alphabetical
                     self?.choreographyHubItems = Self.mapVaultItems(state)
                     self?.choreographyCreationBlockedMessage = state.creationBlockedMessage
                     self?.publishChoreographyTab()
@@ -695,6 +721,13 @@ final class RootBridge: ObservableObject {
         }
     }
 
+    private static func catalogFilter(_ tag: String) -> String? {
+        switch tag.lowercased() {
+        case "", "все", "все теги": return nil
+        default: return tag
+        }
+    }
+
     private static func mapElements(_ state: ElementsUiState) -> ElementsFeatureSnapshot {
         let cards = state.cards.map { mapElementCard($0) }
         let detail = state.detailCard.map { mapElementCard($0) }
@@ -723,7 +756,8 @@ final class RootBridge: ObservableObject {
                 )
             },
             saving: state.saving,
-            saveError: state.saveError
+            saveError: state.saveError,
+            sortAlphabetically: state.sortMode == .alphabetical
         )
     }
 
@@ -759,7 +793,8 @@ final class RootBridge: ObservableObject {
             editingTrackId: state.editingTrackId,
             editingTrack: state.editingTrack.map(track), selectedTrack: state.selectedTrack.map(track),
             styles: state.styleCatalog, tags: state.tagCatalog,
-            saving: state.saving, error: state.operationError)
+            saving: state.saving, error: state.operationError,
+            selectedTag: catalogFilter(state.selectedLevel), sortAlphabetically: state.sortMode == .alphabetical)
     }
 
     private func bindChoreographyStack(_ component: ChoreographyComponent) {
@@ -808,7 +843,9 @@ final class RootBridge: ObservableObject {
                     searchQuery: choreographyHubSearch,
                     items: choreographyHubItems,
                     editor: choreographyEditorSnapshot,
-                    creationBlockedMessage: choreographyCreationBlockedMessage
+                    creationBlockedMessage: choreographyCreationBlockedMessage,
+                    tags: choreographyHubTags, selectedTag: choreographyHubSelectedTag,
+                    sortAlphabetically: choreographyHubSortAlphabetically
                 )
             )
         )
@@ -928,14 +965,21 @@ final class RootBridge: ObservableObject {
         let catalog = state.archiveInspectionCatalog
         let picker: SetsPickerSnapshot? = state.exportPickKind.flatMap { kind in
             let section: SetsSection
-            let archiveRows: [CatalogPickItem]?
             switch kind {
-            case .elements: section = .elements; archiveRows = catalog?.elements
-            case .songs: section = .music; archiveRows = catalog?.songs
-            case .choreographies: section = .choreographies; archiveRows = catalog?.choreographies
+            case .elements: section = .elements
+            case .songs: section = .music
+            case .choreographies: section = .choreographies
             default: return nil
             }
-            let rows = archive ? (archiveRows ?? []) : state.allowedExportRows(kind: kind)
+            let rows = if archive {
+                switch section {
+                case .elements: catalog?.elements ?? []
+                case .music: catalog?.songs ?? []
+                case .choreographies: catalog?.choreographies ?? []
+                }
+            } else {
+                state.allowedExportRows(kind: kind)
+            }
             return SetsPickerSnapshot(kind: section, rows: rows.map {
                 SetsChoiceSnapshot(id: $0.id, title: $0.title, subtitle: $0.subtitle)
             }, selectedIDs: Set(state.exportPickDraftIds))

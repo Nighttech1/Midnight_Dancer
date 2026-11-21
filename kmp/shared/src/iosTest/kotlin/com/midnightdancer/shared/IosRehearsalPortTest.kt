@@ -71,9 +71,12 @@ class IosRehearsalPortTest {
 
     @Test fun unconfiguredAccessIsUnavailableAndFreeOnlyLimitsNewCreation() = runTest {
         assertEquals(RehearsalAccess.Unavailable, IosUnavailableRehearsalAccess.access())
-        assertTrue(IosFreeCreationPolicy.canCreate(0))
-        assertFalse(IosFreeCreationPolicy.canCreate(1))
-        assertFalse(IosFreeCreationPolicy.canCreate(20))
+        val free = IosCreationPolicy(legacyProtected = false)
+        val legacy = IosCreationPolicy(legacyProtected = true)
+        assertTrue(free.canCreate(0))
+        assertFalse(free.canCreate(1))
+        assertFalse(free.canCreate(20))
+        assertTrue(legacy.canCreate(20))
     }
 
     private fun plan() = RehearsalPlan("id", "revision", 5000,
