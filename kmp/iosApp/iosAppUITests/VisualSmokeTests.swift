@@ -1,3 +1,5 @@
+import CoreGraphics
+import UIKit
 import XCTest
 
 /// Simulator evidence on a fresh installation; no private device data or seeded product changes.
@@ -146,7 +148,48 @@ final class VisualSmokeTests: XCTestCase {
         }
     }
 
-    func testPhotoImportAndCatalogControlsAfterRestart() {
+    private func fixtureVideoPosition(in image: CGImage?) -> CGVector? {
+        guard let image else { return nil }
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        let rows = stride(from: 0.22, through: 0.58, by: 0.02)
+        var best: (amount: Int, y: CGFloat)?
+        for row in rows {
+            let y = CGFloat(row)
+            let candidate = CGRect(x: width * 0.045, y: height * (y - 0.015),
+                                   width: width * 0.13, height: height * 0.03).integral
+            guard let band = image.cropping(to: candidate) else { continue }
+            let amount = orangePixels(in: band)
+            if amount > (best?.amount ?? 0) { best = (amount, y) }
+        }
+        guard let best, best.amount >= 8 else { return nil }
+        return CGVector(dx: 0.12, dy: best.y)
+    }
+
+    private func orangePixels(in image: CGImage) -> Int {
+        let width = 32
+        let height = 12
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        return pixels.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return 0 }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            var count = 0
+            for pixel in stride(from: 0, to: buffer.count, by: 4) {
+                let red = Int(buffer[pixel])
+                let green = Int(buffer[pixel + 1])
+                let blue = Int(buffer[pixel + 2])
+                if red >= 155 && green >= 45 && green <= 175 && blue <= 105 &&
+                    red - green >= 35 && green - blue >= 20 { count += 1 }
+            }
+            return count
+        }
+    }
+
+    func testPhotoImportAndCatalogControlsAfterRestart() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
@@ -176,27 +219,28 @@ final class VisualSmokeTests: XCTestCase {
         photo.tap()
 
         let videos = app.segmentedControls["Videos"]
-        let cells = app.cells.firstMatch
+        XCTAssertTrue(videos.waitForExistence(timeout: 40), "The system Photos picker must finish loading")
         let mediaLabel = NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR identifier CONTAINS[c] %@",
                                      "0:05", "5 seconds", "VideoCell")
         let accessibleItem = app.descendants(matching: .any).matching(mediaLabel).firstMatch
-        let loaded = NSPredicate { _, _ in cells.isHittable || accessibleItem.isHittable || videos.exists }
-        let pickerReady = XCTNSPredicateExpectation(predicate: loaded, object: nil)
-        let waiting = XCTWaiter.wait(for: [pickerReady], timeout: 40)
-        capture("18-photos-picker", app: app)
-        XCTAssertEqual(waiting, .completed, "The system Photos picker must finish loading")
-
-        if cells.isHittable {
-            cells.tap()
-        } else if accessibleItem.isHittable {
+        let visibleTile = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            self.fixtureVideoPosition(in: app.screenshot().image.cgImage) != nil
+        }, object: nil)
+        if accessibleItem.isHittable {
+            capture("18-photos-picker", app: app)
             accessibleItem.tap()
         } else {
-            // The remote Photos view can hide thumbnail accessibility. The fresh simulator
-            // contains one seeded video, in the first tile of the Videos tab.
-            XCTAssertTrue(videos.exists)
-            let showsAccessNotice = app.staticTexts["Private Access to Photos"].exists
-            let y = showsAccessNotice ? 0.43 : 0.24
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: CGFloat(y))).tap()
+            // The system picker can show the seeded video without exposing the tile to XCTest.
+            // Find the distinctive orange artwork in the left column of the captured picker.
+            let visible = XCTWaiter.wait(for: [visibleTile], timeout: 20)
+            let screen = app.screenshot()
+            let attachment = XCTAttachment(screenshot: screen)
+            attachment.name = "18-photos-picker"
+            attachment.lifetime = .keepAlways
+            self.add(attachment)
+            XCTAssertEqual(visible, .completed, "The seeded video thumbnail must be visible")
+            let point = try XCTUnwrap(fixtureVideoPosition(in: screen.image.cgImage))
+            app.coordinate(withNormalizedOffset: point).tap()
         }
         let confirmPhoto = app.navigationBars.buttons["Add"]
         if confirmPhoto.exists && confirmPhoto.isHittable { confirmPhoto.tap() }
