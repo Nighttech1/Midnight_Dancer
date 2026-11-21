@@ -176,20 +176,29 @@ class DefaultMusicComponent(
             is MusicIntent.SetChip ->
                 _uiState.update { it.copy(activeChip = intent.chip) }
             is MusicIntent.DeleteTrack -> {
-                // C-132 / 2.8: tell Choreography to drop stub refs to this track.
-                _uiState.value.tracks.firstOrNull { it.id == intent.id }?.let { gone ->
+                val before = _uiState.value
+                if (before.saving) return
+                val gone = before.tracks.firstOrNull { it.id == intent.id } ?: return
+                fun committed() {
+                    _uiState.update { current -> current.copy(saving = false, operationError = null,
+                        tracks = current.tracks.filterNot { it.id == gone.id },
+                        editingTrackId = current.editingTrackId?.takeUnless { it == gone.id },
+                        selectedTrackId = current.selectedTrackId?.takeUnless { it == gone.id }) }
                     DeletedTrackBus.publish(gone.id, gone.title)
                 }
-                _uiState.update { state ->
-                    state.copy(
-                        tracks = state.tracks.filterNot { it.id == intent.id },
-                        editingTrackId =
-                            if (state.editingTrackId == intent.id) null else state.editingTrackId,
-                        selectedTrackId =
-                            if (state.selectedTrackId == intent.id) null else state.selectedTrackId,
-                    )
+                if (saveAppData == null) { committed(); return }
+                _uiState.update { current -> current.copy(saving = true, operationError = null,
+                    tracks = current.tracks.map { if (it.id == gone.id) it.copy(isPlaying = false) else it }) }
+                scope.launch {
+                    try {
+                        withContext(NonCancellable + Dispatchers.Default) { saveAppData.deleteSong(gone.id) }
+                        committed()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
+                    } catch (_: Exception) {
+                        _uiState.update { it.copy(saving = false,
+                            operationError = "Не удалось удалить музыку. Трек сохранён. Попробуйте снова.") }
+                    }
                 }
-                persistDelete(intent.id)
             }
             is MusicIntent.EditTrack ->
                 _uiState.update { if (it.saving) it else it.copy(editingTrackId = intent.id, operationError = null) }
@@ -208,8 +217,12 @@ class DefaultMusicComponent(
                         style = danceStyles?.state?.value?.entries?.firstOrNull()?.id.orEmpty(),
                         mediaUri = intent.mediaUri,
                     )
-                    val track = prepared.tracks.first { it.id == prepared.editingTrackId }
-                    if (saveAppData == null) { _uiState.value = prepared; return }
+                    val draft = prepared.tracks.first { it.id == prepared.editingTrackId }
+                    val track = intent.durationMs?.coerceAtLeast(0L)?.let { duration ->
+                        draft.copy(durationMs = duration, durationLabel = formatDurationLabel(duration))
+                    } ?: draft
+                    val measured = prepared.copy(tracks = prepared.tracks.map { if (it.id == track.id) track else it })
+                    if (saveAppData == null) { _uiState.value = measured; return }
 
                     _uiState.update { it.copy(saving = true, operationError = null) }
                     scope.launch {
@@ -228,23 +241,27 @@ class DefaultMusicComponent(
                 }
             }
             is MusicIntent.UpdateTrackDuration -> {
-                var updated: MusicTrack? = null
-                _uiState.update { state ->
-                    val label = formatDurationLabel(intent.durationMs)
-                    state.copy(
-                        tracks = state.tracks.map { track ->
-                            if (track.id != intent.id) {
-                                track
-                            } else {
-                                track.copy(
-                                    durationLabel = label,
-                                    positionLabel = positionLabelFor(label, track.progress),
-                                ).also { updated = it }
-                            }
-                        },
-                    )
+                val before = _uiState.value
+                if (before.saving) return
+                val old = before.tracks.firstOrNull { it.id == intent.id } ?: return
+                val duration = intent.durationMs.coerceAtLeast(0L)
+                val label = formatDurationLabel(duration)
+                val updated = old.copy(durationMs = duration, durationLabel = label,
+                    positionLabel = positionLabelFor(label, old.progress))
+                fun committed() { _uiState.update { current -> current.copy(saving = false, operationError = null,
+                    tracks = current.tracks.map { row -> if (row.id == updated.id)
+                        row.copy(durationMs = duration, durationLabel = label,
+                            positionLabel = positionLabelFor(label, row.progress)) else row }) } }
+                if (saveAppData == null) { committed(); return }
+                _uiState.update { it.copy(saving = true, operationError = null) }
+                scope.launch {
+                    try {
+                        withContext(NonCancellable + Dispatchers.Default) { saveAppData.upsertSong(updated.toSong()) }
+                        committed()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
+                    } catch (_: Exception) { _uiState.update { it.copy(saving = false,
+                        operationError = "Не удалось записать длительность музыки. Попробуйте снова.") } }
                 }
-                updated?.let(::persistTrack)
             }
             MusicIntent.CloseEdit ->
                 _uiState.update { if (it.saving) it else it.copy(editingTrackId = null) }
@@ -299,24 +316,4 @@ class DefaultMusicComponent(
         }
     }
 
-    private fun persistTrack(track: MusicTrack) {
-        val save = saveAppData ?: return
-        scope.launch {
-            try {
-                withContext(NonCancellable + Dispatchers.Default) { save.upsertSong(track.toSong()) }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
-            } catch (_: Exception) {
-                _uiState.update { it.copy(operationError = "Не удалось записать изменения музыки. Попробуйте снова.") }
-            }
-        }
-    }
-
-    private fun persistDelete(id: String) {
-        val save = saveAppData ?: return
-        scope.launch {
-            withContext(NonCancellable + Dispatchers.Default) {
-                save.deleteSong(id)
-            }
-        }
-    }
 }

@@ -32,9 +32,10 @@ struct SettingsScreenView: View {
                         stylesBlock
                         tagsBlock
                         lowDiskBlock
-                        Text(snapshot.prefsLoaded ? "Настройки загружены" : "Загрузка…")
-                            .font(MdType.eyebrow)
-                            .foregroundStyle(MdColor.textSecondary.opacity(0.8))
+                        if !snapshot.prefsLoaded {
+                            ProgressView("Загрузка настроек…")
+                                .tint(MdColor.neonOrange)
+                        }
                     }
                     .padding(.horizontal, MdChrome.contentHorizontalPadding)
                     .padding(.vertical, MdChrome.contentVerticalPadding)
@@ -58,8 +59,7 @@ struct SettingsScreenView: View {
             Button("Отмена", role: .cancel) { stylePendingDelete = nil }
         } message: {
             Text(
-                "Будут удалены элементы, музыка и хореографии этого стиля. "
-                    + "Действие нельзя отменить."
+                "Элементы, музыка и хореографии перейдут в «Без стиля». Материалы сохранятся."
             )
         }
     }
@@ -153,14 +153,17 @@ struct SettingsScreenView: View {
                 HStack {
                     Text(style).foregroundStyle(MdColor.textPrimary)
                     Spacer()
-                    Button {
-                        stylePendingDelete = style
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(MdColor.danger)
-                            .frame(width: 40, height: 40)
+                    if style != "Без стиля" {
+                        Button {
+                            stylePendingDelete = style
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(MdColor.danger)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Удалить стиль \(style)")
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)

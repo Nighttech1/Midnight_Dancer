@@ -44,6 +44,12 @@ final class RootBridge: ObservableObject {
     private var choreographyHubItems: [VaultItemSnapshot] = []
     private var choreographyEditorSnapshot: SequenceEditorSnapshot?
     private weak var trainerRef: TrainerComponent?
+    private weak var trainerSessionRef: TrainerSessionStubComponent?
+    private var trainerStackCancellation: Cancellation?
+    private var trainerSessionTask: Task<Void, Never>?
+    private var trainerSessionSnapshot: TrainerSessionSnapshot?
+    private var trainerSessionID = UUID().uuidString
+    private var trainerTabIndex = ShellTabKind.trainer.rawValue
     private weak var exchangeRef: ExchangeComponent?
     private weak var settingsRef: SettingsComponent?
 
@@ -145,6 +151,34 @@ final class RootBridge: ObservableObject {
     func musicDelete(_ id: String) { musicRef?.deleteTrack(id: id) }
     func musicCloseEdit() { musicRef?.closeEdit() }
 
+    func musicImport(_ audio: OwnedMusicAudio) async -> Bool {
+        guard let component = musicRef else { return false }
+        // A previous attempt may have committed before its observer was replaced.
+        for await current in component.uiState {
+            if current.tracks.contains(where: { $0.mediaUri == audio.reference }) { return true }
+            if current.saving { return false }
+            break
+        }
+        IosMusicActions.shared.addPicked(component: component, title: audio.title, reference: audio.reference, durationMs: audio.durationMs)
+        for await state in component.uiState {
+            if state.saving { continue }
+            return state.tracks.contains(where: { $0.mediaUri == audio.reference })
+        }
+        return false
+    }
+
+    func musicSave(_ draft: MusicEditDraft) {
+        guard let component = musicRef else { return }
+        IosMusicActions.shared.save(component: component, id: draft.id, title: draft.title,
+            style: draft.style, tags: draft.tags, speed: draft.speed)
+    }
+
+    func musicSeek(_ id: String, _ progress: Float) {
+        guard let component = musicRef else { return }
+        IosMusicActions.shared.seek(component: component, id: id, progress: progress)
+    }
+
+
     // MARK: - Vault
 
     func vaultSearch(_ q: String) { choreographyRef?.setSearchQuery(query: q) }
@@ -168,6 +202,50 @@ final class RootBridge: ObservableObject {
         sequenceEditorRef?.addVideoElement(id: id)
     }
 
+    func vaultTimelineActions() -> ProEditorTimelineActions {
+        let actions = IosChoreographyActions.shared
+        return ProEditorTimelineActions(
+            seek: { [weak self] fraction in
+                self?.sequenceEditorRef?.seekToFraction(fraction: Float(fraction))
+            },
+            select: { [weak self] lane, index in
+                guard let editor = self?.sequenceEditorRef else { return }
+                switch lane {
+                case .elements: actions.selectElement(editor: editor, index: Int32(index))
+                case .music: actions.selectMusic(editor: editor, index: Int32(index))
+                }
+            },
+            split: { [weak self] in
+                if let editor = self?.sequenceEditorRef { actions.split(editor: editor) }
+            },
+            delete: { [weak self] in
+                if let editor = self?.sequenceEditorRef { actions.delete(editor: editor) }
+            },
+            reorder: { [weak self] lane, from, to in
+                guard let editor = self?.sequenceEditorRef else { return }
+                switch lane {
+                case .elements: actions.reorderElements(editor: editor, from: Int32(from), to: Int32(to))
+                case .music: actions.reorderMusic(editor: editor, from: Int32(from), to: Int32(to))
+                }
+            },
+            undo: { [weak self] in
+                if let editor = self?.sequenceEditorRef { actions.undo(editor: editor) }
+            },
+            redo: { [weak self] in
+                if let editor = self?.sequenceEditorRef { actions.redo(editor: editor) }
+            },
+            musicChoices: { [weak self] in
+                guard let editor = self?.sequenceEditorRef else { return [] }
+                return actions.musicChoices(editor: editor).map {
+                    SequenceElementChoice(id: $0.id, title: $0.title)
+                }
+            },
+            addMusic: { [weak self] id in
+                if let editor = self?.sequenceEditorRef { actions.addMusic(editor: editor, id: id) }
+            }
+        )
+    }
+
     // MARK: - Trainer
 
     func trainerSelectVoice(index: Int) { trainerRef?.selectVoiceByIndex(index: Int32(index)) }
@@ -178,6 +256,71 @@ final class RootBridge: ObservableObject {
     func trainerSetTrack(_ t: String) { trainerRef?.setTrack(track: t) }
     func trainerSetTag(_ t: String) { trainerRef?.setElementTag(tag: t) }
     func trainerSetInterval(_ sec: Float) { trainerRef?.setInterval(seconds: sec) }
+    func trainerSetElementTiming(_ enabled: Bool) { trainerRef?.setUseElementTiming(enabled: enabled) }
+    func trainerSessionTogglePause() {
+        guard let session = trainerSessionRef else { return }
+        IosTrainerActions.shared.togglePause(component: session)
+    }
+    func trainerSessionPause() {
+        if trainerSessionSnapshot?.paused == false { trainerSessionTogglePause() }
+    }
+    func trainerSessionSeek(_ fraction: Float, _ fromUser: Bool) {
+        guard let session = trainerSessionRef else { return }
+        IosTrainerActions.shared.seek(component: session, fraction: fraction, fromUser: fromUser)
+    }
+    func trainerSessionVolume(_ volume: Float) {
+        guard let session = trainerSessionRef else { return }
+        IosTrainerActions.shared.trackVolume(component: session, volume: volume)
+    }
+    func trainerSessionFinish() { _ = trainerRef?.onBack() }
+
+    private func bindTrainerStack(_ component: TrainerComponent) {
+        trainerStackCancellation?.cancel()
+        onTrainerStackChanged(component.stack.value)
+        trainerStackCancellation = component.stack.subscribe { [weak self, weak component] stack in
+            Task { @MainActor [weak component] in
+                guard let self, let component, self.trainerRef === component else { return }
+                self.onTrainerStackChanged(stack)
+            }
+        }
+    }
+
+    private func onTrainerStackChanged(_ stack: ChildStack<AnyObject, TrainerComponentChild>) {
+        trainerSessionTask?.cancel()
+        trainerSessionTask = nil
+        switch onEnum(of: stack.active.instance) {
+        case .hub:
+            trainerSessionID = UUID().uuidString
+            trainerSessionRef = nil
+            trainerSessionSnapshot = nil
+            publishTrainerSession()
+        case .session(let wrapped):
+            let component = wrapped.component
+            trainerSessionRef = component
+            trainerSessionID = UUID().uuidString
+            let sessionID = trainerSessionID
+            trainerSessionTask = Task { @MainActor [weak self] in
+                for await state in component.uiState {
+                    guard let self, !Task.isCancelled, self.trainerSessionID == sessionID else { return }
+                    self.trainerSessionSnapshot = TrainerSessionSnapshot(id: sessionID,
+                        trackTitle: state.trackLabel, mediaUri: state.trackMediaUri,
+                        durationMs: state.trackDurationMs, paused: state.isPaused,
+                        progress: state.playheadFraction, moveTitle: state.moveTitle,
+                        cueVideo: state.currentElementMediaUri, phaseIndex: Int(state.phaseIndex),
+                        phaseTotal: Int(state.phaseTotal), trackVolume: state.trackVol,
+                        playlistCount: state.musicPlaylist.count)
+                    self.publishTrainerSession()
+                }
+            }
+        }
+    }
+
+    private func publishTrainerSession() {
+        guard case .trainer(var snapshot) = tabSnapshots[trainerTabIndex].feature else { return }
+        snapshot.session = trainerSessionSnapshot
+        replaceTab(index: trainerTabIndex, title: snapshot.title, feature: .trainer(snapshot))
+    }
+
 
     // MARK: - Exchange
 
@@ -319,13 +462,14 @@ final class RootBridge: ObservableObject {
             })
         case .trainer(let c):
             trainerRef = c.component
+            trainerTabIndex = index
+            bindTrainerStack(c.component)
             tabCollectTasks.append(Task { @MainActor [weak self] in
                 for await state in c.component.uiState {
-                    self?.replaceTab(
-                        index: index,
-                        title: state.title,
-                        feature: .trainer(Self.mapTrainer(state))
-                    )
+                    guard let self else { return }
+                    var snapshot = Self.mapTrainer(state)
+                    snapshot.session = self.trainerSessionSnapshot
+                    self.replaceTab(index: index, title: state.title, feature: .trainer(snapshot))
                 }
             })
         case .exchange(let c):
@@ -396,6 +540,12 @@ final class RootBridge: ObservableObject {
         editorCollectTask = nil
         choreographyEditorSnapshot = nil
         trainerRef = nil
+        trainerSessionRef = nil
+        trainerStackCancellation?.cancel()
+        trainerStackCancellation = nil
+        trainerSessionTask?.cancel()
+        trainerSessionTask = nil
+        trainerSessionSnapshot = nil
         exchangeRef = nil
         settingsRef = nil
     }
@@ -407,6 +557,8 @@ final class RootBridge: ObservableObject {
         tabCollectTasks.forEach { $0.cancel() }
         settingsCollectTask?.cancel()
         splashCollectTask?.cancel()
+        trainerStackCancellation?.cancel()
+        trainerSessionTask?.cancel()
     }
 
     // MARK: - Mappers
@@ -517,28 +669,19 @@ final class RootBridge: ObservableObject {
     }
 
     private static func mapMusic(_ state: MusicUiState) -> MusicFeatureSnapshot {
-        let tracks = state.filteredTracks.map { t in
-            MusicTrackSnapshot(
-                id: t.id,
-                title: t.title,
-                style: t.style,
-                tag: t.tags.first ?? t.level,
-                bpm: Int(t.bpm),
-                durationLabel: t.durationLabel,
-                weightLabel: t.weightLabel,
-                isPlaying: t.isPlaying,
-                progress: t.progress,
-                positionLabel: t.positionLabel,
-                basePlaybackSpeed: t.basePlaybackSpeed
-            )
+        func track(_ t: MusicTrack) -> MusicTrackSnapshot {
+            MusicTrackSnapshot(id: t.id, title: t.title,
+                style: state.displayStyle(value: t.style), tag: t.tags.first ?? t.level,
+                bpm: Int(t.bpm), durationLabel: t.durationLabel, weightLabel: t.weightLabel,
+                isPlaying: t.isPlaying, progress: t.progress, positionLabel: t.positionLabel,
+                basePlaybackSpeed: t.basePlaybackSpeed, mediaUri: t.mediaUri, tags: t.tags)
         }
-        return MusicFeatureSnapshot(
-            title: state.title,
-            searchQuery: state.searchQuery,
-            tracks: tracks,
-            playingTrackId: state.playingTrack?.id,
-            editingTrackId: state.editingTrackId
-        )
+        return MusicFeatureSnapshot(title: state.title, searchQuery: state.searchQuery,
+            tracks: state.filteredTracks.map(track), playingTrackId: state.playingTrack?.id,
+            editingTrackId: state.editingTrackId,
+            editingTrack: state.editingTrack.map(track), selectedTrack: state.selectedTrack.map(track),
+            styles: state.styleCatalog, tags: state.tagCatalog,
+            saving: state.saving, error: state.operationError)
     }
 
     private func bindChoreographyStack(_ component: ChoreographyComponent) {
@@ -643,7 +786,22 @@ final class RootBridge: ObservableObject {
             styleName: state.styleNamesById[state.style] ?? state.style,
             availableStyles: Array(state.availableStyles),
             saveCount: Int(state.saveCount),
-            saveError: state.saveError
+            saveError: state.saveError,
+            timeline: SequenceTimelineSnapshot(
+                elementClips: state.elementTimelineClips.map(mapEditorClip),
+                musicClips: state.musicTimelineClips.map(mapEditorClip),
+                musicSourceClips: state.musicClips.map(mapEditorClip),
+                durationMs: state.durationMs,
+                playheadFraction: Double(state.playheadFraction),
+                timecode: state.timecode,
+                durationTimecode: state.durationTimecode,
+                selectedElementIndex: Int(state.selectedElementIndex),
+                selectedMusicIndex: Int(state.selectedMusicIndex),
+                canUndo: state.canUndo,
+                canRedo: state.canRedo,
+                songPlaybackSpeed: state.songPlaybackSpeed,
+                musicVolume: state.musicVolume
+            )
         )
     }
 
@@ -666,7 +824,9 @@ final class RootBridge: ObservableObject {
             readyPercent: Int(state.readyPercent),
             speakLabel: state.speakLabel,
             selectedVoiceIndex: Int(state.selectedVoiceIndex),
-            storylineTitles: state.storylineSteps.map { $0.title }
+            storylineTitles: state.storylineSteps.map { $0.title },
+            styleOptions: state.styleOptions, trackOptions: state.trackOptions, tagOptions: state.tagOptions,
+            useElementTiming: state.useElementTiming
         )
     }
 

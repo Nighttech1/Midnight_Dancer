@@ -61,8 +61,9 @@ enum MdSpring {
 }
 
 enum MdType {
-    /// `TypographyTokens.TitleLarge` (~22sp)
-    static let titleLarge = Font.system(size: 22, weight: .semibold)
+    static let titleLarge = Font.custom("NotoSerif-Bold", size: 26, relativeTo: .title2)
+    static let brandedControl = Font.custom("NotoSerif-Bold", size: 15, relativeTo: .body)
+    static let brandedBody = Font.custom("NotoSerif-Regular", size: 14, relativeTo: .body)
     /// `TypographyTokens.BodyLarge` (~16sp)
     static let bodyLarge = Font.system(size: 16, weight: .regular)
     /// `TypographyTokens.BodyMedium` (~14sp)

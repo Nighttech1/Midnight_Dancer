@@ -22,6 +22,10 @@ targets:
       - path: iosApp
         excludes:
           - "**/*.md"
+      - path: ../androidApp/src/main/res/font/noto_serif_regular.ttf
+        buildPhase: resources
+      - path: ../androidApp/src/main/res/font/noto_serif_bold.ttf
+        buildPhase: resources
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.midnightdancer.app
       PRODUCT_NAME: MidnightDancer
@@ -47,6 +51,9 @@ targets:
       properties:
         CFBundleDisplayName: Midnight Dancer
         UILaunchScreen: {}
+        UIAppFonts:
+          - noto_serif_regular.ttf
+          - noto_serif_bold.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         "UISupportedInterfaceOrientations~ipad":

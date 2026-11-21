@@ -20,10 +20,6 @@ struct SyncDeckView: View {
             MdNeonAtmosphere(accent: MdColor.neonLime)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(snapshot.title)
-                        .font(MdType.titleLarge)
-                        .foregroundStyle(MdColor.textPrimary)
-
                     actionCard(
                         title: "Поделиться пакетом",
                         subtitle: "Экспорт .mdance одного стиля",

@@ -1,7 +1,22 @@
 import AVFoundation
 import SwiftUI
 
-/// Multi-clip Pro Editor preview — AVMutableComposition + AVPlayer (C-300 / Android ChoreoCompositionPreview).
+struct ChoreoPlaybackSeek: Equatable {
+    let positionMs: Int64
+    private let request = UUID()
+
+    init(positionMs: Int64) {
+        self.positionMs = positionMs
+    }
+}
+
+private struct ChoreoPlaybackSource: Equatable {
+    var elements: [EditorClipSnapshot]
+    var music: [EditorClipSnapshot]
+    var songSpeed: Double
+}
+
+/// An element preview and soundtrack share one AVPlayerItem, including during scrubbing.
 struct ChoreoCompositionPreviewView: View {
     let isPlaying: Bool
     let isEmpty: Bool
@@ -10,12 +25,28 @@ struct ChoreoCompositionPreviewView: View {
     let playheadInElementsMs: Int64
     let scrubbing: Bool
     var glow: CGFloat = 0.4
+    var musicClips: [EditorClipSnapshot] = []
+    var songSpeed: Double = 1
+    var musicVolume: Float = 1
+    var globalPlayheadMs: Int64? = nil
+    var seekRequest: ChoreoPlaybackSeek? = nil
+    var onPlaybackPosition: ((Int64) -> Void)? = nil
+    var onPlaybackEnded: (() -> Void)? = nil
+    var onPlaybackAvailability: ((Bool) -> Void)? = nil
+    var onPlaybackFailed: (() -> Void)? = nil
 
     @StateObject private var playback = ChoreoCompositionPlaybackController()
-    @State private var scrubEndTask: Task<Void, Never>?
 
-    private var compositionKey: String {
-        ChoreoCompositionTimelineMath.compositionKey(for: elementClips)
+    private var source: ChoreoPlaybackSource {
+        ChoreoPlaybackSource(elements: elementClips, music: musicClips, songSpeed: songSpeed)
+    }
+
+    private var targetMs: Int64 { globalPlayheadMs ?? playheadInElementsMs }
+    private var wantsPlayback: Bool { isPlaying && !scrubbing }
+    private var isAudioOnly: Bool {
+        let hasVideo = elementClips.contains { ChoreoCompositionBuilder.mediaReference($0) != nil }
+        let hasAudio = musicClips.contains { ChoreoCompositionBuilder.mediaReference($0) != nil }
+        return !hasVideo && hasAudio
     }
 
     var body: some View {
@@ -23,36 +54,13 @@ struct ChoreoCompositionPreviewView: View {
             let frameWidth = min(geo.size.width, geo.size.height * (9.0 / 16.0))
             let frameHeight = min(geo.size.height, frameWidth * (16.0 / 9.0))
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(Color(red: 0.05, green: 0.055, blue: 0.07))
-                    .overlay {
-                        if !isEmpty {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(
-                                    MdColor.neonOrange.opacity(0.15 + Double(glow) * 0.45),
-                                    lineWidth: 1
-                                )
-                        }
-                    }
-                    .frame(width: frameWidth, height: frameHeight)
-
-                if isEmpty {
-                    emptyPlaceholder
-                } else if playback.player != nil {
-                    ChoreoPlayerLayerView(player: playback.player)
-                        .frame(width: frameWidth, height: frameHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                } else {
-                    Text("Не удалось открыть видео элемента.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(MdColor.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(16)
-                }
-
-                if let label = currentElementLabel, !label.isEmpty, !isEmpty {
+                stage
+                if let label = currentElementLabel, !label.isEmpty, !isEmpty,
+                   !playback.playbackFailed, !isAudioOnly {
                     VStack {
-                        Spacer()
+                        Spacer(minLength: 0)
                         Text(label)
                             .font(MdType.bodyLarge.weight(.bold))
                             .foregroundStyle(MdColor.textPrimary)
@@ -66,56 +74,76 @@ struct ChoreoCompositionPreviewView: View {
                             )
                             .padding(.bottom, 16)
                     }
-                    .frame(width: frameWidth, height: frameHeight)
                 }
+            }
+            .frame(width: frameWidth, height: frameHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(MdColor.neonOrange.opacity(isEmpty ? 0 : 0.15 + Double(glow) * 0.45))
+                    .allowsHitTesting(false)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onAppear {
-            playback.rebind(clips: elementClips, compositionKey: compositionKey)
-            if isPlaying, !scrubbing {
-                playback.applyPlayEdge(targetMs: playheadInElementsMs)
-            } else if !scrubbing {
-                playback.applyPauseSync(targetMs: playheadInElementsMs)
+        .task(id: source) {
+            onPlaybackAvailability?(false)
+            playback.setVolume(musicVolume)
+            playback.setPlaying(wantsPlayback, at: targetMs)
+            await playback.rebind(elementClips: elementClips, musicClips: musicClips, songSpeed: songSpeed)
+            if !Task.isCancelled {
+                onPlaybackAvailability?(playback.player != nil && !playback.playbackFailed)
             }
         }
-        .onDisappear { playback.teardown() }
-        .onChange(of: compositionKey) { newKey in
-            playback.rebind(clips: elementClips, compositionKey: newKey)
-            if isPlaying, !scrubbing {
-                playback.applyPlayEdge(targetMs: playheadInElementsMs)
-            } else if !scrubbing {
-                playback.applyPauseSync(targetMs: playheadInElementsMs)
+        .onDisappear {
+            playback.teardown()
+            onPlaybackAvailability?(false)
+        }
+        .onChange(of: musicVolume) { playback.setVolume($0) }
+        .onChange(of: wantsPlayback) { playback.setPlaying($0, at: targetMs) }
+        .onChange(of: seekRequest) {
+            if let request = $0 { playback.seek(to: request.positionMs) }
+        }
+        .onChange(of: targetMs) {
+            // On the clock-backed path, transport commands carry a distinct seek request.
+            if onPlaybackPosition == nil && !isPlaying { playback.seek(to: $0) }
+        }
+        .onChange(of: playback.player != nil) { onPlaybackAvailability?($0) }
+        .onChange(of: playback.reportedPositionMs) {
+            if let position = $0, wantsPlayback { onPlaybackPosition?(position) }
+        }
+        .onChange(of: playback.reachedEnd) {
+            if $0 { onPlaybackEnded?() }
+        }
+        .onChange(of: playback.playbackFailed) {
+            if $0 {
+                onPlaybackAvailability?(false)
+                onPlaybackFailed?()
             }
         }
-        .onChange(of: isPlaying) { playing in
-            if scrubbing { return }
-            if playing {
-                playback.applyPlayEdge(targetMs: playheadInElementsMs)
-            } else {
-                playback.applyPauseSync(targetMs: playheadInElementsMs)
-            }
-        }
-        .onChange(of: scrubbing) { scrub in
-            if scrub {
-                scrubEndTask?.cancel()
-                playback.applyScrubbing()
-            } else {
-                scrubEndTask?.cancel()
-                scrubEndTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 40_000_000)
-                    guard !Task.isCancelled else { return }
-                    playback.scrubEnded(isPlaying: isPlaying, targetMs: playheadInElementsMs)
-                }
-            }
-        }
-        .onChange(of: playheadInElementsMs) { target in
-            if scrubbing { return }
-            if isPlaying {
-                playback.applyPlayheadWhilePlaying(targetMs: target)
-            } else {
-                playback.applyPauseSync(targetMs: target)
-            }
+    }
+
+    @ViewBuilder private var stage: some View {
+        if playback.playbackFailed {
+            Text("Не удалось открыть один из файлов хореографии.")
+                .font(MdType.bodyMedium)
+                .foregroundStyle(MdColor.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(16)
+                .accessibilityIdentifier("choreo.playbackError")
+        } else if playback.isBuilding {
+            ProgressView().tint(MdColor.neonOrange)
+        } else if isAudioOnly {
+            Label("Музыкальная дорожка", systemImage: "music.note")
+                .font(MdType.bodyMedium)
+                .foregroundStyle(MdColor.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(12)
+        } else if isEmpty {
+            emptyPlaceholder
+        } else if let player = playback.player {
+            ChoreoPlayerLayerView(player: player)
+        } else {
+            emptyPlaceholder
         }
     }
 
@@ -134,11 +162,11 @@ struct ChoreoCompositionPreviewView: View {
 }
 
 private struct ChoreoPlayerLayerView: UIViewRepresentable {
-    let player: AVPlayer?
+    let player: AVPlayer
 
     func makeUIView(context: Context) -> ChoreoPlayerUIView {
         let view = ChoreoPlayerUIView()
-        view.playerLayer.videoGravity = .resizeAspectFill
+        view.playerLayer.videoGravity = .resizeAspect
         view.backgroundColor = .clear
         return view
     }

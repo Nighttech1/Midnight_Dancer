@@ -84,6 +84,8 @@ struct MusicTrackSnapshot: Equatable, Identifiable {
     var progress: Float
     var positionLabel: String
     var basePlaybackSpeed: Double
+    var mediaUri: String? = nil
+    var tags: [String] = []
 }
 
 struct MusicFeatureSnapshot: Equatable {
@@ -92,6 +94,20 @@ struct MusicFeatureSnapshot: Equatable {
     var tracks: [MusicTrackSnapshot]
     var playingTrackId: String?
     var editingTrackId: String?
+    var editingTrack: MusicTrackSnapshot? = nil
+    var selectedTrack: MusicTrackSnapshot? = nil
+    var styles: [String] = []
+    var tags: [String] = []
+    var saving: Bool = false
+    var error: String? = nil
+}
+
+struct MusicEditDraft {
+    var id: String
+    var title: String
+    var style: String
+    var tags: [String]
+    var speed: Double
 }
 
 struct VaultItemSnapshot: Equatable, Identifiable {
@@ -136,6 +152,35 @@ struct SequenceEditorSnapshot: Equatable {
     var availableStyles: [String]
     var saveCount: Int
     var saveError: String?
+    var timeline: SequenceTimelineSnapshot
+}
+
+struct SequenceTimelineSnapshot: Equatable {
+    var elementClips: [EditorClipSnapshot]
+    var musicClips: [EditorClipSnapshot]
+    var musicSourceClips: [EditorClipSnapshot]
+    var durationMs: Int64
+    var playheadFraction: Double
+    var timecode: String
+    var durationTimecode: String
+    var selectedElementIndex: Int
+    var selectedMusicIndex: Int
+    var canUndo: Bool
+    var canRedo: Bool
+    var songPlaybackSpeed: Double
+    var musicVolume: Float
+
+    func withActions(_ actions: ProEditorTimelineActions?) -> ProEditorTimeline? {
+        guard let actions else { return nil }
+        return ProEditorTimeline(
+            elementClips: elementClips, musicClips: musicClips,
+            durationMs: durationMs, playheadFraction: playheadFraction,
+            timecode: timecode, durationTimecode: durationTimecode,
+            selectedElementIndex: selectedElementIndex, selectedMusicIndex: selectedMusicIndex,
+            canUndo: canUndo, canRedo: canRedo, actions: actions,
+            musicSourceClips: musicSourceClips, songPlaybackSpeed: songPlaybackSpeed, musicVolume: musicVolume
+        )
+    }
 }
 
 struct ChoreographyFeatureSnapshot: Equatable {
@@ -158,6 +203,26 @@ struct TrainerFeatureSnapshot: Equatable {
     var speakLabel: String
     var selectedVoiceIndex: Int
     var storylineTitles: [String]
+    var styleOptions: [String] = []
+    var trackOptions: [String] = []
+    var tagOptions: [String] = []
+    var useElementTiming: Bool = true
+    var session: TrainerSessionSnapshot? = nil
+}
+
+struct TrainerSessionSnapshot: Equatable, Identifiable {
+    var id: String
+    var trackTitle: String
+    var mediaUri: String?
+    var durationMs: Int64
+    var paused: Bool
+    var progress: Float
+    var moveTitle: String
+    var cueVideo: String?
+    var phaseIndex: Int
+    var phaseTotal: Int
+    var trackVolume: Float
+    var playlistCount: Int
 }
 
 struct StyleRefSnapshot: Equatable, Identifiable {

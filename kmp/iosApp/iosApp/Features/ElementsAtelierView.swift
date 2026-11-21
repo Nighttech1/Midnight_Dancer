@@ -37,7 +37,7 @@ struct ElementsAtelierView: View {
                 }
             }
         }
-        .sheet(isPresented: editorBinding) {
+        .fullScreenCover(isPresented: editorBinding) {
             if let draft = snapshot.editor {
                 ElementEditSheet(
                     initialDraft: draft,
@@ -60,47 +60,57 @@ struct ElementsAtelierView: View {
 
     private var styleBar: some View {
         HStack(spacing: 10) {
-            Button(action: onStylePrevious) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(MdColor.neonOrange)
-                    .frame(width: 44, height: 44)
+            HStack(spacing: 0) {
+                styleArrow("chevron.left", label: "Предыдущий стиль", action: onStylePrevious)
+                Text(snapshot.styleName)
+                    .font(MdType.brandedControl)
+                    .foregroundStyle(MdColor.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                styleArrow("chevron.right", label: "Следующий стиль", action: onStyleNext)
             }
-            .buttonStyle(.plain)
-            Text(snapshot.styleName)
-                .font(MdType.titleLarge)
-                .foregroundStyle(MdColor.textPrimary)
-                .frame(maxWidth: .infinity)
-                .lineLimit(1)
-            Button(action: onStyleNext) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(MdColor.neonOrange)
-                    .frame(width: 44, height: 44)
+            .background {
+                Capsule().fill(MdColor.surfaceElevated)
+                    .overlay { Capsule().strokeBorder(.white.opacity(0.09)) }
             }
-            .buttonStyle(.plain)
             Button(action: onAdd) {
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(MdColor.oledTrueBlack)
-                    .frame(width: 40, height: 40)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(MdColor.neonOrange))
+                Text("Создать элемент")
+                    .font(MdType.brandedControl)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 13)
+                    .frame(minHeight: 48)
+                    .background(Capsule().fill(MdColor.neonOrange))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Добавить элемент")
+            .accessibilityIdentifier("element.add")
         }
         .padding(.horizontal, MdChrome.contentHorizontalPadding)
-        .padding(.top, 8)
+        .padding(.top, 10)
+    }
+
+    private func styleArrow(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(MdColor.neonOrange)
+                .frame(width: 42, height: 48)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private var searchBar: some View {
         HStack {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(MdColor.textSecondary)
-            TextField("Поиск", text: Binding(
+            TextField("Поиск элементов…", text: Binding(
                 get: { snapshot.searchQuery },
                 set: onSearch
             ))
+            .font(MdType.brandedBody)
             .foregroundStyle(MdColor.textPrimary)
         }
         .padding(12)

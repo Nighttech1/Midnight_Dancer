@@ -38,13 +38,20 @@ struct ElementEditSheet: View {
     private var busy: Bool { importing || saving || submitted }
 
     var body: some View {
-        NavigationStack {
-            editorForm
-                .navigationTitle(draft.cardId == nil ? "Новый элемент" : "Элемент")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { editorToolbar }
+        VStack(spacing: 0) {
+            ScrollView {
+                editorContent
+                    .frame(maxWidth: 520)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+            }
+            .scrollDismissesKeyboard(.interactively)
+
+            editorFooter
         }
-        .tint(MdColor.neonOrange)
+        .background(MdColor.oledTrueBlack.ignoresSafeArea())
+        .tint(flame)
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled()
         .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.movie]) { result in
@@ -83,68 +90,192 @@ struct ElementEditSheet: View {
         }
     }
 
-    private var editorForm: some View {
-        Form {
+    // Match the Android element editor's action color on its OLED surface.
+    private let flame = Color(red: 1, green: 1.0 / 3.0, blue: 0)
+    private let videoSurface = Color(red: 5.0 / 255.0, green: 6.0 / 255.0, blue: 12.0 / 255.0)
+
+    private var editorContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(draft.cardId == nil ? "Новый элемент" : "Редактировать элемент")
+                .font(MdType.titleLarge.weight(.bold))
+                .foregroundStyle(MdColor.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("editor.element")
+
+            TextField("Название", text: $draft.title)
+                .font(MdType.bodyLarge)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 46)
+                .background(fieldBackground)
+                .accessibilityIdentifier("element.name")
+
+            videoStage
+            uploadActions
             descriptionFields
-            videoFields
-            if busy {
-                ProgressView(importing ? "Копирую видео…" : "Сохраняю элемент…")
-            }
-            if let message = importError ?? saveError {
-                Text(message).foregroundStyle(.red).accessibilityIdentifier("element.error")
-            }
+                .padding(.top, 4)
         }
+        .foregroundStyle(MdColor.textPrimary)
         .disabled(busy)
     }
 
-    private var descriptionFields: some View {
-        Section {
-            TextField("Название", text: $draft.title).accessibilityIdentifier("element.name")
-            LabeledContent("Стиль", value: draft.styleName)
-            Picker("Категория", selection: $draft.tag) {
-                Text("Без категории").tag(nil as String?)
-                ForEach(categories, id: \.self) { category in Text(category).tag(Optional(category)) }
+    private var videoStage: some View {
+        let shape = RoundedRectangle(cornerRadius: 20)
+        return ZStack {
+            shape.fill(videoSurface)
+            videoPreview
+        }
+        .aspectRatio(9.0 / 16.0, contentMode: .fit)
+        .clipShape(shape)
+        .overlay { shape.strokeBorder(.white.opacity(0.10), lineWidth: 1).allowsHitTesting(false) }
+    }
+
+    @ViewBuilder private var videoPreview: some View {
+        if let media = draft.videoUri, let url = OwnedElementVideo.resolve(media) {
+            ElementVideoPreview(url: url)
+                .id(url)
+                .accessibilityIdentifier("element.player")
+        } else if draft.videoUri != nil {
+            Label("Видео недоступно", systemImage: "exclamationmark.triangle")
+                .font(MdType.bodyMedium)
+                .foregroundStyle(MdColor.textSecondary)
+                .padding()
+        } else {
+            Image(systemName: "video")
+                .font(.system(size: 32, weight: .light))
+                .foregroundStyle(.white.opacity(0.25))
+                .accessibilityLabel("Видео не выбрано")
+        }
+    }
+
+    private var uploadActions: some View {
+        HStack(spacing: 8) {
+            PhotosPicker(selection: $photo, matching: .videos, photoLibrary: .shared()) {
+                uploadLabel("Выбрать из Фото", icon: "photo.on.rectangle")
             }
-            TextField("Описание", text: $draft.description, axis: .vertical)
-            VStack(alignment: .leading) {
-                Text("Прогресс изучения: \(draft.masteryPercent)%")
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("element.choosePhoto")
+            Button { choosingFile = true } label: {
+                uploadLabel("Выбрать из Файлов", icon: "folder")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("element.chooseFile")
+        }
+    }
+
+    private func uploadLabel(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(MdType.bodyMedium.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .foregroundStyle(flame)
+            .background(flame.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var descriptionFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            labeledField("Стиль") {
+                Text(draft.styleName)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            labeledField("Категория") {
+                Menu {
+                    Button("Без категории") { draft.tag = nil }
+                    ForEach(categories, id: \.self) { category in
+                        Button(category) { draft.tag = category }
+                    }
+                } label: {
+                    HStack {
+                        Text(draft.tag ?? "Без категории")
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(flame)
+                    }
+                    .foregroundStyle(MdColor.textPrimary)
+                    .contentShape(Rectangle())
+                }
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                fieldLabel("Прогресс изучения: \(draft.masteryPercent)%")
                 Slider(value: masteryValue, in: 0...100, step: 1)
             }
+            labeledField("Описание") {
+                TextField("Добавить описание", text: $draft.description, axis: .vertical)
+            }
         }
+    }
+
+    private func labeledField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            fieldLabel(title)
+            content()
+                .font(MdType.bodyLarge)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(minHeight: 46)
+                .background(fieldBackground)
+        }
+    }
+
+    private func fieldLabel(_ title: String) -> some View {
+        Text(title)
+            .font(MdType.bodyMedium.weight(.semibold))
+            .foregroundStyle(MdColor.textSecondary)
+    }
+
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: 14)
+            .fill(.white.opacity(0.04))
+            .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.10), lineWidth: 1) }
     }
 
     private var masteryValue: Binding<Double> {
         Binding(get: { Double(draft.masteryPercent) }, set: { draft.masteryPercent = Int($0.rounded()) })
     }
 
-    private var videoFields: some View {
-        Section("Видео") {
-            if let media = draft.videoUri, let url = OwnedElementVideo.resolve(media) {
-                ElementVideoPreview(url: url).id(url).frame(minHeight: 190)
-                    .accessibilityIdentifier("element.player")
-            } else if draft.videoUri != nil {
-                Text("Видео недоступно. Можно выбрать другой файл.").foregroundStyle(.secondary)
+    private var editorFooter: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            if busy {
+                ProgressView(importing ? "Копирую видео…" : "Сохраняю элемент…")
+                    .font(MdType.bodyMedium)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            PhotosPicker(selection: $photo, matching: .videos, photoLibrary: .shared()) {
-                Label("Выбрать из Фото", systemImage: "photo.on.rectangle")
+            if let message = importError ?? saveError {
+                Text(message)
+                    .font(MdType.bodyMedium)
+                    .foregroundStyle(MdColor.danger)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("element.error")
             }
-            .accessibilityIdentifier("element.choosePhoto")
-            Button { choosingFile = true } label: {
-                Label("Выбрать из Файлов", systemImage: "folder")
+            HStack(spacing: 12) {
+                Spacer()
+                Button("Отмена", action: cancel)
+                    .buttonStyle(.plain)
+                    .font(MdType.bodyLarge)
+                    .foregroundStyle(.white.opacity(0.60))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(busy)
+                    .accessibilityIdentifier("element.cancel")
+                Button("Сохранить", action: save)
+                    .buttonStyle(.plain)
+                    .font(MdType.bodyLarge.weight(.semibold))
+                    .foregroundStyle(flame.opacity(canSave ? 1 : 0.40))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(!canSave)
+                    .accessibilityIdentifier("element.save")
             }
-            .accessibilityIdentifier("element.chooseFile")
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity)
+        .background(MdColor.oledTrueBlack)
     }
 
-    @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button("Закрыть", action: cancel).disabled(busy)
-        }
-        ToolbarItem(placement: .confirmationAction) {
-            Button("Сохранить", action: save)
-                .disabled(busy || draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("element.save")
-        }
+    private var canSave: Bool {
+        !busy && !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func cancel() {

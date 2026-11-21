@@ -27,6 +27,8 @@ data class MusicTrack(
     val basePlaybackSpeed: Double = 1.0,
     /** Content URI of picked audio file (Android SAF). */
     val mediaUri: String? = null,
+    /** Exact source duration, retained independently of the rounded display label. */
+    val durationMs: Long? = null,
 )
 
 enum class MusicSortMode {
@@ -93,7 +95,7 @@ sealed interface MusicIntent {
     /** Creates a draft track and opens TrackEditDialog (replaces «Стиль и тег»). */
     data object BeginUpload : MusicIntent
     /** Android file picker result: draft track named from the file; style/tags stay blank. */
-    data class AddPickedTrack(val title: String, val mediaUri: String) : MusicIntent
+    data class AddPickedTrack(val title: String, val mediaUri: String, val durationMs: Long? = null) : MusicIntent
     /** Real duration from ExoPlayer after metadata is known. */
     data class UpdateTrackDuration(val id: String, val durationMs: Long) : MusicIntent
     data object CloseEdit : MusicIntent

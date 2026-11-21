@@ -27,7 +27,12 @@ struct TabShellView: View {
                 onSearch: actions.musicSearch,
                 onUpload: actions.musicBeginUpload,
                 onEdit: actions.musicEdit,
-                onDelete: actions.musicDelete
+                onDelete: actions.musicDelete,
+                onImport: actions.musicImport,
+                onSave: actions.musicSave,
+                onCloseEdit: actions.musicCloseEdit,
+                onStop: actions.musicStop,
+                onSeek: actions.musicSeek
             )
         case .choreography(let snap):
             if let editor = snap.editor {
@@ -39,7 +44,8 @@ struct TabShellView: View {
                     onSetStyle: actions.vaultEditorSetStyle,
                     onSave: actions.vaultEditorSave,
                     elementChoices: actions.vaultEditorElementChoices,
-                    onAddElement: actions.vaultEditorAddElement
+                    onAddElement: actions.vaultEditorAddElement,
+                    timeline: editor.timeline.withActions(actions.vaultTimelineActions)
                 )
             } else {
                 KineticVaultView(
@@ -51,17 +57,19 @@ struct TabShellView: View {
                 )
             }
         case .trainer(let snap):
-            TrainerHubView(
-                snapshot: snap,
-                onSelectVoice: actions.trainerSelectVoice,
-                onSpeak: actions.trainerSpeak,
-                onStartDance: actions.trainerStartDance,
-                onSetStep: actions.trainerSetStep,
-                onSetStyle: actions.trainerSetStyle,
-                onSetTrack: actions.trainerSetTrack,
-                onSetTag: actions.trainerSetTag,
-                onSetInterval: actions.trainerSetInterval
-            )
+            if let session = snap.session {
+                TrainerSessionView(snapshot: session, onTogglePause: actions.trainerSessionTogglePause,
+                    onPause: actions.trainerSessionPause, onSeek: actions.trainerSessionSeek,
+                    onVolume: actions.trainerSessionVolume, onFinish: actions.trainerSessionFinish)
+                    .id(session.id)
+            } else {
+                TrainerHubView(snapshot: snap,
+                    onSelectVoice: actions.trainerSelectVoice, onSpeak: actions.trainerSpeak,
+                    onStartDance: actions.trainerStartDance, onSetStep: actions.trainerSetStep,
+                    onSetStyle: actions.trainerSetStyle, onSetTrack: actions.trainerSetTrack,
+                    onSetTag: actions.trainerSetTag, onSetInterval: actions.trainerSetInterval,
+                    onSetElementTiming: actions.trainerSetElementTiming)
+            }
         case .exchange(let snap):
             SyncDeckView(
                 snapshot: snap,
@@ -95,6 +103,11 @@ struct TabFeatureActions {
     var musicBeginUpload: () -> Void = {}
     var musicEdit: (String) -> Void = { _ in }
     var musicDelete: (String) -> Void = { _ in }
+    var musicImport: (OwnedMusicAudio) async -> Bool = { _ in false }
+    var musicSave: (MusicEditDraft) -> Void = { _ in }
+    var musicCloseEdit: () -> Void = {}
+    var musicStop: (String) -> Void = { _ in }
+    var musicSeek: (String, Float) -> Void = { _, _ in }
 
     var vaultSearch: (String) -> Void = { _ in }
     var vaultCreate: () -> Void = {}
@@ -107,6 +120,7 @@ struct TabFeatureActions {
     var vaultEditorSave: () -> Void = {}
     var vaultEditorElementChoices: () -> [SequenceElementChoice] = { [] }
     var vaultEditorAddElement: (String) -> Void = { _ in }
+    var vaultTimelineActions: ProEditorTimelineActions? = nil
 
     var trainerSelectVoice: (Int) -> Void = { _ in }
     var trainerSpeak: () -> Void = {}
@@ -116,6 +130,12 @@ struct TabFeatureActions {
     var trainerSetTrack: (String) -> Void = { _ in }
     var trainerSetTag: (String) -> Void = { _ in }
     var trainerSetInterval: (Float) -> Void = { _ in }
+    var trainerSetElementTiming: (Bool) -> Void = { _ in }
+    var trainerSessionTogglePause: () -> Void = {}
+    var trainerSessionPause: () -> Void = {}
+    var trainerSessionSeek: (Float, Bool) -> Void = { _, _ in }
+    var trainerSessionVolume: (Float) -> Void = { _ in }
+    var trainerSessionFinish: () -> Void = {}
 
     var exchangeOpenExport: () -> Void = {}
     var exchangeDismissExport: () -> Void = {}

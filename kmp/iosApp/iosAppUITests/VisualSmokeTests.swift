@@ -52,5 +52,22 @@ final class VisualSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["settings.open"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["settings.open"].isHittable)
         capture("10-settings-closed", app: app)
+        app.buttons["tab.elements"].tap()
+        let add = app.buttons["element.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        XCTAssertTrue(app.buttons["element.save"].waitForExistence(timeout: 10))
+        capture("11-element-editor", app: app)
+        app.buttons["element.cancel"].tap()
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+
+        app.buttons["tab.choreography"].tap()
+        let create = app.buttons["choreo.add"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5))
+        create.tap()
+        XCTAssertTrue(app.buttons["choreo.save"].waitForExistence(timeout: 10))
+        XCTAssertTrue(element("choreo.timeline.ruler", app: app).exists)
+        capture("12-choreography-editor", app: app)
+
     }
 }

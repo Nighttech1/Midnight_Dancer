@@ -21,6 +21,7 @@ struct OwnedElementVideo: Sendable {
     }
 
     static func resolve(_ reference: String) -> URL? {
+        if reference.hasPrefix(OwnedMusicAudio.prefix) { return OwnedMusicAudio.resolve(reference) }
         if reference.hasPrefix(referencePrefix) {
             let fileName = String(reference.dropFirst(referencePrefix.count))
             let parts = fileName.split(separator: ".", omittingEmptySubsequences: false)

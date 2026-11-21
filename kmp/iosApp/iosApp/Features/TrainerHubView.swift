@@ -11,6 +11,7 @@ struct TrainerHubView: View {
     var onSetTrack: (String) -> Void
     var onSetTag: (String) -> Void
     var onSetInterval: (Float) -> Void
+    var onSetElementTiming: (Bool) -> Void
 
     var body: some View {
         ZStack {
@@ -18,10 +19,6 @@ struct TrainerHubView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(snapshot.title)
-                            .font(MdType.titleLarge)
-                            .foregroundStyle(MdColor.textPrimary)
-
                         Text("Режим · \(snapshot.modeLabel)")
                             .font(MdType.eyebrow)
                             .foregroundStyle(MdColor.textSecondary)
@@ -69,14 +66,6 @@ struct TrainerHubView: View {
                             }
                         }
 
-                        MdSpeakZoneView(
-                            speakLabel: snapshot.speakLabel,
-                            accent: MdColor.accentGold,
-                            selectedVoiceIndex: snapshot.selectedVoiceIndex,
-                            onSelectVoice: onSelectVoice,
-                            onSpeak: onSpeak
-                        )
-
                         Text("Готовность \(snapshot.readyPercent)%")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(MdColor.textSecondary)
@@ -100,7 +89,8 @@ struct TrainerHubView: View {
                         .foregroundStyle(MdColor.oledTrueBlack)
                 }
                 .buttonStyle(.plain)
-                .disabled(snapshot.readyPercent < 100)
+                .disabled(snapshot.readyPercent < 100 || snapshot.modeLabel != "Свободная")
+                .accessibilityIdentifier("trainer.start")
                 .padding(.horizontal, MdChrome.contentHorizontalPadding)
                 .padding(.bottom, 12)
             }
@@ -109,10 +99,10 @@ struct TrainerHubView: View {
 
     private func stepGlow(_ step: Int) -> Bool {
         switch step {
-        case 1: return !snapshot.styleName.isEmpty
-        case 2: return !snapshot.trackTitle.isEmpty
-        case 3: return !snapshot.elementTag.isEmpty
-        case 4: return snapshot.intervalSec >= 2
+        case 1: return snapshot.modeLabel == "Свободная"
+        case 2: return !snapshot.styleName.isEmpty && !snapshot.trackTitle.isEmpty
+        case 3: return !snapshot.elementTag.isEmpty && snapshot.intervalSec >= 2
+        case 4: return true
         default: return false
         }
     }
@@ -122,37 +112,31 @@ struct TrainerHubView: View {
         VStack(alignment: .leading, spacing: 8) {
             switch step {
             case 1:
-                TextField("Стиль", text: Binding(
-                    get: { snapshot.styleName },
-                    set: onSetStyle
-                ))
-                .textFieldStyle(.roundedBorder)
+                Text("Свободная тренировка")
+                    .foregroundStyle(MdColor.textPrimary)
+                Text("Отработка по подписке пока не подключена на iOS.")
+                    .font(.footnote).foregroundStyle(MdColor.textSecondary)
             case 2:
-                TextField("Трек", text: Binding(
-                    get: { snapshot.trackTitle },
-                    set: onSetTrack
-                ))
-                .textFieldStyle(.roundedBorder)
+                choice("Стиль", selected: snapshot.styleName, values: snapshot.styleOptions, change: onSetStyle)
+                choice("Трек", selected: snapshot.trackTitle, values: snapshot.trackOptions, change: onSetTrack)
             case 3:
-                TextField("Тег", text: Binding(
-                    get: { snapshot.elementTag },
-                    set: onSetTag
-                ))
-                .textFieldStyle(.roundedBorder)
-            case 4:
-                HStack {
-                    Text("Интервал \(Int(snapshot.intervalSec))с")
-                        .foregroundStyle(MdColor.textSecondary)
-                    Slider(
-                        value: Binding(
-                            get: { Double(snapshot.intervalSec) },
-                            set: { onSetInterval(Float($0)) }
-                        ),
-                        in: 2...15,
-                        step: 1
-                    )
+                choice("Тег", selected: snapshot.elementTag, values: snapshot.tagOptions, change: onSetTag)
+                Toggle("Использовать длительность видео", isOn: Binding(
+                    get: { snapshot.useElementTiming }, set: onSetElementTiming))
                     .tint(MdColor.neonOrange)
+                Text(snapshot.useElementTiming ? "Интервал используется для элементов без видео." : "Смена элементов через выбранный интервал.")
+                    .font(.footnote).foregroundStyle(MdColor.textSecondary)
+                HStack {
+                    Text("Интервал \(Int(max(2, snapshot.intervalSec)))с")
+                        .foregroundStyle(MdColor.textSecondary)
+                    Slider(value: Binding(get: { Double(max(2, snapshot.intervalSec)) },
+                        set: { onSetInterval(Float($0)) }), in: 2...15, step: 1)
+                        .tint(MdColor.neonOrange)
                 }
+                .onAppear { if snapshot.intervalSec <= 0 { onSetInterval(2) } }
+            case 4:
+                MdSpeakZoneView(speakLabel: snapshot.speakLabel, accent: MdColor.accentGold,
+                    selectedVoiceIndex: snapshot.selectedVoiceIndex, onSelectVoice: onSelectVoice, onSpeak: onSpeak)
             default:
                 EmptyView()
             }
@@ -160,4 +144,14 @@ struct TrainerHubView: View {
         .padding(.horizontal, 4)
         .padding(.bottom, 8)
     }
+    private func choice(_ label: String, selected: String, values: [String], change: @escaping (String) -> Void) -> some View {
+        Picker(label, selection: Binding(get: { values.contains(selected) ? selected : "" }, set: change)) {
+            Text(values.isEmpty ? "Нет материалов" : "Выберите").tag("")
+            ForEach(values, id: \.self) { Text($0).tag($0) }
+        }
+        .tint(MdColor.neonOrange)
+        .disabled(values.isEmpty)
+        .accessibilityIdentifier("trainer.choice.\(label == "Стиль" ? "style" : label == "Трек" ? "track" : "tag")")
+    }
+
 }

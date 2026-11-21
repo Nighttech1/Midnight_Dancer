@@ -48,7 +48,9 @@ struct MainShellView: View {
 
     private var tabScaffold: some View {
         VStack(spacing: 0) {
-            topBar
+            if let tab = chrome.tabs.first(where: { $0.id == chrome.selectedTabIndex }) {
+                topBar(tab.title)
+            }
             ZStack {
                 if let tab = chrome.tabs.first(where: { $0.id == chrome.selectedTabIndex }) {
                     TabShellView(tab: tab, actions: tabActions)
@@ -73,8 +75,13 @@ struct MainShellView: View {
         .background(MdColor.oledTrueBlack)
     }
 
-    private var topBar: some View {
+    private func topBar(_ title: String) -> some View {
         HStack {
+            Text(title)
+                .font(MdType.titleLarge)
+                .foregroundStyle(MdColor.textPrimary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape.fill")

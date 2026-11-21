@@ -51,11 +51,12 @@ internal fun Song.toMusicTrack(
         },
         basePlaybackSpeed = playbackSpeed,
         mediaUri = fileName.takeIf { it.isNotBlank() },
+        durationMs = durationMs,
     )
 }
 
 internal fun MusicTrack.toSong(): Song {
-    val durationSec = parseDurationLabelToSeconds(durationLabel)
+    val durationSec = durationMs?.coerceAtLeast(0L)?.div(1000.0) ?: parseDurationLabelToSeconds(durationLabel)
     val size = parseWeightToBytes(weightLabel)
     return Song(
         id = id,

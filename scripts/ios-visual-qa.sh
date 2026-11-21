@@ -91,8 +91,8 @@ if [[ -d "$OUT/VisualSmoke.xcresult" ]]; then
 fi
 if [[ "$TEST_STATUS" -eq 0 ]]; then
   PNG_COUNT="$(find "$OUT/screenshots" -type f -iname '*.png' | wc -l | tr -d ' ')"
-  if [[ "$PNG_COUNT" -lt 10 ]]; then
-    echo "Expected ten named screenshots; only $PNG_COUNT PNG attachments exported." | tee -a "$OUT/attachment-export.log"
+  if [[ "$PNG_COUNT" -lt 12 ]]; then
+    echo "Expected twelve named screenshots; only $PNG_COUNT PNG attachments exported." | tee -a "$OUT/attachment-export.log"
     TEST_STATUS=65
   fi
 fi

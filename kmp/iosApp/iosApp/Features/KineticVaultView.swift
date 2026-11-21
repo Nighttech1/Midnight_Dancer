@@ -12,27 +12,14 @@ struct KineticVaultView: View {
         ZStack {
             MdNeonAtmosphere(accent: MdColor.neonMagenta)
             VStack(spacing: 0) {
-                HStack {
-                    Text(snapshot.title)
-                        .font(MdType.titleLarge)
-                        .foregroundStyle(MdColor.textPrimary)
-                    Spacer()
-                    Button(action: onCreate) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(MdColor.oledTrueBlack)
-                            .frame(width: 40, height: 40)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(MdColor.neonOrange))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Создать хореографию")
-                }
-                .padding(.horizontal, MdChrome.contentHorizontalPadding)
-                .padding(.top, 8)
+                MdCatalogAction(title: "Создать хореографию", action: onCreate)
+                    .accessibilityIdentifier("choreo.add")
+                    .padding(.horizontal, MdChrome.contentHorizontalPadding)
+                    .padding(.top, 8)
 
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(MdColor.textSecondary)
-                    TextField("Поиск", text: Binding(
+                    TextField("Поиск хореографий…", text: Binding(
                         get: { snapshot.searchQuery },
                         set: onSearch
                     ))
